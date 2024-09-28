@@ -104,13 +104,14 @@ func findUserByEmail(ctx context.Context, email string) (*models.User, error) {
 
 	row := userDb.QueryRow(ctx, query, email)
 
-	if err := row.Scan(&ans.Id, &ans.FirstName, &ans.LastName, &ans.Email, &ans.Dob, &ans.PasswordHash, &ans.Phone, &ans.CreatedAt, &ans.UpdatedAt, &ans.Gender); err != nil {
+	if err := row.Scan(&ans.Id, &ans.FirstName, &ans.LastName, &ans.Email, &ans.Dob, &ans.PasswordHash, &ans.Phone, &ans.CreatedAt, &ans.UpdatedAt, &ans.Gender, &ans.Avatar); err != nil {
 		if errors.Is(err, sqldb.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, err
 	}
 
+	readUsers.Set(ctx, ans.Id, *ans)
 	return ans, nil
 }
 
@@ -118,6 +119,7 @@ const allUserFields = "id,first_name,last_name,email,dob,password_hash,phone,cre
 
 func findAllUsers(ctx context.Context, offset uint64, size uint) ([]*models.User, error) {
 	query := fmt.Sprintf("SELECT %s FROM users WHERE id > $1 ORDER BY id DESC LIMIT $2;", allUserFields)
+	rlog.Debug(query)
 	ans := make([]*models.User, 0)
 
 	rows, err := userDb.Query(ctx, query, offset, size)
@@ -135,6 +137,7 @@ func findAllUsers(ctx context.Context, offset uint64, size uint) ([]*models.User
 			return ans, err
 		}
 		ans = append(ans, user)
+		readUsers.Set(ctx, user.Id, *user)
 	}
 
 	return ans, nil
