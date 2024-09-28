@@ -4,11 +4,7 @@ import "time"
 
 type Tenant struct {
 	Name      string    `json:"name"`
-	Id        int64     `json:"id"`
+	Id        uint64    `json:"id,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
-}
-
-type NewTenantRequest struct {
-	Name string `json:"name" binding:"required"`
 }

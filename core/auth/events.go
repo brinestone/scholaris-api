@@ -7,6 +7,6 @@ type UserSignedUp struct {
 	UserId int64
 }
 
-var SignUps = pubsub.NewTopic[*UserSignedUp]("user-signups", pubsub.TopicConfig{
+var SignUps = pubsub.NewTopic[*UserSignedUp]("sign-up", pubsub.TopicConfig{
 	DeliveryGuarantee: pubsub.AtLeastOnce,
 })
