@@ -2,6 +2,7 @@ package tenants
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"encore.dev/beta/errs"
@@ -28,6 +29,17 @@ func NewTenant(ctx context.Context, dto models.NewTenantRequest) error {
 	}
 
 	now := time.Now()
+
+	row := tenantDb.QueryRow(ctx, "SELECT COUNT(*) as cnt FROM tenants WHERE name=$1;", dto.Name)
+	var count int
+	_ = row.Scan(&count)
+	if count > 0 {
+		return &errs.Error{
+			Code:    errs.AlreadyExists,
+			Message: fmt.Sprintf("An organization with name \"%s\" already exists", dto.Name),
+		}
+	}
+
 	_, err := tenantDb.Exec(ctx, "INSERT INTO tenants(name,created_at,updated_at) VALUES ($1,$2,$3);", dto.Name, now, now)
 	if err != nil {
 		return err
