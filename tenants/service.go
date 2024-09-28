@@ -1,3 +1,4 @@
+// CRUD endpoints for tenant objects
 package tenants
 
 import (
