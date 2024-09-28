@@ -37,16 +37,44 @@ func initService() (*Service, error) {
 	}, nil
 }
 
-//encore:api private method=POST path=/permissions
-func (s *Service) SetPermissions(ctx context.Context, req dto.UpdatePermissionsRequest) error {
-	s.fgaClient.Write(ctx).Body(client.ClientWriteRequest{
-		Writes: toOpenFgaUpdates(req.Updates),
-	}).
-		Execute()
+// Deletes permission Tuples
+//
+//encore:api private method=POST path=/permissions/down
+func (s *Service) DeletePermissions(ctx context.Context, req dto.UpdatePermissionsRequest) error {
+	if _, err := s.fgaClient.Write(ctx).Body(client.ClientWriteRequest{
+		Deletes: toOpenFgaDeletes(req.Updates),
+	}).Execute(); err != nil {
+		return err
+	}
 	return nil
 }
 
-func toOpenFgaUpdates(updates []dto.PermissionUpdate) []openfga.TupleKey {
+// Updates permission Tuples
+//
+//encore:api private method=POST path=/permissions/up
+func (s *Service) SetPermissions(ctx context.Context, req dto.UpdatePermissionsRequest) error {
+	if _, err := s.fgaClient.Write(ctx).Body(client.ClientWriteRequest{
+		Writes: toOpenFgaWrites(req.Updates),
+	}).Execute(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func toOpenFgaDeletes(updates []dto.PermissionUpdate) []openfga.TupleKeyWithoutCondition {
+	ans := make([]client.ClientTupleKeyWithoutCondition, 0)
+
+	for _, u := range updates {
+		ans = append(ans, client.ClientTupleKeyWithoutCondition{
+			User:     u.User,
+			Relation: u.Relation,
+			Object:   u.Object,
+		})
+	}
+	return ans
+}
+
+func toOpenFgaWrites(updates []dto.PermissionUpdate) []openfga.TupleKey {
 	ans := make([]client.ClientTupleKey, 0)
 
 	for _, u := range updates {

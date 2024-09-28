@@ -11,6 +11,7 @@ import (
 	"github.com/brinestone/scholaris/core/permissions"
 	"github.com/brinestone/scholaris/dto"
 	"github.com/brinestone/scholaris/models"
+	"github.com/brinestone/scholaris/util"
 )
 
 // var secrets struct {
@@ -23,15 +24,37 @@ type TenantsResponse struct {
 
 // Deletes a Tenant
 //
-//encore:api auth method=DELETE path=/tenants/:id
+//encore:api auth method=DELETE path=/tenants/:id tag:perm_can_delete_tenant
 func DeleteTenant(ctx context.Context, id uint64) error {
-	err := deleteTenantById(ctx, id)
+	tx, err := tenantDb.Begin(ctx)
+	if err != nil {
+		return err
+	}
+
+	err = deleteTenantById(ctx, id)
 	if err != nil {
 		rlog.Error(err.Error())
-		return &errs.Error{
-			Message: "An Unknown error occured",
-			Code:    errs.Internal,
-		}
+		_ = tx.Rollback()
+		return &util.ErrUnknown
+	}
+
+	userId, _ := auth.UserID()
+
+	timeout, cancel := context.WithTimeout(ctx, time.Second*10)
+	defer cancel()
+
+	if err = permissions.DeletePermissions(timeout, dto.UpdatePermissionsRequest{
+		Updates: []dto.PermissionUpdate{
+			{
+				User:     fmt.Sprintf("user:%s", userId),
+				Relation: "owner",
+				Object:   fmt.Sprintf("tenant:%d", id),
+			},
+		},
+	}); err != nil {
+		rlog.Error(err.Error())
+		_ = tx.Rollback()
+		return &util.ErrUnknown
 	}
 
 	DeletedTenants.Publish(ctx, &TenantDeleted{
@@ -74,7 +97,7 @@ func NewTenant(ctx context.Context, req dto.NewTenantRequest) error {
 	}); err != nil {
 		_ = tx.Rollback()
 		rlog.Error(err.Error())
-		return err
+		return &util.ErrUnknown
 	}
 	defer tx.Commit()
 
@@ -88,9 +111,20 @@ func NewTenant(ctx context.Context, req dto.NewTenantRequest) error {
 // Find all Tenants
 //
 //encore:api public method=GET path=/tenants
-func FindTenants(ctx context.Context) (*TenantsResponse, error) {
+func FindTenants(ctx context.Context, req dto.PaginationParams) (*TenantsResponse, error) {
+	ans, err := findTenants(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	return &TenantsResponse{
+		Tenants: ans,
+	}, nil
+}
+
+func findTenants(ctx context.Context, req dto.PaginationParams) ([]*models.Tenant, error) {
 	ans := make([]*models.Tenant, 0)
-	rows, err := tenantDb.Query(ctx, "SELECT id,name,created_at,updated_at FROM tenants;")
+	rows, err := tenantDb.Query(ctx, fmt.Sprintf("SELECT %s FROM tenants WHERE id > $1 ORDER BY updated_at DESC OFFSET 0 LIMIT $2;", tenantFields), req.After, req.Size)
 	if err != nil {
 		return nil, err
 	}
@@ -103,10 +137,7 @@ func FindTenants(ctx context.Context) (*TenantsResponse, error) {
 		}
 		ans = append(ans, tenant)
 	}
-
-	return &TenantsResponse{
-		Tenants: ans,
-	}, nil
+	return ans, nil
 }
 
 const tenantFields = "id,name,created_at,updated_at"
@@ -143,18 +174,12 @@ func createTenant(ctx context.Context, req dto.NewTenantRequest) (*models.Tenant
 
 func deleteTenantById(ctx context.Context, id uint64) error {
 	query := "DELETE FROM tenants WHERE id = $1;"
-	tx, err := tenantDb.Begin(ctx)
-	if err != nil {
-		return err
-	}
 
 	cnt, err := tenantDb.Exec(ctx, query, id)
 	if err != nil {
-		_ = tx.Rollback()
 		return err
 	}
 
-	_ = tx.Commit()
 	rlog.Info(fmt.Sprintf("deleted %d record(s)", cnt.RowsAffected()))
 
 	return nil

@@ -7,7 +7,6 @@ import (
 
 	"encore.dev/beta/auth"
 	"encore.dev/beta/errs"
-	"encore.dev/rlog"
 	"github.com/brinestone/scholaris/core/users"
 	"github.com/brinestone/scholaris/dto"
 	"github.com/golang-jwt/jwt/v4"
@@ -19,14 +18,14 @@ type LoginResponse struct {
 	AccessToken string `json:"access_token"`
 }
 
-// Login user
+// Signs in an existing user using their email and password
 //
 //encore:api public method=POST tag:login
 func LoginUser(ctx context.Context, req dto.LoginRequest) (*LoginResponse, error) {
 	var ans = new(LoginResponse)
 	user, err := users.VerifyCredentials(ctx, req)
 	if err != nil {
-		return nil, errs.WrapCode(err, errs.Unauthenticated, err.Error())
+		return nil, err
 	}
 
 	claims := jwt.MapClaims{
@@ -41,7 +40,6 @@ func LoginUser(ctx context.Context, req dto.LoginRequest) (*LoginResponse, error
 	token := jwt.NewWithClaims(jwtSigningMethod, claims)
 	serializedToken, err := token.SignedString([]byte(secrets.JwtKey))
 	if err != nil {
-		rlog.Error(err.Error())
 		return nil, &errs.Error{
 			Code: errs.Unauthenticated,
 		}
@@ -52,7 +50,7 @@ func LoginUser(ctx context.Context, req dto.LoginRequest) (*LoginResponse, error
 	return ans, nil
 }
 
-// Signs a user
+// Creates a new user account
 //
 //encore:api public method=POST tag:new
 func SignUp(ctx context.Context, req dto.NewUserRequest) error {
@@ -75,7 +73,7 @@ type AuthClaims struct {
 	Email    string `json:"email"`
 	Avatar   string `json:"avatar,omitempty"`
 	FullName string `json:"displayName"`
-	Sub      int64  `json:"sub"`
+	Sub      uint64 `json:"sub"`
 }
 
 var secrets struct {
@@ -97,7 +95,7 @@ func JwtAuthHandler(ctx context.Context, token string) (auth.UID, *AuthClaims, e
 		}
 	}
 
-	var id int64
+	var id uint64
 
 	authClaims := new(AuthClaims)
 	if temp, ok := claims["avatar"].(string); ok {
@@ -112,8 +110,15 @@ func JwtAuthHandler(ctx context.Context, token string) (auth.UID, *AuthClaims, e
 	}
 
 	if temp, ok := claims["sub"].(float64); ok {
-		id = int64(temp)
+		id = uint64(temp)
 		authClaims.Sub = id
+	}
+
+	user, err := users.FindUserById(ctx, id)
+	if err != nil || user == nil || user.Id != id {
+		return "", nil, &errs.Error{
+			Code: errs.Unauthenticated,
+		}
 	}
 
 	return auth.UID(fmt.Sprint(id)), authClaims, nil
