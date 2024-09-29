@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IDX_UQ_tenant_slug_1 ON institutions (tenant, slug);

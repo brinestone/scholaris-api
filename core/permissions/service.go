@@ -2,6 +2,8 @@ package permissions
 
 import (
 	"context"
+	_ "embed"
+	"encoding/json"
 	"fmt"
 
 	"encore.dev/rlog"
@@ -18,7 +20,11 @@ type Service struct {
 var secrets struct {
 	FgaUrl     string `encore:"sensitive"`
 	FgaStoreId string `encore:"sensitive"`
+	FgaModelId string `encore:"sensitive"`
 }
+
+//go:embed system.json
+var dsl string
 
 func initService() (*Service, error) {
 	rlog.Debug("starting permissions service...")
@@ -26,15 +32,44 @@ func initService() (*Service, error) {
 	fgaClient, err := client.NewSdkClient(&client.ClientConfiguration{
 		ApiUrl:  secrets.FgaUrl,
 		StoreId: secrets.FgaStoreId,
+		// AuthorizationModelId: secrets.FgaModelId,
 	})
 	if err != nil {
 		return nil, err
 	}
 	rlog.Debug(fmt.Sprintf("Connected to OpenFGA Server on %s", secrets.FgaUrl))
+	var req openfga.WriteAuthorizationModelRequest
+	if err := json.Unmarshal([]byte(dsl), &req); err != nil {
+		panic(err)
+	}
+
+	_, err = fgaClient.WriteAuthorizationModel(context.TODO()).Body(req).Execute()
+	if err != nil {
+		panic(err)
+	}
+
+	rlog.Info("Updated Authorization model")
 
 	return &Service{
 		fgaClient: fgaClient,
 	}, nil
+}
+
+// Checks whether a permission is valid or not.
+//
+//encore:api private method=GET path=/permissions/check
+func (s *Service) CheckPermission(ctx context.Context, req dto.RelationCheckRequest) (*dto.RelationCheckResponse, error) {
+	res, err := s.fgaClient.Check(ctx).Body(client.ClientCheckRequest{
+		User:     req.Subject,
+		Relation: req.Relation,
+		Object:   req.Target,
+	}).Execute()
+
+	if err != nil {
+		rlog.Error(err.Error())
+	}
+
+	return &dto.RelationCheckResponse{Allowed: *res.Allowed}, nil
 }
 
 // Deletes permission Tuples
@@ -66,9 +101,9 @@ func toOpenFgaDeletes(updates []dto.PermissionUpdate) []openfga.TupleKeyWithoutC
 
 	for _, u := range updates {
 		ans = append(ans, client.ClientTupleKeyWithoutCondition{
-			User:     u.User,
+			User:     u.Subject,
 			Relation: u.Relation,
-			Object:   u.Object,
+			Object:   u.Target,
 		})
 	}
 	return ans
@@ -78,10 +113,25 @@ func toOpenFgaWrites(updates []dto.PermissionUpdate) []openfga.TupleKey {
 	ans := make([]client.ClientTupleKey, 0)
 
 	for _, u := range updates {
+		var condition *openfga.RelationshipCondition
+		if u.Condition != nil {
+			c := make(map[string]any)
+
+			for _, v := range u.Condition.Context {
+				c[v.Name] = v.Value
+			}
+
+			condition = &openfga.RelationshipCondition{
+				Name:    u.Condition.Name,
+				Context: &c,
+			}
+		}
+
 		ans = append(ans, client.ClientTupleKey{
-			User:     u.User,
-			Relation: u.Relation,
-			Object:   u.Object,
+			User:      u.Subject,
+			Relation:  u.Relation,
+			Object:    u.Target,
+			Condition: condition,
 		})
 	}
 

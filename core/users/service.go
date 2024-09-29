@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"time"
 
 	"encore.dev/beta/errs"
@@ -62,8 +61,6 @@ func VerifyCredentials(ctx context.Context, req dto.LoginRequest) (*models.User,
 			Message: "Account not found",
 		}
 	}
-
-	log.Printf("%+v\n", user)
 
 	if err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
 		return nil, &errs.Error{

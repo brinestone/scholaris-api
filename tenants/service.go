@@ -3,12 +3,15 @@ package tenants
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"encore.dev/beta/auth"
 	"encore.dev/beta/errs"
 	"encore.dev/rlog"
+	"encore.dev/storage/cache"
+	"encore.dev/storage/sqldb"
 	"github.com/brinestone/scholaris/core/permissions"
 	"github.com/brinestone/scholaris/dto"
 	"github.com/brinestone/scholaris/models"
@@ -21,6 +24,25 @@ import (
 
 type TenantsResponse struct {
 	Tenants []*models.Tenant `json:"tenants"`
+}
+
+// Finds a tenant using its ID
+//
+//encore:api auth method=GET path=/tenants/:id
+func FindTenant(ctx context.Context, id uint64) (*models.Tenant, error) {
+	var t *models.Tenant
+	var err error
+
+	t, err = findTenantById(ctx, id)
+	if err != nil {
+		if errors.Is(err, sqldb.ErrNoRows) {
+			return nil, &util.ErrNotFound
+		}
+		rlog.Error(err.Error())
+		return nil, &util.ErrUnknown
+	}
+
+	return t, err
 }
 
 // Deletes a Tenant
@@ -47,9 +69,9 @@ func DeleteTenant(ctx context.Context, id uint64) error {
 	if err = permissions.DeletePermissions(timeout, dto.UpdatePermissionsRequest{
 		Updates: []dto.PermissionUpdate{
 			{
-				User:     fmt.Sprintf("user:%s", userId),
+				Subject:  fmt.Sprintf("user:%s", userId),
 				Relation: "owner",
-				Object:   fmt.Sprintf("tenant:%d", id),
+				Target:   fmt.Sprintf("tenant:%d", id),
 			},
 		},
 	}); err != nil {
@@ -90,9 +112,9 @@ func NewTenant(ctx context.Context, req dto.NewTenantRequest) error {
 	if err = permissions.SetPermissions(ctx, dto.UpdatePermissionsRequest{
 		Updates: []dto.PermissionUpdate{
 			{
-				User:     fmt.Sprintf("user:%s", string(*creator)),
+				Subject:  fmt.Sprintf("user:%s", string(*creator)),
 				Relation: models.PermOwner,
-				Object:   fmt.Sprintf("tenant:%d", tenant.Id),
+				Target:   fmt.Sprintf("tenant:%d", tenant.Id),
 			},
 		},
 	}); err != nil {
@@ -184,4 +206,42 @@ func deleteTenantById(ctx context.Context, id uint64) error {
 	rlog.Info(fmt.Sprintf("deleted %d record(s)", cnt.RowsAffected()))
 
 	return nil
+}
+
+func findTenantById(ctx context.Context, id uint64) (*models.Tenant, error) {
+	var t *models.Tenant
+	var err error
+
+	t, err = findTenantByIdFromCache(ctx, id)
+	if err != nil {
+		if errors.Is(err, cache.Miss) {
+			t, err = findTenantByIdFromDb(ctx, id)
+		} else {
+			return nil, err
+		}
+	}
+
+	return t, err
+}
+
+func findTenantByIdFromDb(ctx context.Context, id uint64) (*models.Tenant, error) {
+	query := fmt.Sprintf("SELECT %s FROM tenants WHERE id = $1;", tenantFields)
+	row := tenantDb.QueryRow(ctx, query, id)
+	var t = new(models.Tenant)
+
+	if err := row.Scan(&t.Id, &t.Name, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		return nil, err
+	}
+
+	_ = tenantCache.Set(ctx, id, *t)
+	return t, nil
+}
+
+func findTenantByIdFromCache(ctx context.Context, id uint64) (*models.Tenant, error) {
+	t, err := tenantCache.Get(ctx, id)
+
+	if err != nil {
+		return nil, err
+	}
+	return &t, nil
 }

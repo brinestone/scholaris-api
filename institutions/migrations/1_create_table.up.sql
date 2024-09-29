@@ -5,7 +5,9 @@ CREATE TABLE
         description VARCHAR(255) DEFAULT NULL,
         logo VARCHAR(255) DEFAULT NULL,
         visible BOOLEAN DEFAULT FALSE,
-        slug VARCHAR(15) NOT NULL UNIQUE,
+        slug VARCHAR(15) NOT NULL,
+        tenant BIGSERIAL NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        
     );

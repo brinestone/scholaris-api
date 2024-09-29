@@ -9,6 +9,7 @@ type Institution struct {
 	Visible     bool       `json:"visible"`
 	Slug        string     `json:"slug"`
 	Id          uint64     `json:"id,omitempty"`
+	TenantId    uint64     `json:"tenant"`
 	CreatedAt   time.Time  `json:"createdAt"`
 	UpdatedAt   time.Time  `json:"updatedAt"`
 }
