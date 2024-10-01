@@ -10,9 +10,8 @@ type NewInstitutionRequest struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
 	Logo        string `json:"logo,omitempty"`
-	// Visible     bool   `json:"visible"`
-	Slug     string `json:"slug"`
-	TenantId uint64 `json:"tenantId"`
+	Slug        string `json:"slug"`
+	TenantId    uint64 `json:"tenantId"`
 }
 
 func (n NewInstitutionRequest) Validate() error {

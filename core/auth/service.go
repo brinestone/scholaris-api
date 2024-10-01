@@ -15,7 +15,7 @@ import (
 var jwtSigningMethod = jwt.SigningMethodHS256
 
 type LoginResponse struct {
-	AccessToken string `json:"access_token"`
+	AccessToken string `json:"accessToken"`
 }
 
 // Signs in an existing user using their email and password

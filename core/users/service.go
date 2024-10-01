@@ -134,12 +134,20 @@ func findUserByIdFromDb(ctx context.Context, id uint64) (*models.User, error) {
 	return ans, nil
 }
 
-func findUserByEmailFromCache(ctx context.Context, email string) (*models.User, error) {
-	u, err := emailCache.Get(ctx, email)
-	if err != nil {
-		return nil, err
+func userEmailExists(ctx context.Context, email string) (bool, error) {
+	query := "SELECT COUNT(id) FROM users WHERE email = $1;"
+	var cnt = 0
+
+	row := userDb.QueryRow(ctx, query, email)
+
+	if err := row.Scan(&cnt); err != nil {
+		if errors.Is(err, sqldb.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
 	}
-	return &u, err
+
+	return cnt > 0, nil
 }
 
 func findUserByEmailFromDb(ctx context.Context, email string) (*models.User, error) {
@@ -188,12 +196,12 @@ func findAllUsers(ctx context.Context, offset uint64, size uint) ([]*models.User
 }
 
 func createUser(ctx context.Context, req dto.NewUserRequest) (*models.User, error) {
-	existingUser, err := findUserByEmailFromDb(ctx, req.Email)
+	emailExists, err := userEmailExists(ctx, req.Email)
 	if err != nil {
 		return nil, err
 	}
 
-	if existingUser != nil {
+	if emailExists {
 		return nil, &errs.Error{
 			Code:    errs.AlreadyExists,
 			Message: "email is already in use",

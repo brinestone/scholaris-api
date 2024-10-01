@@ -1,6 +1,7 @@
 package dto
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"time"
@@ -43,18 +44,29 @@ type UserLookupByEmailRequest struct {
 	Email string `query:"email"`
 }
 
-const Male string = "male"
-const Female string = "female"
+type Gender string
+
+const (
+	Male   Gender = "male"
+	Female Gender = "female"
+)
 
 type NewUserRequest struct {
 	FirstName       string `json:"firstName"`
-	LastName        string `json:"lastName"`
+	LastName        string `json:"lastName,omitempty"`
 	Email           string `json:"email"`
 	Dob             string `json:"dob"`
 	Password        string `json:"password"`
 	ConfirmPassword string `json:"confirmPassword"`
-	Phone           string `json:"phone"`
-	Gender          string `json:"gender"`
+	Phone           string `json:"phone,omitempty"`
+	Gender          Gender `json:"gender,omitempty"`
+}
+
+func (g Gender) Validate() error {
+	if g != Male && g != Female {
+		return fmt.Errorf("invalid gender value. Expected \"%s\" or \"%s\". Got: \"%s\"", Male, Female, g)
+	}
+	return nil
 }
 
 func (n NewUserRequest) Validate() error {
@@ -93,13 +105,8 @@ func (n NewUserRequest) Validate() error {
 		msgs = append(msgs, "Passwords do not match")
 	}
 
-	if len(n.Gender) == 0 {
-		msgs = append(msgs, "The gender field is required")
-	} else {
-		temp := strings.ToLower(n.Gender)
-		if temp != Male && temp != Female {
-			msgs = append(msgs, "Invalid gender. Expected \"male\" or \"female\"")
-		}
+	if err := n.Gender.Validate(); err != nil {
+		msgs = append(msgs, err.Error())
 	}
 
 	if len(n.Phone) > 0 && !regexp.MustCompile(`\+(9[976]\d|8[987530]\d|6[987]\d|5[90]\d|42\d|3[875]\d|2[98654321]\d|9[8543210]|8[6421]|6[6543210]|5[87654321]|4[987654310]|3[9643210]|2[70]|7|1)\d{1,14}$`).MatchString(n.Phone) {
@@ -116,4 +123,4 @@ func (n NewUserRequest) Validate() error {
 	return ans
 }
 
-var emailRegex = regexp.MustCompile(`^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$`)
+var emailRegex = regexp.MustCompile(`^[\w-\.]+@([\w-]+\.)+[\w-]{2,}$`)
