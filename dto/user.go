@@ -10,8 +10,9 @@ import (
 )
 
 type LoginRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Email        string `json:"email"`
+	Password     string `json:"password"`
+	CaptchaToken string `json:"captchaToken"`
 }
 
 func (l LoginRequest) Validate() error {
@@ -28,6 +29,10 @@ func (l LoginRequest) Validate() error {
 
 	if len(l.Password) == 0 {
 		msgs = append(msgs, "The password field is required")
+	}
+
+	if len(l.CaptchaToken) == 0 {
+		msgs = append(msgs, "Invalid captcha token")
 	}
 
 	if len(msgs) > 0 {
@@ -60,6 +65,7 @@ type NewUserRequest struct {
 	ConfirmPassword string `json:"confirmPassword"`
 	Phone           string `json:"phone,omitempty"`
 	Gender          Gender `json:"gender,omitempty"`
+	CaptchaToken    string `json:"captchaToken"`
 }
 
 func (g Gender) Validate() error {
@@ -111,6 +117,10 @@ func (n NewUserRequest) Validate() error {
 
 	if len(n.Phone) > 0 && !regexp.MustCompile(`\+(9[976]\d|8[987530]\d|6[987]\d|5[90]\d|42\d|3[875]\d|2[98654321]\d|9[8543210]|8[6421]|6[6543210]|5[87654321]|4[987654310]|3[9643210]|2[70]|7|1)\d{1,14}$`).MatchString(n.Phone) {
 		msgs = append(msgs, "Invalid phone number. Phone numbers must be in international format")
+	}
+
+	if len(n.CaptchaToken) == 0 {
+		msgs = append(msgs, "Invalid captcha token")
 	}
 
 	if len(msgs) > 0 {

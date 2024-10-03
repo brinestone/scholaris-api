@@ -2,13 +2,20 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"encore.dev/beta/auth"
-	"encore.dev/beta/errs"
+	"encore.dev/rlog"
 	"github.com/brinestone/scholaris/core/users"
 	"github.com/brinestone/scholaris/dto"
+	"github.com/brinestone/scholaris/util"
 	"github.com/golang-jwt/jwt/v4"
 )
 
@@ -20,8 +27,13 @@ type LoginResponse struct {
 
 // Signs in an existing user using their email and password
 //
-//encore:api public method=POST tag:login
-func LoginUser(ctx context.Context, req dto.LoginRequest) (*LoginResponse, error) {
+//encore:api public method=POST tag:sign-in
+func SignIn(ctx context.Context, req dto.LoginRequest) (*LoginResponse, error) {
+	if err := verifyCaptcha(req.CaptchaToken); err != nil {
+		rlog.Error(err.Error())
+		return nil, &util.ErrCaptchaError
+	}
+
 	var ans = new(LoginResponse)
 	user, err := users.VerifyCredentials(ctx, req)
 	if err != nil {
@@ -40,9 +52,7 @@ func LoginUser(ctx context.Context, req dto.LoginRequest) (*LoginResponse, error
 	token := jwt.NewWithClaims(jwtSigningMethod, claims)
 	serializedToken, err := token.SignedString([]byte(secrets.JwtKey))
 	if err != nil {
-		return nil, &errs.Error{
-			Code: errs.Unauthenticated,
-		}
+		return nil, &util.ErrUnauthorized
 	}
 
 	ans.AccessToken = serializedToken
@@ -50,10 +60,57 @@ func LoginUser(ctx context.Context, req dto.LoginRequest) (*LoginResponse, error
 	return ans, nil
 }
 
+type CaptchaCheckResponse struct {
+	Success            bool      `json:"success"`
+	ChallengeTimestamp time.Time `json:"challenge_ts"`
+	HostName           string    `json:"hostname"`
+	ErrorCodes         []string  `json:"error-codes,omitempty"`
+}
+
+// type CaptchaCheckRequest struct {
+// 	Secret       string  `json:"secret"`
+// 	RequestToken string  `json:"response"`
+// 	RemoteIp     *string `json:"remoteip"`
+// }
+
+func verifyCaptcha(token string) error {
+	req := make(url.Values)
+	req.Add("secret", secrets.CaptchaSecretKey)
+	req.Add("response", token)
+
+	response, err := http.PostForm("https://www.google.com/recaptcha/api/siteverify", req)
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+
+	// var bodyReader = new(bytes.Reader)
+
+	j, err := io.ReadAll(response.Body)
+	if err != nil {
+		return err
+	}
+
+	var captchaResponse CaptchaCheckResponse
+	if err = json.Unmarshal(j, &captchaResponse); err != nil {
+		return err
+	}
+
+	if !captchaResponse.Success {
+		return errors.New(strings.Trim(strings.Join(captchaResponse.ErrorCodes, "\n"), "\n\t"))
+	}
+
+	return nil
+}
+
 // Creates a new user account
 //
 //encore:api public method=POST tag:new
 func SignUp(ctx context.Context, req dto.NewUserRequest) error {
+	if err := verifyCaptcha(req.CaptchaToken); err != nil {
+		rlog.Error(err.Error())
+		return &util.ErrCaptchaError
+	}
 
 	_, err := users.NewUser(ctx, req)
 	if err != nil {
@@ -77,7 +134,8 @@ type AuthClaims struct {
 }
 
 var secrets struct {
-	JwtKey string
+	JwtKey           string
+	CaptchaSecretKey string
 }
 
 //encore:authhandler
@@ -90,9 +148,7 @@ func JwtAuthHandler(ctx context.Context, token string) (auth.UID, *AuthClaims, e
 	}
 
 	if !t.Valid {
-		return "", nil, &errs.Error{
-			Code: errs.Unauthenticated,
-		}
+		return "", nil, &util.ErrUnauthorized
 	}
 
 	var id uint64
@@ -116,9 +172,7 @@ func JwtAuthHandler(ctx context.Context, token string) (auth.UID, *AuthClaims, e
 
 	user, err := users.FindUserById(ctx, id)
 	if err != nil || user == nil || user.Id != id {
-		return "", nil, &errs.Error{
-			Code: errs.Unauthenticated,
-		}
+		return "", nil, &util.ErrUnauthorized
 	}
 
 	return auth.UID(fmt.Sprint(id)), authClaims, nil
