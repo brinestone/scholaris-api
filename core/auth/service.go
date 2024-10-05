@@ -67,12 +67,6 @@ type CaptchaCheckResponse struct {
 	ErrorCodes         []string  `json:"error-codes,omitempty"`
 }
 
-// type CaptchaCheckRequest struct {
-// 	Secret       string  `json:"secret"`
-// 	RequestToken string  `json:"response"`
-// 	RemoteIp     *string `json:"remoteip"`
-// }
-
 func verifyCaptcha(token string) error {
 	req := make(url.Values)
 	req.Add("secret", secrets.CaptchaSecretKey)
@@ -144,6 +138,9 @@ func JwtAuthHandler(ctx context.Context, token string) (auth.UID, *AuthClaims, e
 
 	t, err := jwt.ParseWithClaims(token, claims, findJwtToken, jwt.WithValidMethods([]string{jwtSigningMethod.Alg()}))
 	if err != nil {
+		if errors.Is(err, jwt.ErrTokenExpired) {
+			return "", nil, &util.ErrUnauthorized
+		}
 		return "", nil, err
 	}
 

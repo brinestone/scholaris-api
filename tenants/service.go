@@ -3,6 +3,7 @@ package tenants
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -18,12 +19,27 @@ import (
 	"github.com/brinestone/scholaris/util"
 )
 
-// var secrets struct {
-// 	DatabaseUri string
-// }
-
-type TenantsResponse struct {
+type FindTenantsResponse struct {
 	Tenants []*models.Tenant `json:"tenants"`
+}
+
+type FindSubscriptionPlansResponse struct {
+	SubscriptionPlans []*models.SubscriptionPlan `json:"plans"`
+}
+
+// Finds Subscription plans
+//
+//encore:api public method=GET path=/subscription-plans
+func FindSubscriptionPlans(ctx context.Context, params dto.PaginationParams) (*FindSubscriptionPlansResponse, error) {
+	plans, err := findSubscriptionPlans(ctx, params)
+	if err != nil {
+		rlog.Error(err.Error())
+		return nil, &util.ErrUnknown
+	}
+
+	return &FindSubscriptionPlansResponse{
+		SubscriptionPlans: plans,
+	}, nil
 }
 
 // Finds a tenant using its ID
@@ -54,7 +70,7 @@ func DeleteTenant(ctx context.Context, id uint64) error {
 		return err
 	}
 
-	err = deleteTenantById(ctx, id)
+	err = deleteTenantById(ctx, tx, id)
 	if err != nil {
 		rlog.Error(err.Error())
 		_ = tx.Rollback()
@@ -97,7 +113,7 @@ func NewTenant(ctx context.Context, req dto.NewTenantRequest) error {
 		return err
 	}
 
-	tenant, err := createTenant(ctx, req)
+	tenant, err := createTenant(ctx, tx, req)
 	if err != nil {
 		_ = tx.Rollback()
 		return err
@@ -118,7 +134,8 @@ func NewTenant(ctx context.Context, req dto.NewTenantRequest) error {
 			},
 		},
 	}); err != nil {
-		_ = tx.Rollback()
+		rlog.Error(err.Error())
+		err = tx.Rollback()
 		rlog.Error(err.Error())
 		return &util.ErrUnknown
 	}
@@ -134,13 +151,13 @@ func NewTenant(ctx context.Context, req dto.NewTenantRequest) error {
 // Find all Tenants
 //
 //encore:api public method=GET path=/tenants
-func FindTenants(ctx context.Context, req dto.PaginationParams) (*TenantsResponse, error) {
+func FindTenants(ctx context.Context, req dto.PaginationParams) (*FindTenantsResponse, error) {
 	ans, err := findTenants(ctx, req)
 	if err != nil {
 		return nil, err
 	}
 
-	return &TenantsResponse{
+	return &FindTenantsResponse{
 		Tenants: ans,
 	}, nil
 }
@@ -155,7 +172,7 @@ func findTenants(ctx context.Context, req dto.PaginationParams) ([]*models.Tenan
 
 	for rows.Next() {
 		var tenant = new(models.Tenant)
-		if err := rows.Scan(&tenant.Id, &tenant.Name, &tenant.CreatedAt, &tenant.UpdatedAt); err != nil {
+		if err := rows.Scan(&tenant.Id, &tenant.Name, &tenant.CreatedAt, &tenant.UpdatedAt, &tenant.Subscription); err != nil {
 			return nil, err
 		}
 		ans = append(ans, tenant)
@@ -163,13 +180,14 @@ func findTenants(ctx context.Context, req dto.PaginationParams) ([]*models.Tenan
 	return ans, nil
 }
 
-const tenantFields = "id,name,created_at,updated_at"
+const tenantFields = "id,name,created_at,updated_at,subscription"
+const subscriptionPlanFields = "id,name,created_at,updated_at,price,currency,enabled,billing_cycle"
 
-func createTenant(ctx context.Context, req dto.NewTenantRequest) (*models.Tenant, error) {
+func createTenant(ctx context.Context, tx *sqldb.Tx, req dto.NewTenantRequest) (*models.Tenant, error) {
 	now := time.Now()
 
 	// Check whether a tenant with the same name already exists.
-	row := tenantDb.QueryRow(ctx, "SELECT COUNT(*) as cnt FROM tenants WHERE name=$1;", req.Name)
+	row := tx.QueryRow(ctx, "SELECT COUNT(name) as cnt FROM tenants WHERE name=$1;", req.Name)
 	var count int
 	_ = row.Scan(&count)
 	if count > 0 {
@@ -180,25 +198,25 @@ func createTenant(ctx context.Context, req dto.NewTenantRequest) (*models.Tenant
 	}
 
 	// Create the database record.
-	_, err := tenantDb.Exec(ctx, "INSERT INTO tenants(name,created_at,updated_at) VALUES ($1,$2,$3);", req.Name, now, now)
+	_, err := tx.Exec(ctx, "INSERT INTO tenants(name,created_at,updated_at) VALUES ($1,$2,$3);", req.Name, now, now)
 	if err != nil {
 		return nil, err
 	}
 
 	// Get the tenant from the database
 	var tenant = new(models.Tenant)
-	row = tenantDb.QueryRow(ctx, fmt.Sprintf("SELECT %s FROM tenants WHERE created_at=$1 AND name=$2;", tenantFields), now, req.Name)
-	if err := row.Scan(&tenant.Id, &tenant.Name, &tenant.CreatedAt, &tenant.UpdatedAt); err != nil {
+	row = tx.QueryRow(ctx, fmt.Sprintf("SELECT %s FROM tenants WHERE created_at=$1 AND name=$2;", tenantFields), now, req.Name)
+	if err := row.Scan(&tenant.Id, &tenant.Name, &tenant.CreatedAt, &tenant.UpdatedAt, &tenant.Subscription); err != nil {
 		return nil, err
 	}
 
 	return tenant, nil
 }
 
-func deleteTenantById(ctx context.Context, id uint64) error {
+func deleteTenantById(ctx context.Context, tx *sqldb.Tx, id uint64) error {
 	query := "DELETE FROM tenants WHERE id = $1;"
 
-	cnt, err := tenantDb.Exec(ctx, query, id)
+	cnt, err := tx.Exec(ctx, query, id)
 	if err != nil {
 		return err
 	}
@@ -229,7 +247,7 @@ func findTenantByIdFromDb(ctx context.Context, id uint64) (*models.Tenant, error
 	row := tenantDb.QueryRow(ctx, query, id)
 	var t = new(models.Tenant)
 
-	if err := row.Scan(&t.Id, &t.Name, &t.CreatedAt, &t.UpdatedAt); err != nil {
+	if err := row.Scan(&t.Id, &t.Name, &t.CreatedAt, &t.UpdatedAt, &t.Subscription); err != nil {
 		return nil, err
 	}
 
@@ -244,4 +262,65 @@ func findTenantByIdFromCache(ctx context.Context, id uint64) (*models.Tenant, er
 		return nil, err
 	}
 	return &t, nil
+}
+
+func findSubscriptionPlans(ctx context.Context, params dto.PaginationParams) ([]*models.SubscriptionPlan, error) {
+	ans := make([]*models.SubscriptionPlan, 0)
+	query := `
+	SELECT
+    	sp.id,
+    	sp.name,
+    	sp.created_at AS "createdAt",
+    	sp.updated_at AS "updatedAt",
+    	sp.price,
+    	sp.currency,
+    	sp.enabled,
+    	sp.billing_cycle AS "billingCycle",
+    	COALESCE(json_agg(json_build_object(
+        	'name', spd.name,
+        	'details', spd.details,
+			'maxCount', spd.max_count,
+			'minCount', spd.min_count,
+			'maxCount', spd.max_count
+    	)) FILTER (WHERE spd.id IS NOT NULL), '[]') AS "descriptions"
+	FROM
+    	subscription_plans sp
+	LEFT JOIN
+    	plan_benefits spd
+	ON
+    	sp.id = spd.subscription_plan
+	WHERE
+		sp.id > $1 AND sp.enabled = true
+	GROUP BY
+    	sp.id
+	OFFSET 0
+	LIMIT $2;
+	`
+
+	rows, err := tenantDb.Query(ctx, query, params.After, params.Size)
+	if err != nil {
+		return ans, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		plan := new(models.SubscriptionPlan)
+		var benefitsJson string
+		if err := rows.Scan(&plan.Id, &plan.Name, &plan.CreatedAt, &plan.UpdatedAt, &plan.Price, &plan.Currency, &plan.Enabled, &plan.BillingCycle, &benefitsJson); err != nil {
+			if !errors.Is(err, sqldb.ErrNoRows) {
+				return ans, err
+			} else {
+				break
+			}
+		}
+
+		var benefits []models.SubscriptionPlanBenefit
+		if err := json.Unmarshal([]byte(benefitsJson), &benefits); err != nil {
+			return ans, err
+		}
+		plan.Benefits = &benefits
+		ans = append(ans, plan)
+	}
+
+	return ans, nil
 }

@@ -3,8 +3,6 @@ package permissions
 import (
 	"context"
 	_ "embed"
-	"encoding/json"
-	"fmt"
 
 	"encore.dev/rlog"
 	"github.com/brinestone/scholaris/dto"
@@ -27,28 +25,15 @@ var secrets struct {
 var dsl string
 
 func initService() (*Service, error) {
-	rlog.Debug("starting permissions service...")
 	var err error
 	fgaClient, err := client.NewSdkClient(&client.ClientConfiguration{
-		ApiUrl:  secrets.FgaUrl,
-		StoreId: secrets.FgaStoreId,
-		// AuthorizationModelId: secrets.FgaModelId,
+		ApiUrl:               secrets.FgaUrl,
+		StoreId:              secrets.FgaStoreId,
+		AuthorizationModelId: secrets.FgaModelId,
 	})
 	if err != nil {
 		return nil, err
 	}
-	rlog.Debug(fmt.Sprintf("Connected to OpenFGA Server on %s", secrets.FgaUrl))
-	var req openfga.WriteAuthorizationModelRequest
-	if err := json.Unmarshal([]byte(dsl), &req); err != nil {
-		panic(err)
-	}
-
-	_, err = fgaClient.WriteAuthorizationModel(context.TODO()).Body(req).Execute()
-	if err != nil {
-		panic(err)
-	}
-
-	rlog.Info("Updated Authorization model")
 
 	return &Service{
 		fgaClient: fgaClient,

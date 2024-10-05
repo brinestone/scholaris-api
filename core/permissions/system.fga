@@ -1,0 +1,46 @@
+model
+  schema 1.1
+
+type user
+
+type tenant
+  relations
+    define owner: [user]
+    define member: [user]
+    define admin: [user] or owner
+    define maintainer: [user] or admin
+    define can_change_owner: owner
+    define can_create_institution: admin
+    define can_delete: owner
+    define can_update: maintainer or admin
+    define can_update_subscription: maintainer
+
+type institution
+  relations
+    define admin: [user] or admin from parent
+    define can_update: can_update from parent or maintainer or admin or owner
+    define maintainer: [user] or maintainer from parent or admin
+    define owner: owner from parent
+    define parent: [tenant]
+    define staff: [user]
+    define student: [user]
+    define teacher: [user]
+    define viewer: [user:*]
+
+type enrollment
+  relations
+    define approver: maintainer from destination or staff from destination
+    define can_approve: approver
+    define can_edit: owner
+    define can_view: viewer
+    define destination: [institution]
+    define owner: [user]
+    define viewer: maintainer from destination or staff from destination or owner
+    
+type subscription
+  relations
+    define owner: [tenant]
+    define viewer: member from owner
+    define editor: maintainer from owner
+    define can_suspend: editor
+    define can_delete: editor
