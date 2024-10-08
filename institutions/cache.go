@@ -12,7 +12,7 @@ import (
 // 	EvictionPolicy: cache.AllKeysLRU,
 // })
 
-var institutionCache = cache.NewStructKeyspace[uint64, models.Institution](noop.CacheCluster, cache.KeyspaceConfig{
+var institutionCache = cache.NewStructKeyspace[string, models.Institution](noop.CacheCluster, cache.KeyspaceConfig{
 	KeyPattern:    "institutions/:key",
 	DefaultExpiry: cache.ExpireIn(5 * time.Minute),
 })

@@ -10,8 +10,11 @@ import (
 )
 
 type LoginRequest struct {
-	Email        string `json:"email"`
-	Password     string `json:"password"`
+	// The user's email address
+	Email string `json:"email"`
+	// The user's plaintext password
+	Password string `json:"password"`
+	// The reCaptcha token for the site
 	CaptchaToken string `json:"captchaToken"`
 }
 
@@ -57,15 +60,24 @@ const (
 )
 
 type NewUserRequest struct {
-	FirstName       string `json:"firstName"`
-	LastName        string `json:"lastName,omitempty"`
-	Email           string `json:"email"`
-	Dob             string `json:"dob"`
-	Password        string `json:"password"`
+	// The user's first name
+	FirstName string `json:"firstName"`
+	// The user's last name (optional)
+	LastName string `json:"lastName,omitempty"`
+	// The user's email address
+	Email string `json:"email"`
+	// The user's date of birth (YYYY/MM/DD)
+	Dob string `json:"dob"`
+	// The user's plaintext password
+	Password string `json:"password"`
+	// Password verification
 	ConfirmPassword string `json:"confirmPassword"`
-	Phone           string `json:"phone,omitempty"`
-	Gender          Gender `json:"gender,omitempty"`
-	CaptchaToken    string `json:"captchaToken"`
+	// The user's phone number in IE64 format
+	Phone string `json:"phone,omitempty"`
+	// The user's gender
+	Gender Gender `json:"gender,omitempty"`
+	// The captcha token for the request
+	CaptchaToken string `json:"captchaToken"`
 }
 
 func (g Gender) Validate() error {

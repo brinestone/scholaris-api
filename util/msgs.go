@@ -1,10 +1,12 @@
 package util
 
-import "encore.dev/beta/errs"
+import (
+	"encore.dev/beta/errs"
+)
 
 var ErrUnknown = errs.Error{
 	Code:    errs.Internal,
-	Message: "An unknown error occured",
+	Message: "Internal server error",
 }
 
 var ErrNotFound = errs.Error{

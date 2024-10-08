@@ -1,3 +1,4 @@
+// All endpoints for authentication
 package auth
 
 import (
@@ -21,13 +22,26 @@ import (
 
 var jwtSigningMethod = jwt.SigningMethodHS256
 
+type VerifyCaptchaRequest struct {
+	// The request's reCaptcha token from the client.
+	Token string `json:"token"`
+}
+
+// Verifies reCaptcha tokens
+//
+//encore:api private method=POST path=/auth/recaptcha-verify
+func VerifyCaptchaToken(ctx context.Context, req VerifyCaptchaRequest) error {
+	return verifyCaptcha(req.Token)
+}
+
 type LoginResponse struct {
+	// The user's access token
 	AccessToken string `json:"accessToken"`
 }
 
 // Signs in an existing user using their email and password
 //
-//encore:api public method=POST tag:sign-in
+//encore:api public method=POST path=/auth/sign-in tag:sign-in
 func SignIn(ctx context.Context, req dto.LoginRequest) (*LoginResponse, error) {
 	if err := verifyCaptcha(req.CaptchaToken); err != nil {
 		rlog.Error(err.Error())
@@ -99,7 +113,7 @@ func verifyCaptcha(token string) error {
 
 // Creates a new user account
 //
-//encore:api public method=POST tag:new
+//encore:api public method=POST path=/auth/sign-up tag:new
 func SignUp(ctx context.Context, req dto.NewUserRequest) error {
 	if err := verifyCaptcha(req.CaptchaToken); err != nil {
 		rlog.Error(err.Error())

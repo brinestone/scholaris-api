@@ -14,10 +14,10 @@ import (
 
 var idCache = cache.NewStructKeyspace[uint64, models.User](noop.CacheCluster, cache.KeyspaceConfig{
 	KeyPattern:    "users/:key",
-	DefaultExpiry: cache.ExpireIn(5 * time.Minute),
+	DefaultExpiry: cache.ExpireIn(1 * time.Hour),
 })
 
 var emailCache = cache.NewStructKeyspace[string, models.User](noop.CacheCluster, cache.KeyspaceConfig{
 	KeyPattern:    "users-:key",
-	DefaultExpiry: cache.ExpireIn(5 * time.Minute),
+	DefaultExpiry: cache.ExpireIn(1 * time.Hour),
 })

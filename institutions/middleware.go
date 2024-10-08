@@ -6,14 +6,38 @@ import (
 	"encore.dev/beta/auth"
 	"encore.dev/middleware"
 	"encore.dev/rlog"
+	appAuth "github.com/brinestone/scholaris/core/auth"
 	"github.com/brinestone/scholaris/core/permissions"
 	"github.com/brinestone/scholaris/dto"
+	"github.com/brinestone/scholaris/models"
 	"github.com/brinestone/scholaris/util"
 )
 
+// Verifies the captcha token in a request
+//
+//encore:middleware target=tag:needs_captcha_ver
+func VerifyCaptchaTokenMiddleware(req middleware.Request, next middleware.Next) middleware.Response {
+	data, ok := req.Data().Payload.(models.CaptchaVerifiable)
+	if !ok {
+		return middleware.Response{
+			Err: &util.ErrCaptchaError,
+		}
+	}
+
+	if err := appAuth.VerifyCaptchaToken(req.Context(), appAuth.VerifyCaptchaRequest{
+		Token: data.GetCaptchaToken(),
+	}); err != nil {
+		return middleware.Response{
+			Err: &util.ErrCaptchaError,
+		}
+	}
+
+	return next(req)
+}
+
 // Validates a user's permission to create an institution
 //
-//encore:middleware target=tag:perm_can_create_institution
+//encore:middleware target=tag:perm_can_create
 func AllowedToCreateInstitutionMiddleware(req middleware.Request, next middleware.Next) middleware.Response {
 	userId, signedIn := auth.UserID()
 	if !signedIn {

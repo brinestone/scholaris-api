@@ -214,3 +214,7 @@ func (ns *NullString) UnmarshalJSON(b []byte) error {
 // 	nt.Valid = true
 // 	return nil
 // }
+
+type CaptchaVerifiable interface {
+	GetCaptchaToken() string
+}

@@ -2,7 +2,7 @@ package permissions
 
 import (
 	"context"
-	_ "embed"
+	"strings"
 
 	"encore.dev/rlog"
 	"github.com/brinestone/scholaris/dto"
@@ -21,15 +21,12 @@ var secrets struct {
 	FgaModelId string `encore:"sensitive"`
 }
 
-//go:embed system.json
-var dsl string
-
 func initService() (*Service, error) {
 	var err error
 	fgaClient, err := client.NewSdkClient(&client.ClientConfiguration{
-		ApiUrl:               secrets.FgaUrl,
-		StoreId:              secrets.FgaStoreId,
-		AuthorizationModelId: secrets.FgaModelId,
+		ApiUrl:  secrets.FgaUrl,
+		StoreId: secrets.FgaStoreId,
+		// AuthorizationModelId: secrets.FgaModelId,
 	})
 	if err != nil {
 		return nil, err
@@ -37,6 +34,35 @@ func initService() (*Service, error) {
 
 	return &Service{
 		fgaClient: fgaClient,
+	}, nil
+}
+
+// List Objects with valid relations
+//
+//encore:api private method=GET path=/permissions/related
+func (s *Service) ListRelations(ctx context.Context, req dto.ListRelationsRequest) (*dto.ListRelationsResponse, error) {
+	reqBody := client.ClientListObjectsRequest{
+		User:     req.Subject,
+		Relation: req.Relation,
+		Type:     req.Type,
+	}
+
+	data, err := s.fgaClient.ListObjects(ctx).
+		Body(reqBody).
+		Execute()
+	if err != nil {
+		return nil, err
+	}
+
+	resultMap := make(map[string][]string)
+
+	for _, rel := range data.GetObjects() {
+		arr := strings.Split(rel, ":")
+		resultMap[arr[0]] = append(resultMap[arr[0]], arr[1])
+	}
+
+	return &dto.ListRelationsResponse{
+		Relations: resultMap,
 	}, nil
 }
 
