@@ -5,7 +5,21 @@ import (
 	"time"
 
 	"encore.dev/beta/errs"
+	"github.com/brinestone/scholaris/models"
 )
+
+type InstitutionLookup struct {
+	Name        string            `json:"name"`
+	Description models.NullString `json:"description,omitempty"`
+	Logo        models.NullString `json:"logo,omitempty"`
+	Visible     bool              `json:"visible"`
+	Slug        string            `json:"slug"`
+	Id          uint64            `json:"id,omitempty"`
+	TenantId    uint64            `json:"-"`
+	CreatedAt   time.Time         `json:"createdAt"`
+	UpdatedAt   time.Time         `json:"updatedAt"`
+	IsMember    bool              `json:"isMember"`
+}
 
 type NewInstitutionRequest struct {
 	// The institution's name

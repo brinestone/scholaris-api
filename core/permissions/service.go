@@ -39,12 +39,12 @@ func initService() (*Service, error) {
 
 // List Objects with valid relations
 //
-//encore:api private method=GET path=/permissions/related
+//encore:api private method=POST path=/permissions/related
 func (s *Service) ListRelations(ctx context.Context, req dto.ListRelationsRequest) (*dto.ListRelationsResponse, error) {
 	reqBody := client.ClientListObjectsRequest{
 		User:     req.Subject,
 		Relation: req.Relation,
-		Type:     req.Type,
+		Type:     string(req.Type),
 	}
 
 	data, err := s.fgaClient.ListObjects(ctx).
@@ -54,11 +54,12 @@ func (s *Service) ListRelations(ctx context.Context, req dto.ListRelationsReques
 		return nil, err
 	}
 
-	resultMap := make(map[string][]string)
+	resultMap := make(map[dto.PermissionType][]string)
 
 	for _, rel := range data.GetObjects() {
 		arr := strings.Split(rel, ":")
-		resultMap[arr[0]] = append(resultMap[arr[0]], arr[1])
+		p, _ := dto.PermissionTypeFromString(arr[0])
+		resultMap[p] = append(resultMap[p], arr[1])
 	}
 
 	return &dto.ListRelationsResponse{

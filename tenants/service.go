@@ -28,7 +28,7 @@ type FindSubscriptionPlansResponse struct {
 // Finds Subscription plans
 //
 //encore:api public method=GET path=/subscription-plans
-func FindSubscriptionPlans(ctx context.Context, params dto.PaginationParams) (*FindSubscriptionPlansResponse, error) {
+func FindSubscriptionPlans(ctx context.Context, params dto.CursorBasedPaginationParams) (*FindSubscriptionPlansResponse, error) {
 	plans, err := findSubscriptionPlans(ctx, params)
 	if err != nil {
 		rlog.Error(err.Error())
@@ -111,38 +111,20 @@ func NewTenant(ctx context.Context, req dto.NewTenantRequest) (*models.Tenant, e
 		return nil, err
 	}
 
-	tenant, err := createTenant(ctx, tx, req)
+	user, _ := auth.UserID()
+
+	tenant, err := createTenant(ctx, tx, req, &user)
 	if err != nil {
 		rlog.Error(err.Error())
 		_ = tx.Rollback()
 		return nil, &util.ErrUnknown
 	}
 
-	var creator *auth.UID
-
-	if i, ok := auth.UserID(); ok {
-		creator = &i
-	}
-
-	if err = permissions.SetPermissions(ctx, dto.UpdatePermissionsRequest{
-		Updates: []dto.PermissionUpdate{
-			{
-				Subject:  fmt.Sprintf("user:%s", string(*creator)),
-				Relation: models.PermOwner,
-				Target:   fmt.Sprintf("tenant:%d", tenant.Id),
-			},
-		},
-	}); err != nil {
-		rlog.Error(err.Error())
-		err = tx.Rollback()
-		rlog.Error(err.Error())
-		return nil, &util.ErrUnknown
-	}
 	_ = tx.Commit()
 
 	NewTenants.Publish(ctx, &TenantCreated{
 		Id:        tenant.Id,
-		CreatedBy: creator,
+		CreatedBy: &user,
 	})
 	return tenant, nil
 }
@@ -201,7 +183,7 @@ func getSubscribedTenants(ctx context.Context, uid auth.UID, after uint64, size 
 			id IN (%s) AND id > $1
 		OFFSET 0
 		LIMIT $2;
-	`, tenantFields, strings.Join(response.Relations[string(dto.PTTenant)], ","))
+	`, tenantFields, strings.Join(response.Relations[dto.PTTenant], ","))
 
 	rows, err := tenantDb.Query(ctx, query, after, size)
 	if err != nil {
@@ -224,7 +206,7 @@ func getSubscribedTenants(ctx context.Context, uid auth.UID, after uint64, size 
 
 	q2 := fmt.Sprintf(`
 		SELECT COUNT(id) FROM tenants WHERE id IN (%s);
-	`, strings.Join(response.Relations[string(dto.PTTenant)], ","))
+	`, strings.Join(response.Relations[dto.PTTenant], ","))
 
 	var cnt uint = 0
 	if err := tenantDb.QueryRow(ctx, q2).Scan(&cnt); err != nil {
@@ -280,7 +262,7 @@ const tenantFields = "id,name,created_at,updated_at,subscription"
 
 // const subscriptionPlanFields = "id,name,created_at,updated_at,price,currency,enabled,billing_cycle"
 
-func createTenant(ctx context.Context, tx *sqldb.Tx, req dto.NewTenantRequest) (*models.Tenant, error) {
+func createTenant(ctx context.Context, tx *sqldb.Tx, req dto.NewTenantRequest, owner *auth.UID) (*models.Tenant, error) {
 	// Check whether a tenant with the same name already exists.
 	row := tx.QueryRow(ctx, "SELECT COUNT(name) AS cnt FROM tenants WHERE name=$1;", req.Name)
 	var count int
@@ -315,6 +297,23 @@ func createTenant(ctx context.Context, tx *sqldb.Tx, req dto.NewTenantRequest) (
 	var tenant = new(models.Tenant)
 	row = tx.QueryRow(ctx, fmt.Sprintf("SELECT %s FROM tenants WHERE id = $1;", tenantFields), newId)
 	if err := row.Scan(&tenant.Id, &tenant.Name, &tenant.CreatedAt, &tenant.UpdatedAt, &tenant.Subscription); err != nil {
+		return nil, err
+	}
+
+	if err = permissions.SetPermissions(ctx, dto.UpdatePermissionsRequest{
+		Updates: []dto.PermissionUpdate{
+			{
+				Subject:  fmt.Sprintf("%s:%s", dto.PTUser, string(*owner)),
+				Relation: models.PermOwner,
+				Target:   fmt.Sprintf("%s:%d", dto.PTTenant, tenant.Id),
+			},
+			{
+				Subject:  fmt.Sprintf("%s:%d", dto.PTTenant, tenant.Id),
+				Relation: models.PermOwner,
+				Target:   fmt.Sprintf("%s:%d", dto.PTSubscription, *subId),
+			},
+		},
+	}); err != nil {
 		return nil, err
 	}
 
@@ -415,7 +414,7 @@ func findTenantByIdFromCache(ctx context.Context, id uint64) (*models.Tenant, er
 	return &t, nil
 }
 
-func findSubscriptionPlans(ctx context.Context, params dto.PaginationParams) ([]*models.SubscriptionPlan, error) {
+func findSubscriptionPlans(ctx context.Context, params dto.CursorBasedPaginationParams) ([]*models.SubscriptionPlan, error) {
 	ans := make([]*models.SubscriptionPlan, 0)
 	query := `
 	SELECT

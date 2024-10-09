@@ -23,7 +23,7 @@ type FetchUsersResponse struct {
 // Fetches a paginated set of Users
 //
 //encore:api auth method=GET path=/users
-func FetchUsers(ctx context.Context, req dto.PaginationParams) (*FetchUsersResponse, error) {
+func FetchUsers(ctx context.Context, req dto.CursorBasedPaginationParams) (*FetchUsersResponse, error) {
 	ans, err := findAllUsers(ctx, req.After, req.Size)
 	if err != nil {
 		return nil, err

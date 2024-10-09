@@ -13,7 +13,7 @@ type LoginRequest struct {
 	// The user's email address
 	Email string `json:"email"`
 	// The user's plaintext password
-	Password string `json:"password"`
+	Password string `json:"password" encore:"sensitive"`
 	// The reCaptcha token for the site
 	CaptchaToken string `json:"captchaToken"`
 }

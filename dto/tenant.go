@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"encore.dev/beta/errs"
-	"github.com/brinestone/scholaris/models"
 )
 
 type FindTenantsRequest struct {
@@ -14,11 +13,6 @@ type FindTenantsRequest struct {
 	// Retrieve only the tenants whereby the user is a member.
 	SubscribedOnly bool `json:"subscribedOnly"`
 }
-
-type InstitutionLookup struct {
-	models.Institution
-}
-
 type TenantLookup struct {
 	Name         string    `json:"name"`
 	Id           uint64    `json:"id,omitempty"`
