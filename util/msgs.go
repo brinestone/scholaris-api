@@ -4,6 +4,9 @@ import (
 	"encore.dev/beta/errs"
 )
 
+const MsgDbAccessError = "db access error"
+const MsgCacheAccessError = "cache access error"
+
 var ErrUnknown = errs.Error{
 	Code:    errs.Internal,
 	Message: "Internal server error",

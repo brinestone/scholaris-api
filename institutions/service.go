@@ -3,13 +3,18 @@ package institutions
 
 import (
 	"context"
+	"crypto/md5"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"regexp"
+	"strconv"
 	"time"
 
 	"encore.dev/beta/auth"
 	"encore.dev/beta/errs"
 	"encore.dev/rlog"
+	"encore.dev/storage/cache"
 	"encore.dev/storage/sqldb"
 	"github.com/brinestone/scholaris/core/permissions"
 	"github.com/brinestone/scholaris/dto"
@@ -19,6 +24,49 @@ import (
 )
 
 // API Functions
+
+// Gets more information for an institution
+//
+//encore:api public method=GET path=/institutions/:identifier
+func GetInstitution(ctx context.Context, identifier string) (*dto.InstitutionDto, error) {
+
+	if match, _ := regexp.MatchString(`^\d+$`, identifier); match {
+		id, _ := strconv.ParseUint(identifier, 10, 64)
+		ans, err := findInstitutionByIdFromCache(ctx, id)
+		if errors.Is(err, cache.Miss) {
+			institution, err := findInstitutionByIdFromDb(ctx, id)
+			if errors.Is(err, sqldb.ErrNoRows) {
+				return nil, &util.ErrNotFound
+			} else if err != nil {
+				rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+				return nil, &util.ErrUnknown
+			}
+
+			return toDto(institution), nil
+		} else if err != nil {
+			rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
+			return nil, &util.ErrUnknown
+		}
+		return ans, nil
+	} else {
+		ans, err := findInstitutionBySlugFromCache(ctx, identifier)
+		if errors.Is(err, cache.Miss) {
+			institution, err := findInstitutionbySlugFromDb(ctx, identifier)
+			if errors.Is(err, sqldb.ErrNoRows) {
+				return nil, &util.ErrNotFound
+			} else if err != nil {
+				rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+				return nil, &util.ErrUnknown
+			}
+
+			return toDto(institution), nil
+		} else if err != nil {
+			rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
+			return nil, &util.ErrUnknown
+		}
+		return ans, nil
+	}
+}
 
 // Looks up institutions
 //
@@ -104,18 +152,25 @@ func NewInstitution(ctx context.Context, req dto.NewInstitutionRequest) (*dto.In
 		})
 	}()
 
-	return &dto.InstitutionLookup{
-		Name:        i.Name,
-		Description: i.Description,
-		Logo:        i.Logo,
-		Visible:     i.Visible,
-		Slug:        i.Slug,
-		Id:          i.Id,
-		TenantId:    i.TenantId,
-		CreatedAt:   i.CreatedAt,
-		UpdatedAt:   i.UpdatedAt,
-		IsMember:    true,
-	}, nil
+	ans := &dto.InstitutionLookup{
+		Name:      i.Name,
+		Visible:   i.Visible,
+		Slug:      i.Slug,
+		Id:        i.Id,
+		TenantId:  i.TenantId,
+		CreatedAt: i.CreatedAt,
+		UpdatedAt: i.UpdatedAt,
+		IsMember:  true,
+	}
+
+	if i.Description.Valid {
+		ans.Description = &i.Description.String
+	}
+	if i.Logo.Valid {
+		ans.Logo = &i.Logo.String
+	}
+
+	return ans, nil
 }
 
 // Private section
@@ -169,17 +224,22 @@ func createInstitution(ctx context.Context, tx *sqldb.Tx, req dto.NewInstitution
 	return newId, nil
 }
 
-// func findInstitutionByIdFromCache(ctx context.Context, id uint64) (*models.Institution, error) {
-// 	return findInstitutionByKeyFromCache(ctx, "id", id)
-// }
+func findInstitutionBySlugFromCache(ctx context.Context, slug string) (*dto.InstitutionDto, error) {
+	return findInstitutionByKeyFromCache(ctx, "slug", slug)
+}
 
-// func findInstitutionByKeyFromCache(ctx context.Context, key string, value any) (*models.Institution, error) {
-// 	ans, err := institutionCache.Get(ctx, fmt.Sprintf("%s=%v", key, value))
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	return &ans, nil
-// }
+func findInstitutionByIdFromCache(ctx context.Context, id uint64) (*dto.InstitutionDto, error) {
+	return findInstitutionByKeyFromCache(ctx, "id", id)
+}
+
+func findInstitutionByKeyFromCache(ctx context.Context, key string, value any) (*dto.InstitutionDto, error) {
+	sum := md5.Sum([]byte(fmt.Sprintf("%s=%v", key, value)))
+	ans, err := institutionCache.Get(ctx, hex.EncodeToString(sum[:]))
+	if err != nil {
+		return nil, err
+	}
+	return &ans, nil
+}
 
 func findInstitutionByKeyFromDbTrx(ctx context.Context, trx *sqldb.Tx, key string, value any) (*models.Institution, error) {
 	var i = new(models.Institution)
@@ -198,32 +258,64 @@ func findInstitutionByKeyFromDbTrx(ctx context.Context, trx *sqldb.Tx, key strin
 	return i, nil
 }
 
+func findInstitutionbySlugFromDb(ctx context.Context, slug string) (*models.Institution, error) {
+	return findInstitutionByKeyFromDb(ctx, "slug", slug)
+}
+
 func findInstitutionByIdFromDbTrx(ctx context.Context, tx *sqldb.Tx, id uint64) (*models.Institution, error) {
 	return findInstitutionByKeyFromDbTrx(ctx, tx, "id", id)
 }
 
-// func findInstitutionByIdFromDb(ctx context.Context, id uint64) (*models.Institution, error) {
-// 	i, err := findInstitutionByKeyFromDb(ctx, "id", id)
-// 	if err != nil {
-// 		return nil, err
-// 	}
+func findInstitutionByIdFromDb(ctx context.Context, id uint64) (*models.Institution, error) {
+	i, err := findInstitutionByKeyFromDb(ctx, "id", id)
+	if err != nil {
+		return nil, err
+	}
 
-// 	return i, nil
-// }
+	return i, nil
+}
 
 // Finds an item from the cache using a key and the value of that key as the cache key
-// func findInstitutionByKeyFromDb(ctx context.Context, key string, value any) (*models.Institution, error) {
-// 	var i = new(models.Institution)
-// 	query := fmt.Sprintf("SELECT %s FROM institutions WHERE %s = $1;", institutionFields, key)
-// 	row := db.QueryRow(ctx, query, value)
+func findInstitutionByKeyFromDb(ctx context.Context, key string, value any) (*models.Institution, error) {
+	var i = new(models.Institution)
+	query := fmt.Sprintf("SELECT %s FROM institutions WHERE %s = $1;", institutionFields, key)
+	row := db.QueryRow(ctx, query, value)
 
-// 	if err := row.Scan(&i.Id, &i.Name, &i.Description, &i.Logo, &i.Visible, &i.Slug, &i.TenantId, &i.CreatedAt, &i.UpdatedAt); err != nil {
-// 		return nil, err
-// 	}
+	if err := row.Scan(&i.Id, &i.Name, &i.Description, &i.Logo, &i.Visible, &i.Slug, &i.TenantId, &i.CreatedAt, &i.UpdatedAt); err != nil {
+		return nil, err
+	}
 
-// 	_ = institutionCache.Set(ctx, fmt.Sprintf("%s=%v", key, value), *i)
-// 	return i, nil
-// }
+	sum := md5.Sum([]byte(fmt.Sprintf("%s=%v", key, value)))
+	_ = institutionCache.Set(ctx, hex.EncodeToString(sum[:]), *toDto(i))
+	return i, nil
+}
+
+func toDto(in *models.Institution) *dto.InstitutionDto {
+	if in == nil {
+		return nil
+	}
+
+	ans := &dto.InstitutionDto{
+		Name:      in.Name,
+		Visible:   in.Visible,
+		Slug:      in.Slug,
+		Id:        in.Id,
+		TenantId:  in.TenantId,
+		CreatedAt: in.CreatedAt,
+		UpdatedAt: in.UpdatedAt,
+		IsMember:  false,
+	}
+
+	if in.Logo.Valid {
+		ans.Logo = &in.Logo.String
+	}
+
+	if in.Description.Valid {
+		ans.Description = &in.Description.String
+	}
+
+	return ans
+}
 
 func lookupInstitutions(ctx context.Context, page uint, size uint, uid *auth.UID) ([]*dto.InstitutionLookup, uint, error) {
 	var cnt uint

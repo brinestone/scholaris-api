@@ -26,6 +26,7 @@ type institution
     define student: [user]
     define teacher: [user]
     define viewer: [user:*]
+    define member: student or teacher or staff or maintainer
 
 type enrollment
   relations

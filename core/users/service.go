@@ -82,7 +82,7 @@ func NewUser(ctx context.Context, req dto.NewUserRequest) (*models.User, error) 
 		return nil, &util.ErrUnknown
 	}
 
-	user, err := createUser(ctx, req)
+	user, err := createUser(ctx, req, tx)
 	if err != nil {
 		_ = tx.Rollback()
 		rlog.Error(err.Error())
@@ -134,11 +134,23 @@ func findUserByIdFromDb(ctx context.Context, id uint64) (*models.User, error) {
 	return ans, nil
 }
 
-func userEmailExists(ctx context.Context, email string) (bool, error) {
-	query := "SELECT COUNT(id) FROM users WHERE email = $1;"
+func userEmailExists(ctx context.Context, email string, tx *sqldb.Tx) (bool, error) {
+	query := `
+	SELECT 
+		COUNT(id) 
+	FROM 
+		users
+	WHERE 
+		email = $1;
+	`
 	var cnt = 0
 
-	row := userDb.QueryRow(ctx, query, email)
+	var row *sqldb.Row
+	if tx != nil {
+		row = tx.QueryRow(ctx, query, email)
+	} else {
+		row = userDb.QueryRow(ctx, query, email)
+	}
 
 	if err := row.Scan(&cnt); err != nil {
 		if errors.Is(err, sqldb.ErrNoRows) {
@@ -195,8 +207,8 @@ func findAllUsers(ctx context.Context, offset uint64, size uint) ([]*models.User
 	return ans, nil
 }
 
-func createUser(ctx context.Context, req dto.NewUserRequest) (*models.User, error) {
-	emailExists, err := userEmailExists(ctx, req.Email)
+func createUser(ctx context.Context, req dto.NewUserRequest, tx *sqldb.Tx) (*models.User, error) {
+	emailExists, err := userEmailExists(ctx, req.Email, tx)
 	if err != nil {
 		return nil, err
 	}
@@ -214,12 +226,19 @@ func createUser(ctx context.Context, req dto.NewUserRequest) (*models.User, erro
 		return nil, err
 	}
 
-	query := "INSERT INTO users (first_name, last_name, email, dob, password_hash, phone, gender) VALUES ($1,$2,$3,$4,$5,$6,$7);"
-	_, err = userDb.Exec(ctx, query, req.FirstName, req.LastName, req.Email, dob, string(ph), req.Phone, req.Gender)
-	if err != nil {
+	query := `
+		INSERT INTO 
+			users (first_name, last_name, email, dob, password_hash, phone, gender) 
+		VALUES 
+			($1,$2,$3,$4,$5,$6,$7) 
+		RETURNING
+			id;
+	`
+	var id int64
+	if err = tx.QueryRow(ctx, query, req.FirstName, req.LastName, req.Email, dob, string(ph), req.Phone, req.Gender).Scan(&id); err != nil {
 		rlog.Error(err.Error())
 		return nil, &util.ErrUnknown
 	}
 
-	return findUserByEmailFromDb(ctx, req.Email)
+	return findUserByIdFromCache(ctx, uint64(id))
 }
