@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"time"
 
 	"encore.dev/beta/errs"
@@ -24,7 +23,7 @@ type FetchUsersResponse struct {
 // Fetches a paginated set of Users
 //
 //encore:api auth method=GET path=/users
-func FetchUsers(ctx context.Context, req dto.PaginationParams) (*FetchUsersResponse, error) {
+func FetchUsers(ctx context.Context, req dto.CursorBasedPaginationParams) (*FetchUsersResponse, error) {
 	ans, err := findAllUsers(ctx, req.After, req.Size)
 	if err != nil {
 		return nil, err
@@ -63,8 +62,6 @@ func VerifyCredentials(ctx context.Context, req dto.LoginRequest) (*models.User,
 		}
 	}
 
-	log.Printf("%+v\n", user)
-
 	if err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
 		return nil, &errs.Error{
 			Code:    errs.Unauthenticated,
@@ -85,7 +82,7 @@ func NewUser(ctx context.Context, req dto.NewUserRequest) (*models.User, error) 
 		return nil, &util.ErrUnknown
 	}
 
-	user, err := createUser(ctx, req)
+	user, err := createUser(ctx, req, tx)
 	if err != nil {
 		_ = tx.Rollback()
 		rlog.Error(err.Error())
@@ -137,12 +134,32 @@ func findUserByIdFromDb(ctx context.Context, id uint64) (*models.User, error) {
 	return ans, nil
 }
 
-func findUserByEmailFromCache(ctx context.Context, email string) (*models.User, error) {
-	u, err := emailCache.Get(ctx, email)
-	if err != nil {
-		return nil, err
+func userEmailExists(ctx context.Context, email string, tx *sqldb.Tx) (bool, error) {
+	query := `
+	SELECT 
+		COUNT(id) 
+	FROM 
+		users
+	WHERE 
+		email = $1;
+	`
+	var cnt = 0
+
+	var row *sqldb.Row
+	if tx != nil {
+		row = tx.QueryRow(ctx, query, email)
+	} else {
+		row = userDb.QueryRow(ctx, query, email)
 	}
-	return &u, err
+
+	if err := row.Scan(&cnt); err != nil {
+		if errors.Is(err, sqldb.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	return cnt > 0, nil
 }
 
 func findUserByEmailFromDb(ctx context.Context, email string) (*models.User, error) {
@@ -190,13 +207,13 @@ func findAllUsers(ctx context.Context, offset uint64, size uint) ([]*models.User
 	return ans, nil
 }
 
-func createUser(ctx context.Context, req dto.NewUserRequest) (*models.User, error) {
-	existingUser, err := findUserByEmailFromDb(ctx, req.Email)
+func createUser(ctx context.Context, req dto.NewUserRequest, tx *sqldb.Tx) (*models.User, error) {
+	emailExists, err := userEmailExists(ctx, req.Email, tx)
 	if err != nil {
 		return nil, err
 	}
 
-	if existingUser != nil {
+	if emailExists {
 		return nil, &errs.Error{
 			Code:    errs.AlreadyExists,
 			Message: "email is already in use",
@@ -209,12 +226,19 @@ func createUser(ctx context.Context, req dto.NewUserRequest) (*models.User, erro
 		return nil, err
 	}
 
-	query := "INSERT INTO users (first_name, last_name, email, dob, password_hash, phone, gender) VALUES ($1,$2,$3,$4,$5,$6,$7);"
-	_, err = userDb.Exec(ctx, query, req.FirstName, req.LastName, req.Email, dob, string(ph), req.Phone, req.Gender)
-	if err != nil {
+	query := `
+		INSERT INTO 
+			users (first_name, last_name, email, dob, password_hash, phone, gender) 
+		VALUES 
+			($1,$2,$3,$4,$5,$6,$7) 
+		RETURNING
+			id;
+	`
+	var id int64
+	if err = tx.QueryRow(ctx, query, req.FirstName, req.LastName, req.Email, dob, string(ph), req.Phone, req.Gender).Scan(&id); err != nil {
 		rlog.Error(err.Error())
 		return nil, &util.ErrUnknown
 	}
 
-	return findUserByEmailFromDb(ctx, req.Email)
+	return findUserByIdFromCache(ctx, uint64(id))
 }

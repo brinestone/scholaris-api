@@ -6,6 +6,18 @@ import (
 	"reflect"
 )
 
+type NullInt32 sql.NullInt32
+
+func (ni *NullInt32) Scan(value any) error {
+	var i sql.NullInt32
+	if err := i.Scan(value); err != nil {
+		return err
+	}
+
+	*ni = NullInt32{i.Int32, reflect.TypeOf(value) != nil}
+	return nil
+}
+
 // NullInt64 is an alias for sql.NullInt64 data type
 type NullInt64 sql.NullInt64
 
@@ -105,6 +117,19 @@ func (ns *NullString) Scan(value interface{}) error {
 // 	return nil
 // }
 
+func (ni *NullInt32) MarshalJSON() ([]byte, error) {
+	if !ni.Valid {
+		return []byte("null"), nil
+	}
+	return json.Marshal(ni.Int32)
+}
+
+func (ni *NullInt32) UnmarshalJSON(b []byte) error {
+	err := json.Unmarshal(b, &ni.Int32)
+	ni.Valid = err == nil
+	return err
+}
+
 // MarshalJSON for NullInt64
 func (ni *NullInt64) MarshalJSON() ([]byte, error) {
 	if !ni.Valid {
@@ -189,3 +214,7 @@ func (ns *NullString) UnmarshalJSON(b []byte) error {
 // 	nt.Valid = true
 // 	return nil
 // }
+
+type CaptchaVerifiable interface {
+	GetCaptchaToken() string
+}

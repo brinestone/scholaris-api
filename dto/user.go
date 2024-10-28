@@ -1,6 +1,7 @@
 package dto
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"time"
@@ -9,8 +10,12 @@ import (
 )
 
 type LoginRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	// The user's email address
+	Email string `json:"email"`
+	// The user's plaintext password
+	Password string `json:"password" encore:"sensitive"`
+	// The reCaptcha token for the site
+	CaptchaToken string `json:"captchaToken"`
 }
 
 func (l LoginRequest) Validate() error {
@@ -29,6 +34,10 @@ func (l LoginRequest) Validate() error {
 		msgs = append(msgs, "The password field is required")
 	}
 
+	if len(l.CaptchaToken) == 0 {
+		msgs = append(msgs, "Invalid captcha token")
+	}
+
 	if len(msgs) > 0 {
 		err = &errs.Error{
 			Code:    errs.InvalidArgument,
@@ -43,18 +52,39 @@ type UserLookupByEmailRequest struct {
 	Email string `query:"email"`
 }
 
-const Male string = "male"
-const Female string = "female"
+type Gender string
+
+const (
+	Male   Gender = "male"
+	Female Gender = "female"
+)
 
 type NewUserRequest struct {
-	FirstName       string `json:"firstName"`
-	LastName        string `json:"lastName"`
-	Email           string `json:"email"`
-	Dob             string `json:"dob"`
-	Password        string `json:"password"`
+	// The user's first name
+	FirstName string `json:"firstName"`
+	// The user's last name (optional)
+	LastName string `json:"lastName,omitempty"`
+	// The user's email address
+	Email string `json:"email"`
+	// The user's date of birth (YYYY/MM/DD)
+	Dob string `json:"dob"`
+	// The user's plaintext password
+	Password string `json:"password"`
+	// Password verification
 	ConfirmPassword string `json:"confirmPassword"`
-	Phone           string `json:"phone"`
-	Gender          string `json:"gender"`
+	// The user's phone number in IE64 format
+	Phone string `json:"phone,omitempty"`
+	// The user's gender
+	Gender Gender `json:"gender,omitempty"`
+	// The captcha token for the request
+	CaptchaToken string `json:"captchaToken"`
+}
+
+func (g Gender) Validate() error {
+	if g != Male && g != Female {
+		return fmt.Errorf("invalid gender value. Expected \"%s\" or \"%s\". Got: \"%s\"", Male, Female, g)
+	}
+	return nil
 }
 
 func (n NewUserRequest) Validate() error {
@@ -93,17 +123,16 @@ func (n NewUserRequest) Validate() error {
 		msgs = append(msgs, "Passwords do not match")
 	}
 
-	if len(n.Gender) == 0 {
-		msgs = append(msgs, "The gender field is required")
-	} else {
-		temp := strings.ToLower(n.Gender)
-		if temp != Male && temp != Female {
-			msgs = append(msgs, "Invalid gender. Expected \"male\" or \"female\"")
-		}
+	if err := n.Gender.Validate(); err != nil {
+		msgs = append(msgs, err.Error())
 	}
 
 	if len(n.Phone) > 0 && !regexp.MustCompile(`\+(9[976]\d|8[987530]\d|6[987]\d|5[90]\d|42\d|3[875]\d|2[98654321]\d|9[8543210]|8[6421]|6[6543210]|5[87654321]|4[987654310]|3[9643210]|2[70]|7|1)\d{1,14}$`).MatchString(n.Phone) {
 		msgs = append(msgs, "Invalid phone number. Phone numbers must be in international format")
+	}
+
+	if len(n.CaptchaToken) == 0 {
+		msgs = append(msgs, "Invalid captcha token")
 	}
 
 	if len(msgs) > 0 {
@@ -116,4 +145,4 @@ func (n NewUserRequest) Validate() error {
 	return ans
 }
 
-var emailRegex = regexp.MustCompile(`^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$`)
+var emailRegex = regexp.MustCompile(`^[\w-\.]+@([\w-]+\.)+[\w-]{2,}$`)
