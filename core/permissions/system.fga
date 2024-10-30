@@ -25,19 +25,9 @@ type institution
     define staff: [user]
     define student: [user]
     define teacher: [user]
-    define viewer: [user:*]
+    define can_view: [user:* with institution_visible] or teacher or student or staff or maintainer
     define member: student or teacher or staff or maintainer
 
-type enrollment
-  relations
-    define approver: maintainer from destination or staff from destination
-    define can_approve: approver
-    define can_edit: owner
-    define can_view: viewer
-    define destination: [institution]
-    define owner: [user]
-    define viewer: maintainer from destination or staff from destination or owner
-    
 type subscription
   relations
     define owner: [tenant]
@@ -45,3 +35,19 @@ type subscription
     define editor: maintainer from owner
     define can_suspend: editor
     define can_delete: editor
+    
+type enrollment
+  relations
+    define owner: [user]
+    define destination: [institution]
+    define draft_viewer: [user] or owner
+    define published_viewer: [institution#maintainer with enrollment_published, institution#staff with enrollment_published] or owner
+    define can_view: draft_viewer or published_viewer
+
+condition enrollment_published(is_draft: bool) {
+  !is_draft
+}
+
+condition institution_visible(visibility: bool) {
+  visibility
+}

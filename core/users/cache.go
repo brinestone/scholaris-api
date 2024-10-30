@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"encore.dev/storage/cache"
-	"github.com/brinestone/scholaris/core/noop"
+	"github.com/brinestone/scholaris/core/pkg"
 	"github.com/brinestone/scholaris/models"
 )
 
@@ -12,12 +12,12 @@ import (
 // 	EvictionPolicy: cache.AllKeysLRU,
 // })
 
-var idCache = cache.NewStructKeyspace[uint64, models.User](noop.CacheCluster, cache.KeyspaceConfig{
+var idCache = cache.NewStructKeyspace[uint64, models.User](pkg.CacheCluster, cache.KeyspaceConfig{
 	KeyPattern:    "users/:key",
 	DefaultExpiry: cache.ExpireIn(1 * time.Hour),
 })
 
-var emailCache = cache.NewStructKeyspace[string, models.User](noop.CacheCluster, cache.KeyspaceConfig{
+var emailCache = cache.NewStructKeyspace[string, models.User](pkg.CacheCluster, cache.KeyspaceConfig{
 	KeyPattern:    "users-:key",
 	DefaultExpiry: cache.ExpireIn(1 * time.Hour),
 })

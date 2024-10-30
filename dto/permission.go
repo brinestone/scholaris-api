@@ -1,6 +1,16 @@
 package dto
 
+import (
+	"fmt"
+
+	"encore.dev/beta/auth"
+)
+
 type PermissionType string
+
+func IdentifierString[T auth.UID | uint64](pt PermissionType, id T) string {
+	return fmt.Sprintf("%s:%v", pt, id)
+}
 
 func PermissionTypeFromString(s string) (PermissionType, bool) {
 	switch s {
@@ -8,6 +18,8 @@ func PermissionTypeFromString(s string) (PermissionType, bool) {
 		return PTInstitution, true
 	case string(PTUser):
 		return PTUser, true
+	case string(PTEnrollment):
+		return PTEnrollment, true
 	case string(PTTenant):
 		return PTTenant, true
 	case string(PTSubscription):
@@ -21,6 +33,7 @@ const (
 	PTInstitution  PermissionType = "institution"
 	PTUser         PermissionType = "user"
 	PTTenant       PermissionType = "tenant"
+	PTEnrollment   PermissionType = "enrollment"
 	PTSubscription PermissionType = "subscription"
 	unknown        PermissionType = ""
 )
@@ -65,8 +78,11 @@ type UpdateCondition struct {
 }
 
 type PermissionUpdate struct {
-	Subject   string
-	Relation  string
+	// The actor who owns the relation
+	Subject string
+	// The relation specifier
+	Relation string
+	// The target resource identifier
 	Target    string
 	Condition *UpdateCondition
 }

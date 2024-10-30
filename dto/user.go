@@ -15,7 +15,7 @@ type LoginRequest struct {
 	// The user's plaintext password
 	Password string `json:"password" encore:"sensitive"`
 	// The reCaptcha token for the site
-	CaptchaToken string `json:"captchaToken"`
+	CaptchaToken string `json:"captchaToken" encore:"sensitive"`
 }
 
 func (l LoginRequest) Validate() error {
