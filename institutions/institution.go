@@ -42,7 +42,7 @@ func GetInstitution(ctx context.Context, identifier string) (*dto.InstitutionDto
 				return nil, &util.ErrUnknown
 			}
 
-			return toDto(institution), nil
+			return toInstitutionDto(institution), nil
 		} else if err != nil {
 			rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
 			return nil, &util.ErrUnknown
@@ -59,7 +59,7 @@ func GetInstitution(ctx context.Context, identifier string) (*dto.InstitutionDto
 				return nil, &util.ErrUnknown
 			}
 
-			return toDto(institution), nil
+			return toInstitutionDto(institution), nil
 		} else if err != nil {
 			rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
 			return nil, &util.ErrUnknown
@@ -177,6 +177,8 @@ func NewInstitution(ctx context.Context, req dto.NewInstitutionRequest) (*dto.In
 
 const institutionFields = "id,name,description,logo,visible,slug,tenant,created_at,updated_at"
 
+// const enrollmentFields = "id,owner,approved_by,approved_at,payment_transaction,service_transaction,created_at,updated_at,status,destination"
+
 func createInstitution(ctx context.Context, tx *sqldb.Tx, req dto.NewInstitutionRequest) (uint64, error) {
 	// Check whether the institution already exists under the same tenant.
 	existsQuery := `
@@ -286,11 +288,11 @@ func findInstitutionByKeyFromDb(ctx context.Context, key string, value any) (*mo
 	}
 
 	sum := md5.Sum([]byte(fmt.Sprintf("%s=%v", key, value)))
-	_ = institutionCache.Set(ctx, hex.EncodeToString(sum[:]), *toDto(i))
+	_ = institutionCache.Set(ctx, hex.EncodeToString(sum[:]), *toInstitutionDto(i))
 	return i, nil
 }
 
-func toDto(in *models.Institution) *dto.InstitutionDto {
+func toInstitutionDto(in *models.Institution) *dto.InstitutionDto {
 	if in == nil {
 		return nil
 	}

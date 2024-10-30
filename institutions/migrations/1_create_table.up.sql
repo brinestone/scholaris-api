@@ -9,5 +9,4 @@ CREATE TABLE
         tenant BIGSERIAL NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        
     );

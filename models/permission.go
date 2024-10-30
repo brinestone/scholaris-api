@@ -1,5 +1,8 @@
 package models
 
-const PermOwner = "owner"
-const PermParent = "parent"
-const PermMember = "member"
+const (
+	PermOwner       = "owner"
+	PermParent      = "parent"
+	PermMember      = "member"
+	PermDestination = "destination"
+)
