@@ -7,5 +7,5 @@ CREATE TABLE
         FOREIGN KEY (institution) REFERENCES institutions(id) ON DELETE CASCADE
     );
 
-ALTER TABLE enrollment_form_questions ADD group BIGINT,
-ADD CONSTRAINT fk_efq_fqg FOREIGN KEY (group) REFERENCES form_question_groups (id) ON DELETE CASCADE;
+ALTER TABLE enrollment_form_questions ADD form_group BIGINT,
+ADD CONSTRAINT fk_efq_fqg FOREIGN KEY (form_group) REFERENCES form_question_groups (id) ON DELETE CASCADE;
