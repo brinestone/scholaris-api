@@ -5,44 +5,64 @@ type user
 
 type tenant
   relations
-    define owner: [user]
-    define member: [user]
     define admin: [user] or owner
-    define maintainer: [user] or admin
     define can_change_owner: owner
     define can_create_institution: admin
     define can_delete: owner
     define can_update: maintainer or admin
     define can_update_subscription: maintainer
+    define maintainer: [user] or admin
+    define member: [user]
+    define owner: [user]
 
 type institution
   relations
     define admin: [user] or admin from parent
     define can_update: can_update from parent or maintainer or admin or owner
+    define can_view: [user:* with institution_visible] or teacher or student or staff or maintainer
     define maintainer: [user] or maintainer from parent or admin
+    define member: student or teacher or staff or maintainer
     define owner: owner from parent
     define parent: [tenant]
     define staff: [user]
     define student: [user]
     define teacher: [user]
-    define can_view: [user:* with institution_visible] or teacher or student or staff or maintainer
-    define member: student or teacher or staff or maintainer
 
 type subscription
   relations
+    define can_delete: editor
+    define can_suspend: editor
+    define editor: maintainer from owner
     define owner: [tenant]
     define viewer: member from owner
-    define editor: maintainer from owner
-    define can_suspend: editor
-    define can_delete: editor
-    
+
 type enrollment
   relations
-    define owner: [user]
+    define can_view: draft_viewer or published_viewer
     define destination: [institution]
     define draft_viewer: [user] or owner
+    define owner: [user]
     define published_viewer: [institution#maintainer with enrollment_published, institution#staff with enrollment_published] or owner
-    define can_view: draft_viewer or published_viewer
+    
+type form
+  relations
+    define owner: [institution, tenant]
+    define draft_viewer: [user with form_in_draft] or maintainer from owner
+    define editor: [user] or maintainer from owner
+    define publish_viewer: [user with form_published] or editor or draft_viewer
+    define responder: [user with can_respond]
+    
+condition form_published(status: string) {
+  status != 'draft'
+}
+
+condition form_in_draft(status: string) {
+  status == 'draft'
+}
+
+condition can_respond(response_count: int, max_responses: int, multi_response: bool, status: string, resubmission: bool){
+  status != 'draft' && (multi_response && response_count < max_responses || resubmission)
+}
 
 condition enrollment_published(is_draft: bool) {
   !is_draft

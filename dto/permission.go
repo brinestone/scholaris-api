@@ -22,6 +22,8 @@ func PermissionTypeFromString(s string) (PermissionType, bool) {
 		return PTEnrollment, true
 	case string(PTTenant):
 		return PTTenant, true
+	case string(PTForm):
+		return PTForm, true
 	case string(PTSubscription):
 		return PTSubscription, true
 	default:
@@ -33,6 +35,7 @@ const (
 	PTInstitution  PermissionType = "institution"
 	PTUser         PermissionType = "user"
 	PTTenant       PermissionType = "tenant"
+	PTForm         PermissionType = "form"
 	PTEnrollment   PermissionType = "enrollment"
 	PTSubscription PermissionType = "subscription"
 	unknown        PermissionType = ""
