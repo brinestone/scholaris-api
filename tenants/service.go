@@ -437,8 +437,8 @@ func findSubscriptionPlans(ctx context.Context, params dto.CursorBasedPagination
     	subscription_plans sp
 	LEFT JOIN
     	plan_benefits spd
-	ON
-    	sp.id = spd.subscription_plan
+		ON
+			sp.id = spd.subscription_plan
 	WHERE
 		sp.id > $1 AND sp.enabled = true
 	GROUP BY

@@ -17,7 +17,12 @@ var institutionCache = cache.NewStructKeyspace[string, dto.InstitutionDto](pkg.C
 	DefaultExpiry: cache.ExpireIn(5 * time.Minute),
 })
 
-var enrollmentQuestionCache = cache.NewStructKeyspace[uint64, dto.EnrollmentQuestion](pkg.CacheCluster, cache.KeyspaceConfig{
+var questionCache = cache.NewStructKeyspace[uint64, dto.EnrollmentQuestions](pkg.CacheCluster, cache.KeyspaceConfig{
 	KeyPattern:    "eqs/:key",
 	DefaultExpiry: cache.ExpireIn(5 * time.Minute),
+})
+
+var enrollmentCache = cache.NewStructKeyspace[uint64, dto.EnrollmentState](pkg.CacheCluster, cache.KeyspaceConfig{
+	KeyPattern:    "enrollments/:key",
+	DefaultExpiry: cache.ExpireIn(20 * time.Minute),
 })

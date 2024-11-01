@@ -29,43 +29,7 @@ import (
 //
 //encore:api public method=GET path=/institutions/:identifier
 func GetInstitution(ctx context.Context, identifier string) (*dto.InstitutionDto, error) {
-
-	if match, _ := regexp.MatchString(`^\d+$`, identifier); match {
-		id, _ := strconv.ParseUint(identifier, 10, 64)
-		ans, err := findInstitutionByIdFromCache(ctx, id)
-		if errors.Is(err, cache.Miss) {
-			institution, err := findInstitutionByIdFromDb(ctx, id)
-			if errors.Is(err, sqldb.ErrNoRows) {
-				return nil, &util.ErrNotFound
-			} else if err != nil {
-				rlog.Error(util.MsgDbAccessError, "msg", err.Error())
-				return nil, &util.ErrUnknown
-			}
-
-			return toInstitutionDto(institution), nil
-		} else if err != nil {
-			rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
-			return nil, &util.ErrUnknown
-		}
-		return ans, nil
-	} else {
-		ans, err := findInstitutionBySlugFromCache(ctx, identifier)
-		if errors.Is(err, cache.Miss) {
-			institution, err := findInstitutionbySlugFromDb(ctx, identifier)
-			if errors.Is(err, sqldb.ErrNoRows) {
-				return nil, &util.ErrNotFound
-			} else if err != nil {
-				rlog.Error(util.MsgDbAccessError, "msg", err.Error())
-				return nil, &util.ErrUnknown
-			}
-
-			return toInstitutionDto(institution), nil
-		} else if err != nil {
-			rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
-			return nil, &util.ErrUnknown
-		}
-		return ans, nil
-	}
+	return findInstitutionByGenericIdentifier(ctx, identifier)
 }
 
 // Looks up institutions
@@ -378,4 +342,43 @@ func lookupInstitutions(ctx context.Context, page uint, size uint, uid *auth.UID
 	}
 
 	return ans, cnt, nil
+}
+
+func findInstitutionByGenericIdentifier(ctx context.Context, identifier string) (*dto.InstitutionDto, error) {
+	if match, _ := regexp.MatchString(`^\d+$`, identifier); match {
+		id, _ := strconv.ParseUint(identifier, 10, 64)
+		ans, err := findInstitutionByIdFromCache(ctx, id)
+		if errors.Is(err, cache.Miss) {
+			institution, err := findInstitutionByIdFromDb(ctx, id)
+			if errors.Is(err, sqldb.ErrNoRows) {
+				return nil, &util.ErrNotFound
+			} else if err != nil {
+				rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+				return nil, &util.ErrUnknown
+			}
+
+			return toInstitutionDto(institution), nil
+		} else if err != nil {
+			rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
+			return nil, &util.ErrUnknown
+		}
+		return ans, nil
+	} else {
+		ans, err := findInstitutionBySlugFromCache(ctx, identifier)
+		if errors.Is(err, cache.Miss) {
+			institution, err := findInstitutionbySlugFromDb(ctx, identifier)
+			if errors.Is(err, sqldb.ErrNoRows) {
+				return nil, &util.ErrNotFound
+			} else if err != nil {
+				rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+				return nil, &util.ErrUnknown
+			}
+
+			return toInstitutionDto(institution), nil
+		} else if err != nil {
+			rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
+			return nil, &util.ErrUnknown
+		}
+		return ans, nil
+	}
 }

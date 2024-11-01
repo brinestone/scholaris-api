@@ -183,7 +183,6 @@ const allUserFields = "id,first_name,last_name,email,dob,password_hash,phone,cre
 
 func findAllUsers(ctx context.Context, offset uint64, size uint) ([]*models.User, error) {
 	query := fmt.Sprintf("SELECT %s FROM users WHERE id > $1 ORDER BY id DESC OFFSET 0 LIMIT $2;", allUserFields)
-	rlog.Debug(query)
 	ans := make([]*models.User, 0)
 
 	rows, err := userDb.Query(ctx, query, offset, size)
