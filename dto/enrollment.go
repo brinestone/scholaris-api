@@ -16,15 +16,23 @@ const (
 
 // Question types
 const (
-	QTOpenEnded      = "open-ended"
+	// Open ended question, meaning the user can provide any text as answer
+	QTOpenEnded = "open-ended"
+	// The user can provide multiple texts as answer
 	QTMultipleChoice = "multiple-choice"
+	// The user can only provide a set of URLs as answer
+	QTUpload = "upload"
 )
 
 // Enrollment statuses
 const (
-	ESDraft    = "draft"
-	ESPending  = "pending"
+	// The enrollment is in draft mode.
+	ESDraft = "draft"
+	// The enrollment has pending.
+	ESPending = "pending"
+	// The enrollment has been rejected.
 	ESRejected = "rejected"
+	// The enrollment has been approved.
 	ESApproved = "approved"
 )
 
@@ -36,7 +44,6 @@ type EnrollmentQuestionOption struct {
 
 type EnrollmentQuestion struct {
 	Id              uint64                      `json:"id"`
-	Institution     uint64                      `json:"institution"`
 	Prompt          string                      `json:"prompt"`
 	QuestionType    string                      `json:"questionType"`
 	AnswerType      string                      `json:"answerType"`
@@ -50,13 +57,13 @@ type EnrollmentQuestions struct {
 }
 
 type NewEnrollment struct {
-	Destination             uint64 `json:"institution"`
+	Destination             string `json:"institution"`
 	ServiceTransactionToken string `json:"serviceTransactionToken"`
 }
 
 func (ne NewEnrollment) Validate() error {
 	var msgs = make([]string, 0)
-	if ne.Destination == 0 {
+	if len(ne.Destination) == 0 {
 		msgs = append(msgs, "Invalid institution ID")
 	}
 
