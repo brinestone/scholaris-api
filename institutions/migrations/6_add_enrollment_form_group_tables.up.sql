@@ -7,4 +7,4 @@ CREATE TABLE
 
 ALTER TABLE enrollment_form_questions ADD group BIGINT;
 
-ALTER TABLE enrollment_form_questions ADD FOREIGN KEY (group) REFERENCES form_question_groups (id) ON DELETE CASCADE;
+ALTER TABLE enrollment_form_questions ADD CONSTRAINT fk_efq_fqg FOREIGN KEY (group) REFERENCES form_question_groups (id) ON DELETE CASCADE;
