@@ -4,7 +4,7 @@ CREATE TABLE
         institution BIGINT,
         label TEXT,
         description TEXT,
-        FOREIGN KEY (institution) REFERENCES institutions(id) ON DELETE CASCADE;
+        FOREIGN KEY (institution) REFERENCES institutions(id) ON DELETE CASCADE
     );
 
 ALTER TABLE enrollment_form_questions ADD group BIGINT,
