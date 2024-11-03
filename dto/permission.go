@@ -60,14 +60,10 @@ type RelationCheckResponse struct {
 }
 
 type RelationCheckRequest struct {
-	Subject  string `query:"subject"`
+	Actor    string `query:"actor"`
 	Relation string `query:"relation"`
 	Target   string `query:"target"`
 }
-
-// func (r *RelationCheckRequest) From(val any) {
-
-// }
 
 type ContextVar struct {
 	Name  string

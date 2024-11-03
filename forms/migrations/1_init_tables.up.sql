@@ -52,12 +52,12 @@ CREATE TABLE
 
 CREATE TABLE
     form_responses (
-        response_id BIGSERIAL,
+        id BIGSERIAL,
         responder BIGINT NOT NULL,
         submitted_at TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (response_id, responder)
+        PRIMARY KEY (id)
     );
 
 CREATE TABLE
@@ -65,9 +65,9 @@ CREATE TABLE
         id BIGSERIAL,
         question BIGINT NOT NULL,
         value TEXT,
-        response BIGINT NO NULL,
+        response BIGINT NOT NULL,
         FOREIGN KEY (question) REFERENCES form_questions (id),
-        FOREIGN KEY (response) REFERENCES form_responses (response_id),
+        FOREIGN KEY (response) REFERENCES form_responses (id),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );

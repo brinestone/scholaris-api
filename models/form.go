@@ -29,11 +29,10 @@ type FormQuestionOption struct {
 type FormQuestion struct {
 	Id            uint64
 	Prompt        string
-	ResponseType  string
 	Form          uint64
 	IsRequired    bool
 	Type          string
-	LayoutVariant string
+	LayoutVariant sql.NullString
 	Options       []FormQuestionOption
 }
 
