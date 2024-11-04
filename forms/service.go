@@ -20,6 +20,21 @@ import (
 	"github.com/brinestone/scholaris/util"
 )
 
+// Updates a form question's options
+//
+//encore:api auth method=PATCH path=/forms/:form/questions/:question/options
+func UpdateFormQuestionOptions(ctx context.Context, form uint64, question uint64, req dto.UpdateFormQuestionOptionsRequest) (*dto.GetFormQuestionsResponse, error) {
+
+	return nil, nil
+}
+
+// Updates a form question
+//
+//encore:api auth method=PATCH path=/forms/:form/questions/:question
+func UpdateQuestion(ctx context.Context, form uint64, question uint64) error {
+	return nil
+}
+
 // Add a question to a form
 //
 //encore:api auth method=POST path=/forms/:formId/question
@@ -123,10 +138,7 @@ func FindFormQuestions(ctx context.Context, id uint64) (*dto.GetFormQuestionsRes
 			return nil, &util.ErrUnknown
 		}
 
-		response = dto.GetFormQuestionsResponse{}
-		for i, v := range questions {
-			response.Questions[i] = *formQuestionToDto(v)
-		}
+		response = dto.GetFormQuestionsResponse{Questions: formQuestionsToDto(questions)}
 
 		if len(response.Questions) > 0 {
 			if err := questionsCache.Set(ctx, id, response); err != nil {
@@ -283,6 +295,7 @@ func findFormQuestionsFromDb(ctx context.Context, id uint64) ([]*models.FormQues
 			fq.type,
 			fq.layout_variant,
 			COALESCE(json_agg(json_build_obj(
+				'id', fqo.id,
 				'caption', fqo.caption,
 				'value', fqo.caption,
 				'image', fqo.image,
@@ -478,6 +491,7 @@ func formQuestionToDto(f *models.FormQuestion) *dto.FormQuestion {
 	for i, k := range f.Options {
 		ans.Options[i] = dto.QuestionOption{
 			Caption: k.Caption,
+			Id:      k.Id,
 		}
 		if k.Value.Valid {
 			ans.Options[i].Value = &k.Value.String
@@ -536,27 +550,11 @@ func createFormQuestion(ctx context.Context, tx *sqldb.Tx, formId uint64, req dt
 		INSERT INTO
 			form_questions(form,prompt,is_required,type,layout_variant)
 		VALUES
-			($1,$2,$3,$4,$5)
-		RETURNING id;
-	`
-	optionInsertQuery := `
-		INSERT INTO
-			form_question_options(question,caption,value,image)
-		VALUES
-			($1,$2,$3,$4);
+			($1,$2,$3,$4,$5);
 	`
 
-	var questionId uint64
-	if err := tx.QueryRow(ctx, questionInsertQuery, formId, req.Prompt, req.IsRequired, req.Type, req.LayoutVariant).Scan(&questionId); err != nil {
+	if _, err := tx.Exec(ctx, questionInsertQuery, formId, req.Prompt, req.IsRequired, req.Type, req.LayoutVariant); err != nil {
 		return err
-	}
-
-	if len(req.Options) > 0 {
-		for _, option := range req.Options {
-			if _, err := tx.Exec(ctx, optionInsertQuery, questionId, option.Caption, option.Value, option.Image); err != nil {
-				return err
-			}
-		}
 	}
 
 	return nil

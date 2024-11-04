@@ -21,6 +21,7 @@ type Form struct {
 }
 
 type FormQuestionOption struct {
+	Id      uint64
 	Caption string
 	Value   sql.NullString
 	Image   sql.NullString

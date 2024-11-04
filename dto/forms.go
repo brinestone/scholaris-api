@@ -2,7 +2,6 @@ package dto
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 )
@@ -35,30 +34,21 @@ func (n NewQuestionOption) Validate() error {
 	return nil
 }
 
+type UpdateFormQuestionOptionsRequest struct {
+	Removed []uint64            `json:"removed"`
+	Added   []NewQuestionOption `json:"added"`
+}
+
 type NewFormQuestionRequest struct {
-	Prompt        string              `json:"prompt"`
-	IsRequired    bool                `json:"isRequired"`
-	Type          *string             `json:"responseType"`
-	LayoutVariant *string             `json:"layoutVariant"`
-	Options       []NewQuestionOption `json:"options"`
+	Prompt        string  `json:"prompt"`
+	IsRequired    bool    `json:"isRequired"`
+	Type          *string `json:"responseType"`
+	LayoutVariant *string `json:"layoutVariant"`
+	// Options       []NewQuestionOption `json:"options"`
 }
 
 func (n NewFormQuestionRequest) Validate() error {
 	msgs := make([]string, 0)
-
-	var defaultCount int
-	for i, v := range n.Options {
-		if err := v.Validate(); err != nil {
-			msgs = append(msgs, fmt.Sprintf("Invalid option at index %d - %s", i, err.Error()))
-		}
-		if v.IsDefault {
-			defaultCount++
-		}
-	}
-
-	if defaultCount > 1 {
-		msgs = append(msgs, "There should only be 1 option marked as default")
-	}
 
 	if n.Type != nil {
 		isValid := false
@@ -121,16 +111,10 @@ func (n UpdateFormRequest) Validate() error {
 }
 
 type QuestionOption struct {
+	Id      uint64  `json:"id"`
 	Caption string  `json:"caption"`
 	Value   *string `json:"value,omitempty"`
 	Image   *string `json:"image,omitempty"`
-}
-
-func (f QuestionOption) Validate() error {
-	if len(f.Caption) == 0 {
-		return errors.New("the caption field is required")
-	}
-	return nil
 }
 
 type FormQuestion struct {
@@ -140,10 +124,6 @@ type FormQuestion struct {
 	IsRequired    bool             `json:"isRequired"`
 	LayoutVariant string           `json:"layoutVariant"`
 	Options       []QuestionOption `json:"options,omitempty"`
-}
-
-func (f FormQuestion) Validate() error {
-	return nil
 }
 
 type GetFormQuestionsResponse struct {
