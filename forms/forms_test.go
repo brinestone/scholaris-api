@@ -33,7 +33,7 @@ func TestMain(t *testing.M) {
 	t.Run()
 }
 
-func TestNewForm(t *testing.T) {
+func TestForms(t *testing.T) {
 	uid := uint64(rand.Int63n(400))
 	captchaToken := make([]byte, 32)
 	io.ReadFull(crypto.Reader, captchaToken)
@@ -73,6 +73,36 @@ func TestNewForm(t *testing.T) {
 		testUpdateForm(t, ctx, form)
 	})
 
+	t.Run("TestCreateQuestion", func(t *testing.T) {
+		testCreateQuestions(t, ctx, form.Id)
+	})
+}
+
+func randomString(len int) string {
+	buf := make([]byte, len)
+	io.ReadFull(crypto.Reader, buf)
+	return string(buf)
+}
+
+// func randomStringPtr(len int) *string {
+// 	s := randomString(len)
+// 	return &s
+// }
+
+func testCreateQuestions(t *testing.T, ctx context.Context, refId uint64) {
+	req := dto.UpdateFormQuestionRequest{
+		Prompt:     randomString(10),
+		IsRequired: true,
+		Type:       dto.QTSingleline,
+	}
+
+	res, err := forms.CreateQuestion(ctx, refId, req)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	assert.Len(t, res.Questions, 1)
 }
 
 func testFindUnOwnedForms(t *testing.T, owner uint64, ctx context.Context, ownerType dto.PermissionType, refId uint64) {
@@ -84,6 +114,7 @@ func testFindUnOwnedForms(t *testing.T, owner uint64, ctx context.Context, owner
 	})
 	if err != nil {
 		t.Error(err)
+		return
 	}
 
 	assert.NotNil(t, res)

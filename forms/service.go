@@ -22,29 +22,57 @@ import (
 
 // Updates a form question's options
 //
-//encore:api auth method=PATCH path=/forms/:form/questions/:question/options
+//encore:api auth method=PATCH path=/forms/:form/questions/:question/options tag:user_is_form_editor
 func UpdateFormQuestionOptions(ctx context.Context, form uint64, question uint64, req dto.UpdateFormQuestionOptionsRequest) (*dto.GetFormQuestionsResponse, error) {
 
-	return nil, nil
+	tx, err := formsDb.Begin(ctx)
+	if err != nil {
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		return nil, &util.ErrUnknown
+	}
+
+	if len(req.Updates) > 0 {
+		if err := updateFormQuestionOptions(ctx, tx, question); err != nil {
+			tx.Rollback()
+			rlog.Error(err.Error())
+			return nil, &util.ErrUnknown
+		}
+	}
+
+	if len(req.Added) > 0 {
+		if err := createFormQuestionOptions(ctx, tx, question, req.Added...); err != nil {
+			tx.Rollback()
+			rlog.Error(err.Error())
+			return nil, &util.ErrUnknown
+		}
+	}
+
+	if len(req.Removed) > 0 {
+		if err := deleteFormQuestionOptions(ctx, tx, question, req.Removed...); err != nil {
+			tx.Rollback()
+			rlog.Error(err.Error())
+			return nil, &util.ErrUnknown
+		}
+	}
+	tx.Commit()
+
+	questions, err := findFormQuestionsFromDb(ctx, form)
+	if err != nil {
+		rlog.Error(err.Error())
+		return nil, &util.ErrUnknown
+	}
+
+	ans := dto.GetFormQuestionsResponse{Questions: formQuestionsToDto(questions)}
+	if err := questionsCache.Set(ctx, form, ans); err != nil {
+		rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
+	}
+	return &ans, nil
 }
 
 // Updates a form question
 //
-//encore:api auth method=PATCH path=/forms/:form/questions/:question
+//encore:api auth method=PATCH path=/forms/:form/questions/:question tag:user_is_form_editor
 func UpdateQuestion(ctx context.Context, form uint64, question uint64, req dto.UpdateFormQuestionRequest) (*dto.GetFormQuestionsResponse, error) {
-	uid, _ := auth.UserID()
-	canEdit, err := permissions.CheckPermission(ctx, dto.RelationCheckRequest{
-		Actor:    dto.IdentifierString(dto.PTUser, uid),
-		Relation: models.PermEditor,
-		Target:   dto.IdentifierString(dto.PTForm, form),
-	})
-	if err != nil {
-		rlog.Error(err.Error())
-	}
-	if canEdit == nil || !canEdit.Allowed {
-		return nil, &util.ErrForbidden
-	}
-
 	tx, err := formsDb.Begin(ctx)
 	if err != nil {
 		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
@@ -59,45 +87,32 @@ func UpdateQuestion(ctx context.Context, form uint64, question uint64, req dto.U
 		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
 		return nil, &util.ErrUnknown
 	}
+	tx.Commit()
 
 	questions, err := findFormQuestionsFromDb(ctx, form)
 	if err != nil {
 		rlog.Error(err.Error())
 		return nil, &util.ErrUnknown
 	}
-	tx.Commit()
 
 	ans := dto.GetFormQuestionsResponse{Questions: formQuestionsToDto(questions)}
 	if err := questionsCache.Set(ctx, form, ans); err != nil {
 		rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
 	}
-	return nil, nil
+	return &ans, nil
 }
 
 // Add a question to a form
 //
-//encore:api auth method=POST path=/forms/:formId/question
-func CreateQuestion(ctx context.Context, formId uint64, req dto.UpdateFormQuestionRequest) (*dto.GetFormQuestionsResponse, error) {
-	uid, _ := auth.UserID()
-	perm, err := permissions.CheckPermission(ctx, dto.RelationCheckRequest{
-		Actor:    dto.IdentifierString(dto.PTUser, uid),
-		Relation: models.PermEditor,
-		Target:   dto.IdentifierString(dto.PTForm, formId),
-	})
-	if err != nil {
-		rlog.Error(err.Error())
-	}
-	if perm == nil || !perm.Allowed {
-		return nil, &util.ErrForbidden
-	}
-
+//encore:api auth method=POST path=/forms/:form/question tag:user_is_form_editor
+func CreateQuestion(ctx context.Context, form uint64, req dto.UpdateFormQuestionRequest) (*dto.GetFormQuestionsResponse, error) {
 	tx, err := formsDb.Begin(ctx)
 	if err != nil {
 		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
 		return nil, &util.ErrUnknown
 	}
 
-	if err := createFormQuestion(ctx, tx, formId, req); err != nil {
+	if err := createFormQuestion(ctx, tx, form, req); err != nil {
 		tx.Rollback()
 		if errs.Convert(err) == nil {
 			return nil, err
@@ -105,16 +120,16 @@ func CreateQuestion(ctx context.Context, formId uint64, req dto.UpdateFormQuesti
 		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
 		return nil, &util.ErrUnknown
 	}
+	tx.Commit()
 
-	questions, err := findFormQuestionsFromDb(ctx, formId)
+	questions, err := findFormQuestionsFromDb(ctx, form)
 	if err != nil {
 		rlog.Error(err.Error())
 		return nil, &util.ErrUnknown
 	}
-	tx.Commit()
 
 	ans := dto.GetFormQuestionsResponse{Questions: formQuestionsToDto(questions)}
-	if err := questionsCache.Set(ctx, formId, ans); err != nil {
+	if err := questionsCache.Set(ctx, form, ans); err != nil {
 		rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
 	}
 
@@ -123,21 +138,8 @@ func CreateQuestion(ctx context.Context, formId uint64, req dto.UpdateFormQuesti
 
 // Update a form
 //
-//encore:api auth method=PUT path=/forms/:id
+//encore:api auth method=PUT path=/forms/:id tag:user_is_form_editor
 func UpdateForm(ctx context.Context, id uint64, req dto.UpdateFormRequest) (*dto.FormConfig, error) {
-	uid, _ := auth.UserID()
-	perm, err := permissions.CheckPermission(ctx, dto.RelationCheckRequest{
-		Actor:    dto.IdentifierString(dto.PTUser, uid),
-		Relation: models.PermEditor,
-		Target:   dto.IdentifierString(dto.PTForm, id),
-	})
-	if err != nil {
-		rlog.Error(err.Error())
-	}
-	if perm == nil || !perm.Allowed {
-		return nil, &util.ErrForbidden
-	}
-
 	tx, err := formsDb.Begin(ctx)
 	if err != nil {
 		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
@@ -149,13 +151,13 @@ func UpdateForm(ctx context.Context, id uint64, req dto.UpdateFormRequest) (*dto
 		tx.Rollback()
 		return nil, &util.ErrUnknown
 	}
+	tx.Commit()
 
-	form, err := findFormFromDbTx(ctx, tx, id)
+	form, err := findFormFromDb(ctx, id)
 	if err != nil {
 		rlog.Error(err.Error())
 		return nil, &util.ErrUnknown
 	}
-	tx.Commit()
 
 	ans := formToDto(form)
 	if err := formCache.Set(ctx, id, *ans); err != nil {
@@ -333,11 +335,11 @@ func findFormQuestionsFromDb(ctx context.Context, id uint64) ([]*models.FormQues
 			fq.is_required,
 			fq.type,
 			fq.layout_variant,
-			COALESCE(json_agg(json_build_obj(
+			COALESCE(json_agg(json_build_object(
 				'id', fqo.id,
 				'caption', fqo.caption,
 				'value', fqo.caption,
-				'image', fqo.image,
+				'image', fqo.image
 			)) FILTER (WHERE fqo.question IS NOT NULL), '[]') AS options
 		FROM
 			form_questions fq
@@ -374,6 +376,35 @@ func findFormQuestionsFromDb(ctx context.Context, id uint64) ([]*models.FormQues
 	}
 
 	return ans, nil
+}
+
+func findFormFromDb(ctx context.Context, id uint64) (*models.Form, error) {
+	query := `
+		SELECT
+			id,
+			title,
+			description,
+			meta_background,
+			meta_bg_img,
+			meta_img,
+			created_at,
+			updated_at,
+			owner,
+			multi_response,
+			response_resubmission,
+			status
+		FROM
+			forms
+		WHERE
+			id = $1
+		;
+	`
+
+	var form *models.Form = new(models.Form)
+	if err := formsDb.QueryRow(ctx, query, id).Scan(&form.Id, &form.Title, &form.Description, &form.BackgroundColor, &form.BackgroundImage, &form.Image, &form.CreatedAt, &form.UpdatedAt, &form.Owner, &form.MultiResponse, &form.Resubmission, &form.Status); err != nil {
+		return nil, err
+	}
+	return form, nil
 }
 
 func findFormFromDbTx(ctx context.Context, tx *sqldb.Tx, id uint64) (*models.Form, error) {
@@ -521,6 +552,7 @@ func formQuestionToDto(f *models.FormQuestion) *dto.FormQuestion {
 	// ans.ResponseType = f.ResponseType
 	// ans.Form = f.Form
 	ans.IsRequired = f.IsRequired
+	ans.Type = f.Type
 	ans.Id = f.Id
 	if f.LayoutVariant.Valid {
 		ans.LayoutVariant = f.LayoutVariant.String
@@ -618,6 +650,82 @@ func updateFormQuestion(ctx context.Context, tx *sqldb.Tx, formId uint64, questi
 	`
 
 	if _, err := tx.Exec(ctx, updateQuery, req.Prompt, req.Type, req.LayoutVariant, formId, questionId); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func updateFormQuestionOptions(ctx context.Context, tx *sqldb.Tx, questionId uint64, req ...dto.FormQuestionOptionUpdate) error {
+	for _, v := range req {
+		updateQuery := `
+			UPDATE
+				form_question_options
+			SET
+				caption=$1
+				value=$2
+				image=$3
+				is_default=$6
+			WHERE
+				question=$4 AND id=$5
+				AND (
+					value IS DISTINCT FROM $2 OR
+					caption IS DISTINCT FROM $1 OR
+					image IS DISTINCT FROM $3 OR
+					is_default IS DISTINCT FROM $6 OR
+				);
+		`
+		if _, err := tx.Exec(ctx, updateQuery, v.Caption, v.Value, v.Image, questionId, v.Id, v.IsDefault); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func createFormQuestionOptions(ctx context.Context, tx *sqldb.Tx, questionId uint64, req ...dto.NewQuestionOption) error {
+	for _, v := range req {
+		query := `
+			INSERT INTO
+				form_question_options(caption,value,image,question,is_default)
+			VALUES
+				($1,$2,$3,$4,$5)
+			RETURNING id;
+		`
+		var optionId uint64
+		if err := tx.QueryRow(ctx, query, v.Caption, v.Value, v.Image, questionId, v.IsDefault).Scan(&optionId); err != nil {
+			return err
+		} else if v.IsDefault {
+			updateQuery := `
+				UPDATE
+					form_question_options
+				SET
+					is_default = false
+				WHERE
+					question=$1 AND id != $2;
+			`
+			if _, err := tx.Exec(ctx, updateQuery, questionId, optionId); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func deleteFormQuestionOptions(ctx context.Context, tx *sqldb.Tx, questionId uint64, req ...uint64) error {
+	ids := ""
+	for i := range req {
+		ids = string(fmt.Appendf([]byte(ids), "$%d", i+1))
+	}
+	rlog.Debug("deleting question options", "question", questionId, "ids", req, "format", ids)
+
+	query := fmt.Sprintf(`
+		DELETE FROM
+			form_question_options
+		WHERE
+			id IN (%s);
+	`, ids)
+
+	if _, err := tx.Exec(ctx, query, req); err != nil {
 		return err
 	}
 

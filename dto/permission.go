@@ -8,7 +8,7 @@ import (
 
 type PermissionType string
 
-func IdentifierString[T auth.UID | uint64](pt PermissionType, id T) string {
+func IdentifierString[T auth.UID | uint64 | string](pt PermissionType, id T) string {
 	return fmt.Sprintf("%s:%v", pt, id)
 }
 

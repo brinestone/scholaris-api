@@ -39,6 +39,7 @@ type FormQuestionOptionUpdate struct {
 	Id        uint64  `json:"id"`
 	Caption   string  `json:"caption"`
 	Value     *string `json:"value,omitempty"`
+	Image     *string `json:"image"`
 	IsDefault bool    `json:"isDefault"`
 }
 
@@ -66,6 +67,10 @@ type UpdateFormQuestionOptionsRequest struct {
 }
 
 func (u UpdateFormQuestionOptionsRequest) Validate() error {
+	if len(u.Added) == 0 && len(u.Removed) == 0 && len(u.Updates) == 0 {
+		return errors.New("there should be at least one entry in all the fields")
+	}
+
 	msgs := make([]string, 0)
 
 	if len(u.Added) > 0 {
@@ -101,7 +106,7 @@ func (u UpdateFormQuestionOptionsRequest) Validate() error {
 type UpdateFormQuestionRequest struct {
 	Prompt        string  `json:"prompt"`
 	IsRequired    bool    `json:"isRequired"`
-	Type          *string `json:"type"`
+	Type          string  `json:"type"`
 	LayoutVariant *string `json:"layoutVariant"`
 	// Options       []NewQuestionOption `json:"options"`
 }
@@ -109,19 +114,18 @@ type UpdateFormQuestionRequest struct {
 func (n UpdateFormQuestionRequest) Validate() error {
 	msgs := make([]string, 0)
 
-	if n.Type != nil {
+	if len(n.Type) > 0 {
 		isValid := false
 		for _, k := range questionTypes {
-			if k == *n.Type {
+			if k == n.Type {
 				isValid = true
 				break
 			}
 		}
 		if !isValid {
-			msgs = append(msgs, "Invalid question type")
 		}
 	} else {
-		*n.Type = QTSingleline
+		msgs = append(msgs, "Invalid question type")
 	}
 
 	if len(n.Prompt) <= 0 {
@@ -179,7 +183,7 @@ type QuestionOption struct {
 type FormQuestion struct {
 	Id            uint64           `json:"id"`
 	Prompt        string           `json:"prompt"`
-	ResponseType  string           `json:"responseType"`
+	Type          string           `json:"type"`
 	IsRequired    bool             `json:"isRequired"`
 	LayoutVariant string           `json:"layoutVariant"`
 	Options       []QuestionOption `json:"options,omitempty"`
