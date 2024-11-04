@@ -31,14 +31,53 @@ func UpdateFormQuestionOptions(ctx context.Context, form uint64, question uint64
 // Updates a form question
 //
 //encore:api auth method=PATCH path=/forms/:form/questions/:question
-func UpdateQuestion(ctx context.Context, form uint64, question uint64) error {
-	return nil
+func UpdateQuestion(ctx context.Context, form uint64, question uint64, req dto.UpdateFormQuestionRequest) (*dto.GetFormQuestionsResponse, error) {
+	uid, _ := auth.UserID()
+	canEdit, err := permissions.CheckPermission(ctx, dto.RelationCheckRequest{
+		Actor:    dto.IdentifierString(dto.PTUser, uid),
+		Relation: models.PermEditor,
+		Target:   dto.IdentifierString(dto.PTForm, form),
+	})
+	if err != nil {
+		rlog.Error(err.Error())
+	}
+	if canEdit == nil || !canEdit.Allowed {
+		return nil, &util.ErrForbidden
+	}
+
+	tx, err := formsDb.Begin(ctx)
+	if err != nil {
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		return nil, &util.ErrUnknown
+	}
+
+	if err := updateFormQuestion(ctx, tx, form, question, req); err != nil {
+		tx.Rollback()
+		if errs.Convert(err) == nil {
+			return nil, err
+		}
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		return nil, &util.ErrUnknown
+	}
+
+	questions, err := findFormQuestionsFromDb(ctx, form)
+	if err != nil {
+		rlog.Error(err.Error())
+		return nil, &util.ErrUnknown
+	}
+	tx.Commit()
+
+	ans := dto.GetFormQuestionsResponse{Questions: formQuestionsToDto(questions)}
+	if err := questionsCache.Set(ctx, form, ans); err != nil {
+		rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
+	}
+	return nil, nil
 }
 
 // Add a question to a form
 //
 //encore:api auth method=POST path=/forms/:formId/question
-func CreateQuestion(ctx context.Context, formId uint64, req dto.NewFormQuestionRequest) (*dto.GetFormQuestionsResponse, error) {
+func CreateQuestion(ctx context.Context, formId uint64, req dto.UpdateFormQuestionRequest) (*dto.GetFormQuestionsResponse, error) {
 	uid, _ := auth.UserID()
 	perm, err := permissions.CheckPermission(ctx, dto.RelationCheckRequest{
 		Actor:    dto.IdentifierString(dto.PTUser, uid),
@@ -527,7 +566,7 @@ func updateForm(ctx context.Context, tx *sqldb.Tx, formId uint64, update dto.Upd
 	return nil
 }
 
-func createFormQuestion(ctx context.Context, tx *sqldb.Tx, formId uint64, req dto.NewFormQuestionRequest) error {
+func createFormQuestion(ctx context.Context, tx *sqldb.Tx, formId uint64, req dto.UpdateFormQuestionRequest) error {
 	formExistsQuery := `
 		SELECT
 			COUNT(id)
@@ -554,6 +593,31 @@ func createFormQuestion(ctx context.Context, tx *sqldb.Tx, formId uint64, req dt
 	`
 
 	if _, err := tx.Exec(ctx, questionInsertQuery, formId, req.Prompt, req.IsRequired, req.Type, req.LayoutVariant); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func updateFormQuestion(ctx context.Context, tx *sqldb.Tx, formId uint64, questionId uint64, req dto.UpdateFormQuestionRequest) error {
+	updateQuery := `
+		UPDATE
+			form_questions
+		SET
+			updated_at=DEFAULT,
+			prompt=$1,
+			type=$2,
+			layout_variant=$3
+		WHERE
+			form=$4 AND id=$5
+			AND (
+				prompt IS DISTINCT FROM $1 OR
+				type IS DISTINCT FROM $2 OR
+				layout_variant IS DISTINCT FROM $3 OR
+			);
+	`
+
+	if _, err := tx.Exec(ctx, updateQuery, req.Prompt, req.Type, req.LayoutVariant, formId, questionId); err != nil {
 		return err
 	}
 

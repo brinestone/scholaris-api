@@ -2,6 +2,7 @@ package dto
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -34,20 +35,78 @@ func (n NewQuestionOption) Validate() error {
 	return nil
 }
 
-type UpdateFormQuestionOptionsRequest struct {
-	Removed []uint64            `json:"removed"`
-	Added   []NewQuestionOption `json:"added"`
+type FormQuestionOptionUpdate struct {
+	Id        uint64  `json:"id"`
+	Caption   string  `json:"caption"`
+	Value     *string `json:"value,omitempty"`
+	IsDefault bool    `json:"isDefault"`
 }
 
-type NewFormQuestionRequest struct {
+func (f FormQuestionOptionUpdate) Validate() error {
+	msgs := make([]string, 0)
+
+	if f.Id == 0 {
+		msgs = append(msgs, "Invalid value for id")
+	}
+
+	if len(f.Caption) == 0 {
+		msgs = append(msgs, "The caption field is required")
+	}
+
+	if len(msgs) > 0 {
+		return errors.New(strings.Join(msgs, "\n"))
+	}
+	return nil
+}
+
+type UpdateFormQuestionOptionsRequest struct {
+	Removed []uint64                   `json:"removed"`
+	Added   []NewQuestionOption        `json:"added"`
+	Updates []FormQuestionOptionUpdate `json:"updates"`
+}
+
+func (u UpdateFormQuestionOptionsRequest) Validate() error {
+	msgs := make([]string, 0)
+
+	if len(u.Added) > 0 {
+		for i, v := range u.Added {
+			if err := v.Validate(); err != nil {
+				msgs = append(msgs, fmt.Sprintf("error at added[%d] - %s", i, err.Error()))
+			}
+		}
+	}
+
+	if len(u.Updates) > 0 {
+		for i, v := range u.Updates {
+			if err := v.Validate(); err != nil {
+				msgs = append(msgs, fmt.Sprintf("error at updates[%d] - %s", i, err.Error()))
+			}
+		}
+	}
+
+	if len(u.Removed) > 0 {
+		for i, v := range u.Removed {
+			if v == 0 {
+				msgs = append(msgs, fmt.Sprintf("Invalid ID at removed[%d]", i))
+			}
+		}
+	}
+
+	if len(msgs) == 0 {
+		return errors.New(strings.Join(msgs, "\n"))
+	}
+	return nil
+}
+
+type UpdateFormQuestionRequest struct {
 	Prompt        string  `json:"prompt"`
 	IsRequired    bool    `json:"isRequired"`
-	Type          *string `json:"responseType"`
+	Type          *string `json:"type"`
 	LayoutVariant *string `json:"layoutVariant"`
 	// Options       []NewQuestionOption `json:"options"`
 }
 
-func (n NewFormQuestionRequest) Validate() error {
+func (n UpdateFormQuestionRequest) Validate() error {
 	msgs := make([]string, 0)
 
 	if n.Type != nil {
