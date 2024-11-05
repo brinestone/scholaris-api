@@ -21,10 +21,11 @@ type Form struct {
 }
 
 type FormQuestionOption struct {
-	Id      uint64
-	Caption string
-	Value   sql.NullString
-	Image   sql.NullString
+	Id        uint64
+	Caption   string
+	Value     *string
+	IsDefault bool
+	Image     *string
 }
 
 type FormQuestion struct {

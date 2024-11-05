@@ -21,6 +21,28 @@ const (
 
 var questionTypes = []string{QTSingleline, QTSingleChoice, QTMCQ, QTFile, QTDate, QTGeoPoint, QTEmail, QTMultiline, QTTel}
 
+type DeleteQuestionsRequest struct {
+	Questions []uint64 `json:"questions"`
+}
+
+func (d DeleteQuestionsRequest) Validate() error {
+	msgs := make([]string, 0)
+	if len(d.Questions) == 0 {
+		msgs = append(msgs, "The questions field cannot be empty")
+	} else {
+		for i, id := range d.Questions {
+			if id == 0 {
+				msgs = append(msgs, fmt.Sprintf("Invalid question ID at questions[%d]", i))
+			}
+		}
+	}
+
+	if len(msgs) > 0 {
+		return errors.New(strings.Join(msgs, "\n"))
+	}
+	return nil
+}
+
 type NewQuestionOption struct {
 	Caption   string  `json:"caption"`
 	Value     *string `json:"value,omitempty"`
@@ -68,7 +90,7 @@ type UpdateFormQuestionOptionsRequest struct {
 
 func (u UpdateFormQuestionOptionsRequest) Validate() error {
 	if len(u.Added) == 0 && len(u.Removed) == 0 && len(u.Updates) == 0 {
-		return errors.New("there should be at least one entry in all the fields")
+		return errors.New("there should be at least one entry in either the: added,removed or updates fields")
 	}
 
 	msgs := make([]string, 0)
@@ -85,6 +107,12 @@ func (u UpdateFormQuestionOptionsRequest) Validate() error {
 		for i, v := range u.Updates {
 			if err := v.Validate(); err != nil {
 				msgs = append(msgs, fmt.Sprintf("error at updates[%d] - %s", i, err.Error()))
+			} else {
+				for j, w := range u.Removed {
+					if w == v.Id {
+						msgs = append(msgs, fmt.Sprintf("option marked for update at updates[%d] cannot be also marked for removal in removed[%d]", i, j))
+					}
+				}
 			}
 		}
 	}
@@ -97,7 +125,7 @@ func (u UpdateFormQuestionOptionsRequest) Validate() error {
 		}
 	}
 
-	if len(msgs) == 0 {
+	if len(msgs) > 0 {
 		return errors.New(strings.Join(msgs, "\n"))
 	}
 	return nil
@@ -174,10 +202,11 @@ func (n UpdateFormRequest) Validate() error {
 }
 
 type QuestionOption struct {
-	Id      uint64  `json:"id"`
-	Caption string  `json:"caption"`
-	Value   *string `json:"value,omitempty"`
-	Image   *string `json:"image,omitempty"`
+	Id        uint64  `json:"id"`
+	Caption   string  `json:"caption"`
+	Value     *string `json:"value,omitempty"`
+	Image     *string `json:"image,omitempty"`
+	IsDefault bool    `json:"isDefault"`
 }
 
 type FormQuestion struct {
@@ -185,7 +214,7 @@ type FormQuestion struct {
 	Prompt        string           `json:"prompt"`
 	Type          string           `json:"type"`
 	IsRequired    bool             `json:"isRequired"`
-	LayoutVariant string           `json:"layoutVariant"`
+	LayoutVariant string           `json:"layoutVariant,omitempty"`
 	Options       []QuestionOption `json:"options,omitempty"`
 }
 

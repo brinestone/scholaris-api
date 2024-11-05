@@ -20,11 +20,60 @@ import (
 	"github.com/brinestone/scholaris/util"
 )
 
+// Deletes a form
+//
+//encore:api auth method=DELETE path=/forms/:form tag:user_is_form_editor
+func DeleteForm(ctx context.Context, form uint64) error {
+	tx, err := formsDb.Begin(ctx)
+	if err != nil {
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		return &util.ErrUnknown
+	}
+
+	if err := deleteForm(ctx, tx, form); err != nil {
+		tx.Rollback()
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		return &util.ErrUnknown
+	}
+	defer tx.Commit()
+
+	return nil
+}
+
+// Deletes a form's questions
+//
+//encore:api auth method=DELETE path=/forms/:form/questions tag:user_is_form_editor
+func DeleteFormQuestions(ctx context.Context, form uint64, req dto.DeleteQuestionsRequest) (*dto.GetFormQuestionsResponse, error) {
+	tx, err := formsDb.Begin(ctx)
+	if err != nil {
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		return nil, &util.ErrUnknown
+	}
+
+	if err := deleteFormQuestions(ctx, tx, form, req.Questions...); err != nil {
+		tx.Rollback()
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		return nil, &util.ErrUnknown
+	}
+	tx.Commit()
+
+	questions, err := findFormQuestionsFromDb(ctx, form)
+	if err != nil {
+		rlog.Error(err.Error())
+		return nil, &util.ErrUnknown
+	}
+
+	ans := dto.GetFormQuestionsResponse{Questions: formQuestionsToDto(questions)}
+	if err := questionsCache.Set(ctx, form, ans); err != nil {
+		rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
+	}
+	return &ans, nil
+}
+
 // Updates a form question's options
 //
 //encore:api auth method=PATCH path=/forms/:form/questions/:question/options tag:user_is_form_editor
 func UpdateFormQuestionOptions(ctx context.Context, form uint64, question uint64, req dto.UpdateFormQuestionOptionsRequest) (*dto.GetFormQuestionsResponse, error) {
-
 	tx, err := formsDb.Begin(ctx)
 	if err != nil {
 		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
@@ -32,7 +81,7 @@ func UpdateFormQuestionOptions(ctx context.Context, form uint64, question uint64
 	}
 
 	if len(req.Updates) > 0 {
-		if err := updateFormQuestionOptions(ctx, tx, question); err != nil {
+		if err := updateFormQuestionOptions(ctx, tx, question, req.Updates...); err != nil {
 			tx.Rollback()
 			rlog.Error(err.Error())
 			return nil, &util.ErrUnknown
@@ -338,8 +387,9 @@ func findFormQuestionsFromDb(ctx context.Context, id uint64) ([]*models.FormQues
 			COALESCE(json_agg(json_build_object(
 				'id', fqo.id,
 				'caption', fqo.caption,
-				'value', fqo.caption,
-				'image', fqo.image
+				'value', fqo.value,
+				'image', fqo.image,
+				'isDefault', fqo.is_default
 			)) FILTER (WHERE fqo.question IS NOT NULL), '[]') AS options
 		FROM
 			form_questions fq
@@ -549,8 +599,6 @@ func formQuestionToDto(f *models.FormQuestion) *dto.FormQuestion {
 	var ans = new(dto.FormQuestion)
 
 	ans.Prompt = f.Prompt
-	// ans.ResponseType = f.ResponseType
-	// ans.Form = f.Form
 	ans.IsRequired = f.IsRequired
 	ans.Type = f.Type
 	ans.Id = f.Id
@@ -561,14 +609,11 @@ func formQuestionToDto(f *models.FormQuestion) *dto.FormQuestion {
 
 	for i, k := range f.Options {
 		ans.Options[i] = dto.QuestionOption{
-			Caption: k.Caption,
-			Id:      k.Id,
-		}
-		if k.Value.Valid {
-			ans.Options[i].Value = &k.Value.String
-		}
-		if k.Image.Valid {
-			ans.Options[i].Image = &k.Image.String
+			Caption:   k.Caption,
+			Id:        k.Id,
+			Value:     k.Value,
+			Image:     k.Image,
+			IsDefault: k.IsDefault,
 		}
 	}
 
@@ -636,7 +681,6 @@ func updateFormQuestion(ctx context.Context, tx *sqldb.Tx, formId uint64, questi
 		UPDATE
 			form_questions
 		SET
-			updated_at=DEFAULT,
 			prompt=$1,
 			type=$2,
 			layout_variant=$3
@@ -645,11 +689,23 @@ func updateFormQuestion(ctx context.Context, tx *sqldb.Tx, formId uint64, questi
 			AND (
 				prompt IS DISTINCT FROM $1 OR
 				type IS DISTINCT FROM $2 OR
-				layout_variant IS DISTINCT FROM $3 OR
+				layout_variant IS DISTINCT FROM $3
 			);
 	`
 
 	if _, err := tx.Exec(ctx, updateQuery, req.Prompt, req.Type, req.LayoutVariant, formId, questionId); err != nil {
+		return err
+	}
+
+	formUpdateQuery := `
+		UPDATE
+			forms
+		SET
+			updated_at=DEFAULT
+		WHERE
+			id=$1;
+	`
+	if _, err := tx.Exec(ctx, formUpdateQuery, formId); err != nil {
 		return err
 	}
 
@@ -662,9 +718,9 @@ func updateFormQuestionOptions(ctx context.Context, tx *sqldb.Tx, questionId uin
 			UPDATE
 				form_question_options
 			SET
-				caption=$1
-				value=$2
-				image=$3
+				caption=$1,
+				value=$2,
+				image=$3,
 				is_default=$6
 			WHERE
 				question=$4 AND id=$5
@@ -672,7 +728,7 @@ func updateFormQuestionOptions(ctx context.Context, tx *sqldb.Tx, questionId uin
 					value IS DISTINCT FROM $2 OR
 					caption IS DISTINCT FROM $1 OR
 					image IS DISTINCT FROM $3 OR
-					is_default IS DISTINCT FROM $6 OR
+					is_default IS DISTINCT FROM $6
 				);
 		`
 		if _, err := tx.Exec(ctx, updateQuery, v.Caption, v.Value, v.Image, questionId, v.Id, v.IsDefault); err != nil {
@@ -712,22 +768,45 @@ func createFormQuestionOptions(ctx context.Context, tx *sqldb.Tx, questionId uin
 }
 
 func deleteFormQuestionOptions(ctx context.Context, tx *sqldb.Tx, questionId uint64, req ...uint64) error {
-	ids := ""
-	for i := range req {
-		ids = string(fmt.Appendf([]byte(ids), "$%d", i+1))
+	for _, id := range req {
+		query := `
+			DELETE FROM
+				form_question_options
+			WHERE
+				id=$1 AND question=$2;
+		`
+		if _, err := tx.Exec(ctx, query, id, questionId); err != nil {
+			return err
+		}
 	}
-	rlog.Debug("deleting question options", "question", questionId, "ids", req, "format", ids)
 
-	query := fmt.Sprintf(`
+	return nil
+}
+
+func deleteFormQuestions(ctx context.Context, tx *sqldb.Tx, formId uint64, req ...uint64) error {
+	for _, id := range req {
+		query := `
+			DELETE FROM
+				form_questions
+			WHERE
+				id=$1 AND form=$2;
+		`
+		if _, err := tx.Exec(ctx, query, id, formId); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func deleteForm(ctx context.Context, tx *sqldb.Tx, formId uint64) error {
+	query := `
 		DELETE FROM
-			form_question_options
+			forms
 		WHERE
-			id IN (%s);
-	`, ids)
-
-	if _, err := tx.Exec(ctx, query, req); err != nil {
+			id=$1;
+	`
+	if _, err := tx.Exec(ctx, query, formId); err != nil {
 		return err
 	}
-
 	return nil
 }
