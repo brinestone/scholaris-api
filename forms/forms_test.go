@@ -61,6 +61,15 @@ func TestForms(t *testing.T) {
 	assert.NotNil(t, form)
 	assert.Greater(t, uint64(form.Id), uint64(0))
 
+	t.Run("Test_GetFormInfo", func(t *testing.T) {
+		t.Run("Test_GetFormInfo_Exists", func(t *testing.T) {
+			testFindExistingFormInfo(t, ctx, form.Id)
+		})
+		t.Run("Test_GetFormInfo_NoExists", func(t *testing.T) {
+			testFindNonExistingFormInfo(t, ctx)
+		})
+	})
+
 	t.Run("TestFindForms_Owned", func(t *testing.T) {
 		testFindOwnedForms(t, ownerId, ctx, dto.PTInstitution)
 	})
@@ -358,4 +367,22 @@ func testDeleteForm(t *testing.T, ctx context.Context, id uint64) {
 	}
 
 	assert.Empty(t, res.Questions)
+}
+
+func testFindExistingFormInfo(t *testing.T, ctx context.Context, id uint64) {
+	res, err := forms.GetFormInfo(ctx, id)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	assert.NotNil(t, res)
+	assert.Equal(t, id, res.Id)
+}
+
+func testFindNonExistingFormInfo(t *testing.T, ctx context.Context) {
+	randomId := uint64(rand.Int63n(1000))
+	res, err := forms.GetFormInfo(ctx, randomId)
+	assert.NotNil(t, err)
+	assert.Nil(t, res)
 }

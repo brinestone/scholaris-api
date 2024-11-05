@@ -20,6 +20,38 @@ import (
 	"github.com/brinestone/scholaris/util"
 )
 
+// Gets a form's info
+//
+//encore:api public method=GET path=/forms/:form
+func GetFormInfo(ctx context.Context, form uint64) (*dto.FormConfig, error) {
+	cfg, err := formCache.Get(ctx, form)
+	if err != nil {
+		if !errors.Is(err, cache.Miss) {
+			rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
+		}
+
+		cfg, err := findFormFromDb(ctx, form)
+		if err != nil {
+			if errs.Convert(err) == nil {
+				return nil, err
+			} else if errors.Is(err, sqldb.ErrNoRows) {
+				return nil, &util.ErrNotFound
+			} else {
+				rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+				return nil, &util.ErrUnknown
+			}
+		}
+
+		ans := formToDto(cfg)
+		if err := formCache.Set(ctx, form, *ans); err != nil {
+			rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
+		}
+
+		return ans, nil
+	}
+	return &cfg, nil
+}
+
 // Toggles a form's status
 //
 //encore:api auth method=PUT path=/forms/:form/toggle tag:user_is_form_editor
