@@ -1156,7 +1156,6 @@ func deleteFormQuestionGroups(ctx context.Context, tx *sqldb.Tx, form uint64, id
 		return nil
 	}
 
-	rlog.Debug("ids", "ids", groupIds)
 	query := fmt.Sprintf(`
 		DELETE FROM
 			form_question_groups
