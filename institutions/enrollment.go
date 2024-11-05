@@ -155,7 +155,7 @@ func findEnrollmentQuestions(ctx context.Context, institutionId uint64) ([]*mode
 				'label', efqo.label,
 				'value', efqo.value,
 				'isDefault', efqo.is_default
-			)) FILTER (WHERE efqo.question IS NOT NULL), '[]') AS answers
+			)) FILTER (WHERE efqo.question IS NOT NULL), '[]') AS options
 		FROM
 			enrollment_form_questions efq
 		LEFT JOIN

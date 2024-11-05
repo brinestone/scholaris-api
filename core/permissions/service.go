@@ -18,7 +18,6 @@ type Service struct {
 var secrets struct {
 	FgaUrl     string `encore:"sensitive"`
 	FgaStoreId string `encore:"sensitive"`
-	FgaModelId string `encore:"sensitive"`
 }
 
 func initService() (*Service, error) {
@@ -72,7 +71,7 @@ func (s *Service) ListRelations(ctx context.Context, req dto.ListRelationsReques
 //encore:api private method=GET path=/permissions/check
 func (s *Service) CheckPermission(ctx context.Context, req dto.RelationCheckRequest) (*dto.RelationCheckResponse, error) {
 	res, err := s.fgaClient.Check(ctx).Body(client.ClientCheckRequest{
-		User:     req.Subject,
+		User:     req.Actor,
 		Relation: req.Relation,
 		Object:   req.Target,
 	}).Execute()

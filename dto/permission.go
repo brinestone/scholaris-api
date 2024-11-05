@@ -8,7 +8,7 @@ import (
 
 type PermissionType string
 
-func IdentifierString[T auth.UID | uint64](pt PermissionType, id T) string {
+func IdentifierString[T auth.UID | uint64 | string](pt PermissionType, id T) string {
 	return fmt.Sprintf("%s:%v", pt, id)
 }
 
@@ -22,6 +22,8 @@ func PermissionTypeFromString(s string) (PermissionType, bool) {
 		return PTEnrollment, true
 	case string(PTTenant):
 		return PTTenant, true
+	case string(PTForm):
+		return PTForm, true
 	case string(PTSubscription):
 		return PTSubscription, true
 	default:
@@ -33,6 +35,7 @@ const (
 	PTInstitution  PermissionType = "institution"
 	PTUser         PermissionType = "user"
 	PTTenant       PermissionType = "tenant"
+	PTForm         PermissionType = "form"
 	PTEnrollment   PermissionType = "enrollment"
 	PTSubscription PermissionType = "subscription"
 	unknown        PermissionType = ""
@@ -57,14 +60,10 @@ type RelationCheckResponse struct {
 }
 
 type RelationCheckRequest struct {
-	Subject  string `query:"subject"`
+	Actor    string `query:"actor"`
 	Relation string `query:"relation"`
 	Target   string `query:"target"`
 }
-
-// func (r *RelationCheckRequest) From(val any) {
-
-// }
 
 type ContextVar struct {
 	Name  string

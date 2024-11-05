@@ -4,8 +4,12 @@ import (
 	"encore.dev/beta/errs"
 )
 
-const MsgDbAccessError = "db access error"
-const MsgCacheAccessError = "cache access error"
+const (
+	MsgDbAccessError    = "db access error"
+	MsgCacheAccessError = "cache access error"
+	MsgForbidden        = "forbidden action"
+	MsgCallError        = "error while calling API"
+)
 
 var ErrConflict = errs.Error{
 	Code:    errs.AlreadyExists,
