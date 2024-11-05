@@ -78,12 +78,34 @@ func TestForms(t *testing.T) {
 		testFindUnOwnedForms(t, ownerId, ctx, dto.PTTenant, form.Id)
 	})
 
+	var groupId uint64
+	t.Run("Test_Grouping", func(t *testing.T) {
+		testFormQuestionGrouping(t, ctx, form.Id, &groupId)
+	})
+
 	t.Run("TestUpdateForm", func(t *testing.T) {
 		testUpdateForm(t, ctx, form)
 	})
 
 	t.Run("TestCreateQuestion", func(t *testing.T) {
-		testCreateQuestions(t, ctx, form.Id)
+		testCreateQuestions(t, ctx, form.Id, groupId)
+	})
+
+	t.Run("Test_GroupDeletion", func(t *testing.T) {
+		res, err := forms.DeleteQuestionGroup(ctx, form.Id, dto.DeleteFormQuestionGroupsRequest{
+			Ids: []uint64{
+				groupId,
+			},
+		})
+
+		if err != nil {
+			t.Error(err)
+			return
+		}
+
+		assert.NotNil(t, res)
+		assert.Empty(t, res.Groups)
+		assert.Empty(t, res.Questions)
 	})
 
 	t.Run("TestToggleFormStatus", func(t *testing.T) {
@@ -262,11 +284,12 @@ func testUpdateQuestion(t *testing.T, ctx context.Context, form uint64, ref dto.
 	assert.NotEqual(t, ref.Prompt, res.Questions[0].Prompt)
 }
 
-func testCreateQuestions(t *testing.T, ctx context.Context, refId uint64) {
+func testCreateQuestions(t *testing.T, ctx context.Context, refId, group uint64) {
 	req := dto.UpdateFormQuestionRequest{
 		Prompt:     randomString(10),
 		IsRequired: true,
 		Type:       dto.QTSingleline,
+		Group:      group,
 	}
 
 	res, err := forms.CreateQuestion(ctx, refId, req)
@@ -385,4 +408,40 @@ func testFindNonExistingFormInfo(t *testing.T, ctx context.Context) {
 	res, err := forms.GetFormInfo(ctx, randomId)
 	assert.NotNil(t, err)
 	assert.Nil(t, res)
+}
+
+func testFormQuestionGrouping(t *testing.T, ctx context.Context, formId uint64, ref *uint64) {
+	var group dto.FormQuestionGroup
+	t.Run("Test_NewGroup", func(t *testing.T) {
+		label := randomString(20)
+		res, err := forms.CreateQuestionGroup(ctx, formId, dto.UpdateFormQuestionGroupRequest{
+			Label: &label,
+		})
+
+		if err != nil {
+			t.Error(err)
+			return
+		}
+
+		assert.NotNil(t, res)
+		assert.NotEmpty(t, res.Groups)
+		group = res.Groups[0]
+		*ref = group.Id
+	})
+
+	t.Run("Test_UpdateGroup", func(t *testing.T) {
+		updatedLabel := *group.Label + " updated"
+		res, err := forms.UpdateQuestionGroup(ctx, formId, group.Id, dto.UpdateFormQuestionGroupRequest{
+			Label:       &updatedLabel,
+			Description: group.Description,
+			Image:       group.Image,
+		})
+
+		if err != nil {
+			t.Error(err)
+		}
+
+		assert.NotNil(t, res)
+		assert.NotEqual(t, updatedLabel, res.Groups[0].Label)
+	})
 }

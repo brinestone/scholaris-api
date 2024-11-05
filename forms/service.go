@@ -20,6 +20,97 @@ import (
 	"github.com/brinestone/scholaris/util"
 )
 
+// Deletes a form's question group
+//
+//encore:api auth method=DELETE path=/forms/:form/groups tag:user_is_form_editor
+func DeleteQuestionGroup(ctx context.Context, form uint64, req dto.DeleteFormQuestionGroupsRequest) (*dto.GetFormQuestionsResponse, error) {
+
+	tx, err := formsDb.Begin(ctx)
+	if err != nil {
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		return nil, &util.ErrUnknown
+	}
+
+	if err := deleteFormQuestionGroups(ctx, tx, form, req.Ids...); err != nil {
+		tx.Rollback()
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		return nil, &util.ErrUnknown
+	}
+	tx.Commit()
+
+	questions, groups, err := findFormQuestionsFromDb(ctx, form)
+	if err != nil {
+		rlog.Error(err.Error())
+		return nil, &util.ErrUnknown
+	}
+
+	ans := dto.GetFormQuestionsResponse{Questions: formQuestionsToDto(questions), Groups: formQuestionGroupsToDto(groups)}
+	if err := questionsCache.Set(ctx, form, ans); err != nil {
+		rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
+	}
+	return &ans, nil
+}
+
+// Updates a form's question group
+//
+//encore:api auth method=PATCH path=/forms/:form/groups/:group tag:user_is_form_editor
+func UpdateQuestionGroup(ctx context.Context, form, group uint64, req dto.UpdateFormQuestionGroupRequest) (*dto.GetFormQuestionsResponse, error) {
+	tx, err := formsDb.Begin(ctx)
+	if err != nil {
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		return nil, &util.ErrUnknown
+	}
+
+	if err := updateFormQuestionGroup(ctx, tx, form, group, req); err != nil {
+		tx.Rollback()
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		return nil, &util.ErrUnknown
+	}
+	tx.Commit()
+
+	questions, groups, err := findFormQuestionsFromDb(ctx, form)
+	if err != nil {
+		rlog.Error(err.Error())
+		return nil, &util.ErrUnknown
+	}
+
+	ans := dto.GetFormQuestionsResponse{Questions: formQuestionsToDto(questions), Groups: formQuestionGroupsToDto(groups)}
+	if err := questionsCache.Set(ctx, form, ans); err != nil {
+		rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
+	}
+	return &ans, nil
+}
+
+// Creates a form's question group
+//
+//encore:api auth method=POST path=/forms/:form/groups tag:user_is_form_editor
+func CreateQuestionGroup(ctx context.Context, form uint64, req dto.UpdateFormQuestionGroupRequest) (*dto.GetFormQuestionsResponse, error) {
+	tx, err := formsDb.Begin(ctx)
+	if err != nil {
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		return nil, &util.ErrUnknown
+	}
+
+	if err := createQuestionsGroup(ctx, tx, form, req); err != nil {
+		tx.Rollback()
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		return nil, &util.ErrUnknown
+	}
+
+	tx.Commit()
+	questions, groups, err := findFormQuestionsFromDb(ctx, form)
+	if err != nil {
+		rlog.Error(err.Error())
+		return nil, &util.ErrUnknown
+	}
+
+	ans := dto.GetFormQuestionsResponse{Questions: formQuestionsToDto(questions), Groups: formQuestionGroupsToDto(groups)}
+	if err := questionsCache.Set(ctx, form, ans); err != nil {
+		rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
+	}
+	return &ans, nil
+}
+
 // Gets a form's info
 //
 //encore:api public method=GET path=/forms/:form
@@ -130,13 +221,13 @@ func DeleteFormQuestions(ctx context.Context, form uint64, req dto.DeleteQuestio
 	}
 	tx.Commit()
 
-	questions, err := findFormQuestionsFromDb(ctx, form)
+	questions, groups, err := findFormQuestionsFromDb(ctx, form)
 	if err != nil {
 		rlog.Error(err.Error())
 		return nil, &util.ErrUnknown
 	}
 
-	ans := dto.GetFormQuestionsResponse{Questions: formQuestionsToDto(questions)}
+	ans := dto.GetFormQuestionsResponse{Questions: formQuestionsToDto(questions), Groups: formQuestionGroupsToDto(groups)}
 	if err := questionsCache.Set(ctx, form, ans); err != nil {
 		rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
 	}
@@ -154,7 +245,7 @@ func UpdateFormQuestionOptions(ctx context.Context, form uint64, question uint64
 	}
 
 	if len(req.Updates) > 0 {
-		if err := updateFormQuestionOptions(ctx, tx, question, req.Updates...); err != nil {
+		if err := updateFormQuestionOptions(ctx, tx, form, question, req.Updates...); err != nil {
 			tx.Rollback()
 			rlog.Error(err.Error())
 			return nil, &util.ErrUnknown
@@ -162,7 +253,7 @@ func UpdateFormQuestionOptions(ctx context.Context, form uint64, question uint64
 	}
 
 	if len(req.Added) > 0 {
-		if err := createFormQuestionOptions(ctx, tx, question, req.Added...); err != nil {
+		if err := createFormQuestionOptions(ctx, tx, form, question, req.Added...); err != nil {
 			tx.Rollback()
 			rlog.Error(err.Error())
 			return nil, &util.ErrUnknown
@@ -170,7 +261,7 @@ func UpdateFormQuestionOptions(ctx context.Context, form uint64, question uint64
 	}
 
 	if len(req.Removed) > 0 {
-		if err := deleteFormQuestionOptions(ctx, tx, question, req.Removed...); err != nil {
+		if err := deleteFormQuestionOptions(ctx, tx, form, question, req.Removed...); err != nil {
 			tx.Rollback()
 			rlog.Error(err.Error())
 			return nil, &util.ErrUnknown
@@ -178,13 +269,13 @@ func UpdateFormQuestionOptions(ctx context.Context, form uint64, question uint64
 	}
 	tx.Commit()
 
-	questions, err := findFormQuestionsFromDb(ctx, form)
+	questions, groups, err := findFormQuestionsFromDb(ctx, form)
 	if err != nil {
 		rlog.Error(err.Error())
 		return nil, &util.ErrUnknown
 	}
 
-	ans := dto.GetFormQuestionsResponse{Questions: formQuestionsToDto(questions)}
+	ans := dto.GetFormQuestionsResponse{Questions: formQuestionsToDto(questions), Groups: formQuestionGroupsToDto(groups)}
 	if err := questionsCache.Set(ctx, form, ans); err != nil {
 		rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
 	}
@@ -211,13 +302,13 @@ func UpdateQuestion(ctx context.Context, form uint64, question uint64, req dto.U
 	}
 	tx.Commit()
 
-	questions, err := findFormQuestionsFromDb(ctx, form)
+	questions, groups, err := findFormQuestionsFromDb(ctx, form)
 	if err != nil {
 		rlog.Error(err.Error())
 		return nil, &util.ErrUnknown
 	}
 
-	ans := dto.GetFormQuestionsResponse{Questions: formQuestionsToDto(questions)}
+	ans := dto.GetFormQuestionsResponse{Questions: formQuestionsToDto(questions), Groups: formQuestionGroupsToDto(groups)}
 	if err := questionsCache.Set(ctx, form, ans); err != nil {
 		rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
 	}
@@ -244,13 +335,13 @@ func CreateQuestion(ctx context.Context, form uint64, req dto.UpdateFormQuestion
 	}
 	tx.Commit()
 
-	questions, err := findFormQuestionsFromDb(ctx, form)
+	questions, groups, err := findFormQuestionsFromDb(ctx, form)
 	if err != nil {
 		rlog.Error(err.Error())
 		return nil, &util.ErrUnknown
 	}
 
-	ans := dto.GetFormQuestionsResponse{Questions: formQuestionsToDto(questions)}
+	ans := dto.GetFormQuestionsResponse{Questions: formQuestionsToDto(questions), Groups: formQuestionGroupsToDto(groups)}
 	if err := questionsCache.Set(ctx, form, ans); err != nil {
 		rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
 	}
@@ -295,13 +386,13 @@ func UpdateForm(ctx context.Context, id uint64, req dto.UpdateFormRequest) (*dto
 func FindFormQuestions(ctx context.Context, id uint64) (*dto.GetFormQuestionsResponse, error) {
 	response, err := questionsCache.Get(ctx, id)
 	if errors.Is(err, cache.Miss) {
-		questions, err := findFormQuestionsFromDb(ctx, id)
+		questions, groups, err := findFormQuestionsFromDb(ctx, id)
 		if err != nil {
 			rlog.Error(util.MsgDbAccessError, "msg", err.Error())
 			return nil, &util.ErrUnknown
 		}
 
-		response = dto.GetFormQuestionsResponse{Questions: formQuestionsToDto(questions)}
+		response = dto.GetFormQuestionsResponse{Questions: formQuestionsToDto(questions), Groups: formQuestionGroupsToDto(groups)}
 
 		if len(response.Questions) > 0 {
 			if err := questionsCache.Set(ctx, id, response); err != nil {
@@ -449,8 +540,8 @@ func createForm(ctx context.Context, tx *sqldb.Tx, owner uint64, input dto.NewFo
 	return findFormFromDbTx(ctx, tx, id)
 }
 
-func findFormQuestionsFromDb(ctx context.Context, id uint64) ([]*models.FormQuestion, error) {
-	query := `
+func findFormQuestionsFromDb(ctx context.Context, id uint64) ([]*models.FormQuestion, []*models.FormQuestionGroup, error) {
+	questionsQuery := `
 		SELECT
 			fq.id,
 			fq.prompt,
@@ -463,7 +554,8 @@ func findFormQuestionsFromDb(ctx context.Context, id uint64) ([]*models.FormQues
 				'value', fqo.value,
 				'image', fqo.image,
 				'isDefault', fqo.is_default
-			)) FILTER (WHERE fqo.question IS NOT NULL), '[]') AS options
+			)) FILTER (WHERE fqo.question IS NOT NULL), '[]') AS options,
+			fq.form_group
 		FROM
 			form_questions fq
 		LEFT JOIN
@@ -475,11 +567,11 @@ func findFormQuestionsFromDb(ctx context.Context, id uint64) ([]*models.FormQues
 			fq.id;
 	`
 
-	rows, err := formsDb.Query(ctx, query, id)
+	rows, err := formsDb.Query(ctx, questionsQuery, id)
 	if errors.Is(err, sqldb.ErrNoRows) {
-		return nil, nil
+		return nil, nil, nil
 	} else if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer rows.Close()
 
@@ -487,18 +579,47 @@ func findFormQuestionsFromDb(ctx context.Context, id uint64) ([]*models.FormQues
 	for rows.Next() {
 		var question = new(models.FormQuestion)
 		var optionsJson string
-		if err := rows.Scan(&question.Id, &question.Prompt, &question.IsRequired, &question.Type, &question.LayoutVariant, &optionsJson); err != nil {
-			return nil, err
+		if err := rows.Scan(&question.Id, &question.Prompt, &question.IsRequired, &question.Type, &question.LayoutVariant, &optionsJson, &question.Group); err != nil {
+			return nil, nil, err
 		}
 
 		if err := json.Unmarshal([]byte(optionsJson), &question.Options); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-
 		ans = append(ans, question)
 	}
+	var groups []*models.FormQuestionGroup = make([]*models.FormQuestionGroup, 0)
 
-	return ans, nil
+	groupsQuery := `
+		SELECT
+			id,
+			form,
+			label,
+			description,
+			image
+		FROM
+			form_question_groups
+		WHERE
+			form=$1;
+	`
+
+	groupRows, err := formsDb.Query(ctx, groupsQuery, id)
+	if errors.Is(err, sqldb.ErrNoRows) {
+		return nil, nil, nil
+	} else if err != nil {
+		return nil, nil, err
+	}
+	defer groupRows.Close()
+
+	for groupRows.Next() {
+		var group = new(models.FormQuestionGroup)
+		if err := groupRows.Scan(&group.Id, &group.Form, &group.Label, &group.Description, &group.Image); err != nil {
+			return nil, nil, err
+		}
+		groups = append(groups, group)
+	}
+
+	return ans, groups, nil
 }
 
 func findFormFromDb(ctx context.Context, id uint64) (*models.Form, error) {
@@ -668,6 +789,30 @@ func formQuestionsToDto(f []*models.FormQuestion) []dto.FormQuestion {
 	return ans
 }
 
+func formQuestionGroupsToDto(f []*models.FormQuestionGroup) []dto.FormQuestionGroup {
+	var ans = make([]dto.FormQuestionGroup, len(f))
+	for i, g := range f {
+		ans[i] = *formQuestionGroupToDto(g)
+	}
+	return ans
+}
+
+func formQuestionGroupToDto(f *models.FormQuestionGroup) *dto.FormQuestionGroup {
+	var ans = new(dto.FormQuestionGroup)
+	ans.Id = f.Id
+	ans.Form = f.Form
+	if f.Label.Valid {
+		ans.Label = &f.Label.String
+	}
+	if f.Description.Valid {
+		ans.Description = &f.Description.String
+	}
+	if f.Image.Valid {
+		ans.Image = &f.Image.String
+	}
+	return ans
+}
+
 func formQuestionToDto(f *models.FormQuestion) *dto.FormQuestion {
 	var ans = new(dto.FormQuestion)
 
@@ -698,7 +843,6 @@ func updateForm(ctx context.Context, tx *sqldb.Tx, formId uint64, update dto.Upd
 		UPDATE
 			forms
 		SET
-			updated_at=DEFAULT,
 			title=$1,
 			description=$2,
 			meta_background=$3,
@@ -713,7 +857,8 @@ func updateForm(ctx context.Context, tx *sqldb.Tx, formId uint64, update dto.Upd
 	if _, err := tx.Exec(ctx, query, &update.Title, &update.Description, &update.BackgroundColor, &update.BackgroundImage, &update.Image, &update.MultiResponse, &update.Resubmission, &formId); err != nil {
 		return err
 	}
-	return nil
+
+	return bumpFormTimestamp(ctx, tx, formId)
 }
 
 func createFormQuestion(ctx context.Context, tx *sqldb.Tx, formId uint64, req dto.UpdateFormQuestionRequest) error {
@@ -737,16 +882,20 @@ func createFormQuestion(ctx context.Context, tx *sqldb.Tx, formId uint64, req dt
 
 	questionInsertQuery := `
 		INSERT INTO
-			form_questions(form,prompt,is_required,type,layout_variant)
+			form_questions(form,prompt,is_required,type,layout_variant,form_group)
 		VALUES
-			($1,$2,$3,$4,$5);
+			($1,$2,$3,$4,$5,$6);
 	`
 
-	if _, err := tx.Exec(ctx, questionInsertQuery, formId, req.Prompt, req.IsRequired, req.Type, req.LayoutVariant); err != nil {
+	var group *uint64
+	if req.Group > 0 {
+		group = &req.Group
+	}
+	if _, err := tx.Exec(ctx, questionInsertQuery, formId, req.Prompt, req.IsRequired, req.Type, req.LayoutVariant, group); err != nil {
 		return err
 	}
 
-	return nil
+	return bumpFormTimestamp(ctx, tx, formId)
 }
 
 func updateFormQuestion(ctx context.Context, tx *sqldb.Tx, formId uint64, questionId uint64, req dto.UpdateFormQuestionRequest) error {
@@ -756,36 +905,34 @@ func updateFormQuestion(ctx context.Context, tx *sqldb.Tx, formId uint64, questi
 		SET
 			prompt=$1,
 			type=$2,
-			layout_variant=$3
+			layout_variant=$3,
+			form_group=$6
 		WHERE
 			form=$4 AND id=$5
 			AND (
 				prompt IS DISTINCT FROM $1 OR
 				type IS DISTINCT FROM $2 OR
-				layout_variant IS DISTINCT FROM $3
+				layout_variant IS DISTINCT FROM $3 OR
+				form_group IS DISTINCT FROM $6
 			);
 	`
-
-	if _, err := tx.Exec(ctx, updateQuery, req.Prompt, req.Type, req.LayoutVariant, formId, questionId); err != nil {
+	var group *uint64
+	if req.Group > 0 {
+		group = &req.Group
+	}
+	res, err := tx.Exec(ctx, updateQuery, req.Prompt, req.Type, req.LayoutVariant, formId, questionId, group)
+	if err != nil {
 		return err
 	}
 
-	formUpdateQuery := `
-		UPDATE
-			forms
-		SET
-			updated_at=DEFAULT
-		WHERE
-			id=$1;
-	`
-	if _, err := tx.Exec(ctx, formUpdateQuery, formId); err != nil {
-		return err
+	if res.RowsAffected() > 0 {
+		return bumpFormTimestamp(ctx, tx, formId)
 	}
 
 	return nil
 }
 
-func updateFormQuestionOptions(ctx context.Context, tx *sqldb.Tx, questionId uint64, req ...dto.FormQuestionOptionUpdate) error {
+func updateFormQuestionOptions(ctx context.Context, tx *sqldb.Tx, formId, questionId uint64, req ...dto.FormQuestionOptionUpdate) error {
 	for _, v := range req {
 		updateQuery := `
 			UPDATE
@@ -804,14 +951,18 @@ func updateFormQuestionOptions(ctx context.Context, tx *sqldb.Tx, questionId uin
 					is_default IS DISTINCT FROM $6
 				);
 		`
-		if _, err := tx.Exec(ctx, updateQuery, v.Caption, v.Value, v.Image, questionId, v.Id, v.IsDefault); err != nil {
+		res, err := tx.Exec(ctx, updateQuery, v.Caption, v.Value, v.Image, questionId, v.Id, v.IsDefault)
+		if err != nil {
 			return err
+		}
+		if res.RowsAffected() > 0 {
+			return bumpFormTimestamp(ctx, tx, formId)
 		}
 	}
 	return nil
 }
 
-func createFormQuestionOptions(ctx context.Context, tx *sqldb.Tx, questionId uint64, req ...dto.NewQuestionOption) error {
+func createFormQuestionOptions(ctx context.Context, tx *sqldb.Tx, formId, questionId uint64, req ...dto.NewQuestionOption) error {
 	for _, v := range req {
 		query := `
 			INSERT INTO
@@ -837,10 +988,10 @@ func createFormQuestionOptions(ctx context.Context, tx *sqldb.Tx, questionId uin
 			}
 		}
 	}
-	return nil
+	return bumpFormTimestamp(ctx, tx, formId)
 }
 
-func deleteFormQuestionOptions(ctx context.Context, tx *sqldb.Tx, questionId uint64, req ...uint64) error {
+func deleteFormQuestionOptions(ctx context.Context, tx *sqldb.Tx, formId, questionId uint64, req ...uint64) error {
 	for _, id := range req {
 		query := `
 			DELETE FROM
@@ -853,7 +1004,7 @@ func deleteFormQuestionOptions(ctx context.Context, tx *sqldb.Tx, questionId uin
 		}
 	}
 
-	return nil
+	return bumpFormTimestamp(ctx, tx, formId)
 }
 
 func deleteFormQuestions(ctx context.Context, tx *sqldb.Tx, formId uint64, req ...uint64) error {
@@ -868,7 +1019,7 @@ func deleteFormQuestions(ctx context.Context, tx *sqldb.Tx, formId uint64, req .
 			return err
 		}
 	}
-	return nil
+	return bumpFormTimestamp(ctx, tx, formId)
 }
 
 func deleteForm(ctx context.Context, tx *sqldb.Tx, formId uint64) error {
@@ -910,7 +1061,6 @@ func toggleFormStatus(ctx context.Context, tx *sqldb.Tx, formId uint64) error {
 		UPDATE
 			forms
 		SET
-			updated_at=DEFAULT,
 			status=$1
 		WHERE
 			id=$2;
@@ -918,6 +1068,109 @@ func toggleFormStatus(ctx context.Context, tx *sqldb.Tx, formId uint64) error {
 
 	if _, err := tx.Exec(ctx, query, newStatus, formId); err != nil {
 		return err
+	}
+
+	return bumpFormTimestamp(ctx, tx, formId)
+}
+
+func createQuestionsGroup(ctx context.Context, tx *sqldb.Tx, formId uint64, req dto.UpdateFormQuestionGroupRequest) error {
+	query := `
+		INSERT INTO
+			form_question_groups(form,label,description,image)
+		VALUES
+			($1,$2,$3,$4);
+	`
+
+	var label, description, image *string
+	if req.Label != nil && len(*req.Label) > 0 {
+		label = req.Label
+	}
+
+	if req.Description != nil && len(*req.Description) > 0 {
+		description = req.Description
+	}
+
+	if req.Image != nil && len(*req.Image) > 0 {
+		image = req.Image
+	}
+
+	if _, err := tx.Exec(ctx, query, formId, label, description, image); err != nil {
+		return err
+	}
+
+	return bumpFormTimestamp(ctx, tx, formId)
+}
+
+func bumpFormTimestamp(ctx context.Context, tx *sqldb.Tx, formId uint64) error {
+	query := `
+		UPDATE
+			forms
+		SET
+			updated_at=DEFAULT
+		WHERE
+			id=$1;
+	`
+	if _, err := tx.Exec(ctx, query, formId); err != nil {
+		return err
+	}
+	return nil
+}
+
+func updateFormQuestionGroup(ctx context.Context, tx *sqldb.Tx, form, group uint64, req dto.UpdateFormQuestionGroupRequest) error {
+
+	query := `
+		UPDATE
+			form_question_groups
+		SET
+			label=$1,
+			description=$2,
+			image=$3
+		WHERE
+			id=$4 AND form=$5
+			AND (
+				label IS DISTINCT FROM $1 OR
+				description IS DISTINCT FROM $2 OR
+				image IS DISTINCT FROM $3
+			);
+	`
+
+	res, err := tx.Exec(ctx, query, req.Label, req.Description, req.Image, group, form)
+	if err != nil {
+		return err
+	}
+	if res.RowsAffected() > 0 {
+		return bumpFormTimestamp(ctx, tx, form)
+	}
+	return nil
+}
+
+func deleteFormQuestionGroups(ctx context.Context, tx *sqldb.Tx, form uint64, ids ...uint64) error {
+	groupIds := ""
+	for i, id := range ids {
+		groupIds += fmt.Sprintf("%d", id)
+		if i < len(ids)-1 {
+			groupIds += ","
+		}
+	}
+	if len(groupIds) == 0 {
+		return nil
+	}
+
+	rlog.Debug("ids", "ids", groupIds)
+	query := fmt.Sprintf(`
+		DELETE FROM
+			form_question_groups
+		WHERE
+			form=$1 AND id IN (%s)
+	`, groupIds)
+
+	res, err := tx.Exec(ctx, query, form)
+	if err != nil {
+		return err
+	}
+
+	if res.RowsAffected() > 0 {
+		return bumpFormTimestamp(ctx, tx, form)
 	}
 
 	return nil

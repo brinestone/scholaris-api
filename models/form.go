@@ -35,7 +35,16 @@ type FormQuestion struct {
 	IsRequired    bool
 	Type          string
 	LayoutVariant sql.NullString
+	Group         sql.NullInt64
 	Options       []FormQuestionOption
+}
+
+type FormQuestionGroup struct {
+	Id          uint64
+	Label       sql.NullString
+	Description sql.NullString
+	Image       sql.NullString
+	Form        uint64
 }
 
 type FormResponse struct {

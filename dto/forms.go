@@ -21,6 +21,16 @@ const (
 
 var questionTypes = []string{QTSingleline, QTSingleChoice, QTMCQ, QTFile, QTDate, QTGeoPoint, QTEmail, QTMultiline, QTTel}
 
+type DeleteFormQuestionGroupsRequest struct {
+	Ids []uint64 `json:"ids,omitempty"`
+}
+
+type UpdateFormQuestionGroupRequest struct {
+	Label       *string `json:"label,omitempty"`
+	Description *string `json:"description,omitempty"`
+	Image       *string `json:"image,omitempty"`
+}
+
 type DeleteQuestionsRequest struct {
 	Questions []uint64 `json:"questions"`
 }
@@ -136,6 +146,7 @@ type UpdateFormQuestionRequest struct {
 	IsRequired    bool    `json:"isRequired"`
 	Type          string  `json:"type"`
 	LayoutVariant *string `json:"layoutVariant"`
+	Group         uint64  `json:"group,omitempty"`
 	// Options       []NewQuestionOption `json:"options"`
 }
 
@@ -216,10 +227,20 @@ type FormQuestion struct {
 	IsRequired    bool             `json:"isRequired"`
 	LayoutVariant string           `json:"layoutVariant,omitempty"`
 	Options       []QuestionOption `json:"options,omitempty"`
+	Group         uint64           `json:"group,omitempty"`
+}
+
+type FormQuestionGroup struct {
+	Id          uint64  `json:"id"`
+	Label       *string `json:"label,omitempty"`
+	Form        uint64  `json:"form"`
+	Description *string `json:"description"`
+	Image       *string `json:"image"`
 }
 
 type GetFormQuestionsResponse struct {
-	Questions []FormQuestion `json:"questions"`
+	Questions []FormQuestion      `json:"questions"`
+	Groups    []FormQuestionGroup `json:"groups"`
 }
 
 type GetFormsInput struct {
