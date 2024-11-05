@@ -20,6 +20,47 @@ import (
 	"github.com/brinestone/scholaris/util"
 )
 
+// Toggles a form's status
+//
+//encore:api auth method=PUT path=/forms/:form/toggle tag:user_is_form_editor
+func ToggleFormStatus(ctx context.Context, form uint64) (*dto.FormConfig, error) {
+	tx, err := formsDb.Begin(ctx)
+	if err != nil {
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		return nil, &util.ErrUnknown
+	}
+
+	if err := toggleFormStatus(ctx, tx, form); err != nil {
+		tx.Rollback()
+		if errors.Is(err, sqldb.ErrNoRows) {
+			return nil, &util.ErrNotFound
+		} else {
+			rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+			return nil, &util.ErrUnknown
+		}
+	}
+	tx.Commit()
+
+	f, err := findFormFromDb(ctx, form)
+	if err != nil {
+		rlog.Error(err.Error())
+		return nil, &util.ErrUnknown
+	}
+
+	ans := formToDto(f)
+	if err := formCache.Set(ctx, form, *ans); err != nil {
+		rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
+	}
+
+	if f.Status == "published" {
+		PublishedForms.Publish(ctx, FormPublished{
+			Id:        f.Id,
+			Timestamp: f.UpdatedAt,
+		})
+	}
+	return ans, nil
+}
+
 // Deletes a form
 //
 //encore:api auth method=DELETE path=/forms/:form tag:user_is_form_editor
@@ -808,5 +849,44 @@ func deleteForm(ctx context.Context, tx *sqldb.Tx, formId uint64) error {
 	if _, err := tx.Exec(ctx, query, formId); err != nil {
 		return err
 	}
+	return nil
+}
+
+func toggleFormStatus(ctx context.Context, tx *sqldb.Tx, formId uint64) error {
+	query := `
+		SELECT
+			status
+		FROM
+			forms
+		WHERE
+			id = $1;
+	`
+
+	var currentStatus string
+	if err := tx.QueryRow(ctx, query, formId).Scan(&currentStatus); err != nil {
+		return err
+	}
+
+	var newStatus string
+	if currentStatus == "draft" {
+		newStatus = "published"
+	} else {
+		newStatus = "draft"
+	}
+
+	query = `
+		UPDATE
+			forms
+		SET
+			updated_at=DEFAULT,
+			status=$1
+		WHERE
+			id=$2;
+	`
+
+	if _, err := tx.Exec(ctx, query, newStatus, formId); err != nil {
+		return err
+	}
+
 	return nil
 }

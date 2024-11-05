@@ -77,9 +77,24 @@ func TestForms(t *testing.T) {
 		testCreateQuestions(t, ctx, form.Id)
 	})
 
+	t.Run("TestToggleFormStatus", func(t *testing.T) {
+		testFormToggle(t, ctx, form)
+	})
+
 	t.Run("TestDeleteForm", func(t *testing.T) {
 		testDeleteForm(t, ctx, form.Id)
 	})
+}
+
+func testFormToggle(t *testing.T, ctx context.Context, form *dto.FormConfig) {
+	update, err := forms.ToggleFormStatus(ctx, form.Id)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	assert.NotNil(t, update)
+	assert.NotEqual(t, form.Status, update.Status)
 }
 
 func randomString(len int) string {
