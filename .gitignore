@@ -4,3 +4,4 @@ encore.gen.cue
 /encore.gen
 .secrets.local*
 /tmp
+node_modules

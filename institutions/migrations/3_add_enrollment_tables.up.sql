@@ -33,6 +33,7 @@ CREATE TABLE
 		FOREIGN KEY (enrollment) REFERENCES enrollments (id) ON DELETE CASCADE
 	);
 
+-- deleted in v7
 CREATE TABLE
 	enrollment_form_questions (
 		id BIGSERIAL PRIMARY KEY,
@@ -45,6 +46,7 @@ CREATE TABLE
 		FOREIGN KEY (institution) REFERENCES institutions (id) ON DELETE CASCADE
 	);
 
+-- deleted in v7
 CREATE TABLE
 	enrollment_form_question_options (
 		question BIGINT NOT NULL,
@@ -54,6 +56,7 @@ CREATE TABLE
 		FOREIGN KEY (question) REFERENCES enrollment_form_questions (id) ON DELETE CASCADE
 	);
 
+-- deleted in v7
 CREATE TABLE
 	enrollment_form_answers (
 		question BIGINT NOT NULL,
