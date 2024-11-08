@@ -34,6 +34,13 @@ func TestMain(t *testing.M) {
 	et.MockEndpoint(sAuth.VerifyCaptchaToken, func(ctx context.Context, req sAuth.VerifyCaptchaRequest) error {
 		return nil
 	})
+	et.MockEndpoint(permissions.ListRelations, func(ctx context.Context, req dto.ListRelationsRequest) (*dto.ListRelationsResponse, error) {
+		return &dto.ListRelationsResponse{
+			Relations: map[dto.PermissionType][]string{
+				dto.PTForm: {},
+			},
+		}, nil
+	})
 	t.Run()
 }
 

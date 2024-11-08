@@ -38,8 +38,12 @@ func SubmitResponse(ctx context.Context, form, response uint64) (*dto.UserFormRe
 
 	if err := submitUserResponse(ctx, tx, form, uid, response); err != nil {
 		tx.Rollback()
-		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
-		return nil, &util.ErrUnknown
+		if errs.Convert(err) == nil {
+			return nil, err
+		} else {
+			rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+			return nil, &util.ErrUnknown
+		}
 	}
 	tx.Commit()
 
