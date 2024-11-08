@@ -44,11 +44,9 @@ type NewInstitutionRequest struct {
 	// The institution's slug
 	Slug string `json:"slug"`
 	// The institution's tenant ID
-	TenantId uint64 `json:"tenantId"`
+	Tenant uint64 `json:"tenantId"`
 	// The request's captcha token
-	Captcha string `json:"captcha"`
-	// The timestamp of the request
-	Timestamp time.Time `header:"x-timestamp"`
+	Captcha string `header:"x-ver-token"`
 }
 
 func (n NewInstitutionRequest) GetCaptchaToken() string {
@@ -58,7 +56,7 @@ func (n NewInstitutionRequest) GetCaptchaToken() string {
 func (n NewInstitutionRequest) Validate() error {
 	msgs := make([]string, 0)
 
-	if n.TenantId == 0 {
+	if n.Tenant == 0 {
 		msgs = append(msgs, "The tenantId field is required")
 	}
 

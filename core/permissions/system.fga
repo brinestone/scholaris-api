@@ -12,6 +12,8 @@ type tenant
     define can_delete: owner
     define can_update: maintainer or admin
     define can_update_subscription: maintainer
+    define can_create_settings: admin
+    define can_edit_settings: [user] or can_create_settings
     define maintainer: [user] or admin
     define member: [user]
     define owner: [user]
@@ -52,6 +54,22 @@ type form
     define can_delete: maintainer from owner
     define editor: [user] or maintainer from owner
     define owner: [institution, tenant]
+    
+type tenantSetting
+  relations
+    define owner: [tenant]
+    define editor: can_edit_settings from owner
+    define viewer: [user] or editor
+    define can_edit: editor
+  
+type institutionSetting
+  relations
+    define owner: [institution]
+    define parent: [tenantSetting, institutionSetting]
+    define editor: maintainer from owner or editor from parent
+    define viewer: [user] or editor
+    define can_edit: editor
+    
 
 condition enrollment_published(is_draft: bool) {
   !is_draft

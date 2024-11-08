@@ -6,8 +6,8 @@ type CursorBasedPaginationParams struct {
 }
 
 type PageBasedPaginationParams struct {
-	Page uint `query:"page" json:"page"`
-	Size uint `query:"size" json:"size"`
+	Page uint `query:"page" json:"page" encore:"optional"`
+	Size uint `query:"size" json:"size" encore:"optional"`
 }
 
 func (p *PageBasedPaginationParams) Validate() error {

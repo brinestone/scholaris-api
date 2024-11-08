@@ -56,7 +56,7 @@ func AllowedToCreateInstitutionMiddleware(req middleware.Request, next middlewar
 	ans, err := permissions.CheckPermission(req.Context(), dto.RelationCheckRequest{
 		Actor:    fmt.Sprintf("user:%v", userId),
 		Relation: "can_create_institution",
-		Target:   fmt.Sprintf("tenant:%d", data.TenantId),
+		Target:   fmt.Sprintf("tenant:%d", data.Tenant),
 	})
 
 	if err != nil {
