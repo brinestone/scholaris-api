@@ -48,7 +48,7 @@ type ListRelationsResponse struct {
 
 type ListRelationsRequest struct {
 	// The object claiming to own the relation.
-	Subject string `json:"subject"`
+	Actor string `json:"subject"`
 	// The relation specifier
 	Relation string `json:"relation"`
 	// The target object
@@ -60,30 +60,71 @@ type RelationCheckResponse struct {
 }
 
 type RelationCheckRequest struct {
-	Actor    string `query:"actor"`
-	Relation string `query:"relation"`
-	Target   string `query:"target"`
+	// The actor's identifier who owns the relation
+	Actor string `json:"actor"`
+	// The relation specicfier
+	Relation string `json:"relation"`
+	// The target resource identifier
+	Target    string             `json:"target"`
+	Condition *RelationCondition `json:"condition,omitempty" encore:"optional"`
 }
 
-type ContextVar struct {
+type ContextEntry struct {
 	Name  string
 	Type  string
 	Value string
 }
 
-type UpdateCondition struct {
+type RelationCondition struct {
 	Name    string
-	Context []ContextVar
+	Context []ContextEntry
+}
+
+func HavingEntry(name, _type, value string) ContextEntry {
+	return ContextEntry{
+		Name:  name,
+		Type:  _type,
+		Value: value,
+	}
+}
+
+func WithCondition(name string, entries ...ContextEntry) RelationCondition {
+	ans := RelationCondition{
+		Name:    name,
+		Context: make([]ContextEntry, len(entries)),
+	}
+	copy(ans.Context, entries)
+
+	return ans
 }
 
 type PermissionUpdate struct {
 	// The actor who owns the relation
-	Subject string
+	Actor string
 	// The relation specifier
 	Relation string
 	// The target resource identifier
-	Target    string
-	Condition *UpdateCondition
+	Target string
+	// The conditions of the relation
+	Condition *RelationCondition
+}
+
+func (p PermissionUpdate) WithCondition(c *RelationCondition) PermissionUpdate {
+	p.Condition = c
+	return p
+}
+
+func NewPermissionUpdate[T string | uint64 | auth.UID](actor, relation, target string) PermissionUpdate {
+	return NewPermissionUpdateWithCondition[T](actor, relation, target, nil)
+}
+
+func NewPermissionUpdateWithCondition[T string | uint64 | auth.UID](actor, relation, target string, cond *RelationCondition) PermissionUpdate {
+	return PermissionUpdate{
+		Actor:     actor,
+		Relation:  relation,
+		Target:    target,
+		Condition: cond,
+	}
 }
 
 type UpdatePermissionsRequest struct {

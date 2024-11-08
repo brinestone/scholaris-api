@@ -6,24 +6,6 @@ import (
 	"strings"
 )
 
-// Form Answer types
-const (
-	FAText           = "text"
-	FASingleChoice   = "single-choice"
-	FAMultipleChoice = "multiple-choice"
-	FAFile           = "file"
-)
-
-// Question types
-const (
-	// Open ended question, meaning the user can provide any text as answer
-	QTOpenEnded = "open-ended"
-	// The user can provide multiple texts as answer
-	QTMultipleChoice = "multiple-choice"
-	// The user can only provide a set of URLs as answer
-	QTUpload = "upload"
-)
-
 // Enrollment statuses
 const (
 	// The enrollment is in draft mode.
@@ -49,7 +31,7 @@ type EnrollmentQuestion struct {
 	AnswerType      string                      `json:"answerType"`
 	IsRequired      bool                        `json:"isRequired"`
 	ChoiceDelimiter string                      `json:"choiceDelimiter"`
-	Options         []*EnrollmentQuestionOption `json:"options,omitempty"`
+	Options         []*EnrollmentQuestionOption `json:"options,omitempty" encore:"optional"`
 }
 
 type EnrollmentQuestions struct {
@@ -80,12 +62,12 @@ func (ne NewEnrollment) Validate() error {
 type UpdateEnrollment struct {
 	Destination uint64 `json:"institution"`
 	Answers     []struct {
-		Value    string `json:"value,omitempty"`
+		Value    string `json:"value,omitempty" encore:"optional"`
 		Question uint64 `json:"question"`
-	} `json:"answers,omitempty"`
+	} `json:"answers,omitempty" encore:"optional"`
 	RemovedAnswers   []int
-	AddedDocuments   []string `json:"addedDocuments,omitempty"`
-	RemovedDocuments []string `json:"removedDocuments,omitempty"`
+	AddedDocuments   []string `json:"addedDocuments,omitempty" encore:"optional"`
+	RemovedDocuments []string `json:"removedDocuments,omitempty" encore:"optional"`
 }
 
 func (ue UpdateEnrollment) Validate() error {
@@ -112,8 +94,8 @@ type EnrollmentState struct {
 	Id          uint64 `json:"id"`
 	Destination uint64 `json:"institution"`
 	Answers     []struct {
-		Value    []*string `json:"value,omitempty"`
+		Value    []*string `json:"value,omitempty" encore:"optional"`
 		Question uint64    `json:"question"`
-	} `json:"answers,omitempty"`
-	Documents []string `json:"documents,omitempty"`
+	} `json:"answers,omitempty" encore:"optional"`
+	Documents []string `json:"documents,omitempty" encore:"optional"`
 }

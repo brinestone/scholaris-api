@@ -4,7 +4,7 @@ import "time"
 
 type Tenant struct {
 	Name         string    `json:"name"`
-	Id           uint64    `json:"id,omitempty"`
+	Id           uint64    `json:"id,omitempty" encore:"optional"`
 	CreatedAt    time.Time `json:"createdAt"`
 	UpdatedAt    time.Time `json:"updatedAt"`
 	Subscription uint64    `json:"subscription"`
@@ -18,7 +18,7 @@ type SubscriptionPlanBenefit struct {
 }
 
 type SubscriptionPlan struct {
-	Id           uint64                     `json:"id,omitempty"`
+	Id           uint64                     `json:"id,omitempty" encore:"optional"`
 	Name         string                     `json:"name"`
 	CreatedAt    time.Time                  `json:"createdAt"`
 	UpdatedAt    time.Time                  `json:"updatedAt"`

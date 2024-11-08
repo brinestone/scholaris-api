@@ -78,7 +78,7 @@ type CaptchaCheckResponse struct {
 	Success            bool      `json:"success"`
 	ChallengeTimestamp time.Time `json:"challenge_ts"`
 	HostName           string    `json:"hostname"`
-	ErrorCodes         []string  `json:"error-codes,omitempty"`
+	ErrorCodes         []string  `json:"error-codes,omitempty" encore:"optional"`
 }
 
 func verifyCaptcha(token string) error {
@@ -136,7 +136,7 @@ func SignUp(ctx context.Context, req dto.NewUserRequest) error {
 
 type AuthClaims struct {
 	Email    string `json:"email"`
-	Avatar   string `json:"avatar,omitempty"`
+	Avatar   string `json:"avatar,omitempty" encore:"optional"`
 	FullName string `json:"displayName"`
 	Sub      uint64 `json:"sub"`
 }

@@ -8,6 +8,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
+	"time"
 
 	"encore.dev/beta/auth"
 	"encore.dev/beta/errs"
@@ -19,6 +22,157 @@ import (
 	"github.com/brinestone/scholaris/models"
 	"github.com/brinestone/scholaris/util"
 )
+
+// Submits a user's response
+//
+//encore:api auth method=PATCH path=/forms/:form/responses/:response/submit tag:user_owns_response tag:user_can_submit_response
+func SubmitResponse(ctx context.Context, form, response uint64) (*dto.UserFormResponse, error) {
+	sub, _ := auth.UserID()
+	uid, _ := strconv.ParseUint(string(sub), 10, 64)
+
+	tx, err := formsDb.Begin(ctx)
+	if err != nil {
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		return nil, &util.ErrUnknown
+	}
+
+	if err := submitUserResponse(ctx, tx, form, uid, response); err != nil {
+		tx.Rollback()
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		return nil, &util.ErrUnknown
+	}
+	tx.Commit()
+
+	defer func() {
+		FormSubmissions.Publish(ctx, ResponseSubmitted{
+			Form:      form,
+			Response:  response,
+			Timestamp: time.Now(),
+		})
+	}()
+
+	r, err := findUserResponseById(ctx, form, uid, response)
+	if errors.Is(err, sqldb.ErrNoRows) {
+		return nil, &util.ErrNotFound
+	} else if err != nil {
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		return nil, &util.ErrUnknown
+	}
+
+	return &responsesToDto(r)[0], nil
+}
+
+// Updates a user's answers
+//
+//encore:api auth method=PATCH path=/forms/:form/responses/:response/answers tag:user tag:user_owns_response
+func UpdateResponseAnswers(ctx context.Context, form, response uint64, req *dto.UpdateUserAnswersRequest) (*dto.UserFormResponse, error) {
+	sub, _ := auth.UserID()
+	uid, _ := strconv.ParseUint(string(sub), 10, 64)
+
+	tx, err := formsDb.Begin(ctx)
+	if err != nil {
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		return nil, &util.ErrUnknown
+	}
+
+	if len(req.Updated) > 0 {
+		if err := updateUserResponseAnswers(ctx, tx, form, response, req.Updated...); err != nil {
+			if errs.Convert(err) == nil {
+				return nil, err
+			} else {
+				rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+				return nil, &util.ErrUnknown
+			}
+		}
+	}
+
+	if len(req.Removed) > 0 {
+		if err := deleteResponseAnswers(ctx, tx, form, response, req.Removed...); err != nil {
+			if errs.Convert(err) == nil {
+				return nil, err
+			} else {
+				rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+				return nil, &util.ErrUnknown
+			}
+		}
+	}
+	tx.Commit()
+
+	r, err := findUserResponseById(ctx, form, uid, response)
+	if errors.Is(err, sqldb.ErrNoRows) {
+		return nil, &util.ErrNotFound
+	} else if err != nil {
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		return nil, &util.ErrUnknown
+	}
+
+	return &responsesToDto(r)[0], nil
+}
+
+// Gets a user's response
+//
+//encore:api auth method=GET path=/forms/:form/responses/:response
+func GetUserResponse(ctx context.Context, form, response uint64) (*dto.UserFormResponse, error) {
+	sub, _ := auth.UserID()
+	uid, _ := strconv.ParseUint(string(sub), 10, 64)
+
+	r, err := findUserResponseById(ctx, form, uid, response)
+	if errors.Is(err, sqldb.ErrNoRows) {
+		return nil, &util.ErrNotFound
+	} else if err != nil {
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		return nil, &util.ErrUnknown
+	}
+
+	return &responsesToDto(r)[0], nil
+}
+
+// Gets a user's form responses
+//
+//encore:api auth method=GET path=/forms/:form/responses
+func GetUserResponses(ctx context.Context, form uint64) (*dto.UserFormResponses, error) {
+	sub, _ := auth.UserID()
+	uid, _ := strconv.ParseUint(string(sub), 10, 64)
+
+	responses, err := findUserResponses(ctx, uid, form)
+	if err != nil {
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		return nil, &util.ErrUnknown
+	}
+	return &dto.UserFormResponses{
+		Responses: responsesToDto(responses...),
+	}, nil
+}
+
+// Creates a response for a form
+//
+//encore:api auth method=POST path=/forms/:form/responses/new tag:user_can_respond_to_form
+func CreateFormResponse(ctx context.Context, form uint64) (*dto.UserFormResponses, error) {
+	sub, _ := auth.UserID()
+	uid, _ := strconv.ParseUint(string(sub), 10, 64)
+
+	tx, err := formsDb.Begin(ctx)
+	if err != nil {
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		return nil, &util.ErrUnknown
+	}
+
+	if err := createUserFormResponse(ctx, tx, form, uid); err != nil {
+		tx.Rollback()
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		return nil, &util.ErrUnknown
+	}
+	tx.Commit()
+
+	responses, err := findUserResponses(ctx, uid, form)
+	if err != nil {
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		return nil, &util.ErrUnknown
+	}
+	return &dto.UserFormResponses{
+		Responses: responsesToDto(responses...),
+	}, nil
+}
 
 // Deletes a form's question group
 //
@@ -45,7 +199,7 @@ func DeleteQuestionGroup(ctx context.Context, form uint64, req dto.DeleteFormQue
 	}
 
 	ans := dto.GetFormQuestionsResponse{Questions: formQuestionsToDto(questions), Groups: formQuestionGroupsToDto(groups)}
-	if err := questionsCache.Set(ctx, form, ans); err != nil {
+	if err := questionsCache.Set(ctx, questionsCacheKey(form), ans); err != nil {
 		rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
 	}
 	return &ans, nil
@@ -75,7 +229,7 @@ func UpdateQuestionGroup(ctx context.Context, form, group uint64, req dto.Update
 	}
 
 	ans := dto.GetFormQuestionsResponse{Questions: formQuestionsToDto(questions), Groups: formQuestionGroupsToDto(groups)}
-	if err := questionsCache.Set(ctx, form, ans); err != nil {
+	if err := questionsCache.Set(ctx, questionsCacheKey(form), ans); err != nil {
 		rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
 	}
 	return &ans, nil
@@ -105,7 +259,7 @@ func CreateQuestionGroup(ctx context.Context, form uint64, req dto.UpdateFormQue
 	}
 
 	ans := dto.GetFormQuestionsResponse{Questions: formQuestionsToDto(questions), Groups: formQuestionGroupsToDto(groups)}
-	if err := questionsCache.Set(ctx, form, ans); err != nil {
+	if err := questionsCache.Set(ctx, questionsCacheKey(form), ans); err != nil {
 		rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
 	}
 	return &ans, nil
@@ -121,7 +275,7 @@ func GetFormInfo(ctx context.Context, form uint64) (*dto.FormConfig, error) {
 			rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
 		}
 
-		cfg, err := findFormFromDb(ctx, form)
+		_cfg, err := findFormFromDb(ctx, form)
 		if err != nil {
 			if errs.Convert(err) == nil {
 				return nil, err
@@ -133,13 +287,33 @@ func GetFormInfo(ctx context.Context, form uint64) (*dto.FormConfig, error) {
 			}
 		}
 
-		ans := formToDto(cfg)
+		ans := formToDto(_cfg)
 		if err := formCache.Set(ctx, form, *ans); err != nil {
 			rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
 		}
 
-		return ans, nil
+		cfg = *ans
 	}
+
+	uid, authed := auth.UserID()
+	if !authed && cfg.Status == dto.FSDraft {
+		rlog.Warn("draft form access attempt", "form", form)
+		return nil, &util.ErrForbidden
+	}
+
+	perm, err := permissions.CheckPermission(ctx, dto.RelationCheckRequest{
+		Actor:    dto.IdentifierString(dto.PTUser, uid),
+		Relation: models.PermCanViewForm,
+		Target:   dto.IdentifierString(dto.PTForm, form),
+	})
+
+	if err != nil {
+		rlog.Error(util.MsgCallError, "msg", err.Error())
+		return nil, &util.ErrUnknown
+	} else if !perm.Allowed {
+		return nil, &util.ErrForbidden
+	}
+
 	return &cfg, nil
 }
 
@@ -199,7 +373,12 @@ func DeleteForm(ctx context.Context, form uint64) error {
 		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
 		return &util.ErrUnknown
 	}
-	defer tx.Commit()
+	tx.Commit()
+
+	DeletedForms.Publish(ctx, FormDeleted{
+		Id:        form,
+		Timestamp: time.Now(),
+	})
 
 	return nil
 }
@@ -228,7 +407,7 @@ func DeleteFormQuestions(ctx context.Context, form uint64, req dto.DeleteQuestio
 	}
 
 	ans := dto.GetFormQuestionsResponse{Questions: formQuestionsToDto(questions), Groups: formQuestionGroupsToDto(groups)}
-	if err := questionsCache.Set(ctx, form, ans); err != nil {
+	if err := questionsCache.Set(ctx, questionsCacheKey(form), ans); err != nil {
 		rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
 	}
 	return &ans, nil
@@ -276,7 +455,7 @@ func UpdateFormQuestionOptions(ctx context.Context, form uint64, question uint64
 	}
 
 	ans := dto.GetFormQuestionsResponse{Questions: formQuestionsToDto(questions), Groups: formQuestionGroupsToDto(groups)}
-	if err := questionsCache.Set(ctx, form, ans); err != nil {
+	if err := questionsCache.Set(ctx, questionsCacheKey(form), ans); err != nil {
 		rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
 	}
 	return &ans, nil
@@ -309,7 +488,7 @@ func UpdateQuestion(ctx context.Context, form uint64, question uint64, req dto.U
 	}
 
 	ans := dto.GetFormQuestionsResponse{Questions: formQuestionsToDto(questions), Groups: formQuestionGroupsToDto(groups)}
-	if err := questionsCache.Set(ctx, form, ans); err != nil {
+	if err := questionsCache.Set(ctx, questionsCacheKey(form), ans); err != nil {
 		rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
 	}
 	return &ans, nil
@@ -342,7 +521,7 @@ func CreateQuestion(ctx context.Context, form uint64, req dto.UpdateFormQuestion
 	}
 
 	ans := dto.GetFormQuestionsResponse{Questions: formQuestionsToDto(questions), Groups: formQuestionGroupsToDto(groups)}
-	if err := questionsCache.Set(ctx, form, ans); err != nil {
+	if err := questionsCache.Set(ctx, questionsCacheKey(form), ans); err != nil {
 		rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
 	}
 
@@ -384,7 +563,8 @@ func UpdateForm(ctx context.Context, id uint64, req dto.UpdateFormRequest) (*dto
 //
 //encore:api public method=GET path=/forms/:id/questions
 func FindFormQuestions(ctx context.Context, id uint64) (*dto.GetFormQuestionsResponse, error) {
-	response, err := questionsCache.Get(ctx, id)
+	cacheKey := questionsCacheKey(id)
+	response, err := questionsCache.Get(ctx, cacheKey)
 	if errors.Is(err, cache.Miss) {
 		questions, groups, err := findFormQuestionsFromDb(ctx, id)
 		if err != nil {
@@ -395,7 +575,7 @@ func FindFormQuestions(ctx context.Context, id uint64) (*dto.GetFormQuestionsRes
 		response = dto.GetFormQuestionsResponse{Questions: formQuestionsToDto(questions), Groups: formQuestionGroupsToDto(groups)}
 
 		if len(response.Questions) > 0 {
-			if err := questionsCache.Set(ctx, id, response); err != nil {
+			if err := questionsCache.Set(ctx, cacheKey, response); err != nil {
 				rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
 			}
 		}
@@ -410,9 +590,31 @@ func FindFormQuestions(ctx context.Context, id uint64) (*dto.GetFormQuestionsRes
 //encore:api public method=GET path=/forms
 func FindForms(ctx context.Context, params dto.GetFormsInput) (*dto.PaginatedResponse[dto.FormConfig], error) {
 	ownerType, _ := dto.PermissionTypeFromString(params.OwnerType)
+	overrides := make([]uint64, 0)
+	uid, authed := auth.UserID()
+	if authed {
+		res, err := permissions.ListRelations(ctx, dto.ListRelationsRequest{
+			Actor:    dto.IdentifierString(dto.PTUser, uid),
+			Relation: models.PermEditor,
+			Type:     string(dto.PTForm),
+		})
+		if err != nil {
+			rlog.Error(util.MsgCallError, "msg", err.Error())
+			return nil, &util.ErrUnknown
+		}
+		arr, ok := res.Relations[dto.PTForm]
+		if ok && len(arr) > 0 {
+			for _, id := range arr {
+				if i, err := strconv.ParseUint(id, 10, 64); err == nil {
+					overrides = append(overrides, i)
+				}
+			}
+		}
+	}
+
 	res, err := findFormsFromCache(ctx, int(params.Page), int(params.Size), ownerType, params.Owner)
 	if errors.Is(err, cache.Miss) {
-		formsFromDb, count, err := findFormsFromDb(ctx, int(params.Page), int(params.Size), params.Owner)
+		formsFromDb, count, err := findFormsFromDb(ctx, int(params.Page), int(params.Size), params.Owner, overrides...)
 		if err != nil {
 			return nil, err
 		}
@@ -437,7 +639,7 @@ func FindForms(ctx context.Context, params dto.GetFormsInput) (*dto.PaginatedRes
 				rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
 			}
 		}
-		return response, nil
+		res = response
 	} else if err != nil {
 		rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
 	}
@@ -482,15 +684,21 @@ func NewForm(ctx context.Context, req dto.NewFormInput) (*dto.FormConfig, error)
 		}
 	}
 
-	if err := permissions.SetPermissions(ctx, dto.UpdatePermissionsRequest{
+	update := dto.UpdatePermissionsRequest{
 		Updates: []dto.PermissionUpdate{
 			{
-				Subject:  dto.IdentifierString(dto.PermissionType(req.OwnerType), req.Owner),
+				Actor:    dto.IdentifierString(dto.PermissionType(req.OwnerType), req.Owner),
 				Relation: models.PermOwner,
+				Target:   dto.IdentifierString(dto.PTForm, form.Id),
+			}, {
+				Actor:    dto.IdentifierString(dto.PTUser, uid),
+				Relation: models.PermEditor,
 				Target:   dto.IdentifierString(dto.PTForm, form.Id),
 			},
 		},
-	}); err != nil {
+	}
+
+	if err := permissions.SetPermissions(ctx, update); err != nil {
 		rlog.Error(err.Error())
 		tx.Rollback()
 		return nil, &util.ErrUnknown
@@ -502,7 +710,7 @@ func NewForm(ctx context.Context, req dto.NewFormInput) (*dto.FormConfig, error)
 		rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
 	}
 
-	NewForms.Publish(ctx, FormCreated{
+	NewForms.Publish(ctx, FormEvent{
 		Id:        ans.Id,
 		Timestamp: ans.CreatedAt,
 	})
@@ -512,13 +720,34 @@ func NewForm(ctx context.Context, req dto.NewFormInput) (*dto.FormConfig, error)
 func createForm(ctx context.Context, tx *sqldb.Tx, owner uint64, input dto.NewFormInput) (*models.Form, error) {
 	query := `
 		INSERT INTO
-			forms(title,description,meta_background,meta_bg_img,meta_img,owner,multi_response,response_resubmission)
+			forms(
+				title,
+				description,
+				meta_background,
+				meta_bg_img,
+				meta_img,
+				owner,
+				multi_response,
+				response_resubmission,
+				deadline,
+				max_responses,
+				max_submissions
+			)
 		VALUES
-			($1,$2,$3,$4,$5,$6,$7,$8)
+			($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
 		RETURNING id;
 	`
 
 	var description, bg, bgImg, img *string
+	var deadline *time.Time
+	var maxResponses, maxSubmissions *uint
+
+	if input.MaxSubmissions > 0 {
+		maxSubmissions = &input.MaxSubmissions
+	}
+	if input.MaxResponses > 0 {
+		maxResponses = &input.MaxResponses
+	}
 	if input.Description != nil {
 		description = input.Description
 	}
@@ -531,9 +760,12 @@ func createForm(ctx context.Context, tx *sqldb.Tx, owner uint64, input dto.NewFo
 	if input.Image != nil {
 		img = input.Image
 	}
+	if input.Deadline != nil {
+		deadline = input.Deadline
+	}
 
 	var id uint64
-	if err := tx.QueryRow(ctx, query, &input.Title, description, bg, bgImg, img, &owner, &input.MultiResponse, &input.Resubmission).Scan(&id); err != nil {
+	if err := tx.QueryRow(ctx, query, input.Title, description, bg, bgImg, img, owner, input.MultiResponse, input.Resubmission, deadline, maxResponses, maxSubmissions).Scan(&id); err != nil {
 		return nil, err
 	}
 
@@ -636,7 +868,10 @@ func findFormFromDb(ctx context.Context, id uint64) (*models.Form, error) {
 			owner,
 			multi_response,
 			response_resubmission,
-			status
+			status,
+			deadline,
+			max_responses,
+			max_submissions
 		FROM
 			forms
 		WHERE
@@ -645,7 +880,7 @@ func findFormFromDb(ctx context.Context, id uint64) (*models.Form, error) {
 	`
 
 	var form *models.Form = new(models.Form)
-	if err := formsDb.QueryRow(ctx, query, id).Scan(&form.Id, &form.Title, &form.Description, &form.BackgroundColor, &form.BackgroundImage, &form.Image, &form.CreatedAt, &form.UpdatedAt, &form.Owner, &form.MultiResponse, &form.Resubmission, &form.Status); err != nil {
+	if err := formsDb.QueryRow(ctx, query, id).Scan(&form.Id, &form.Title, &form.Description, &form.BackgroundColor, &form.BackgroundImage, &form.Image, &form.CreatedAt, &form.UpdatedAt, &form.Owner, &form.MultiResponse, &form.Resubmission, &form.Status, &form.Deadline, &form.MaxResponses, &form.MaxSubmissions); err != nil {
 		return nil, err
 	}
 	return form, nil
@@ -665,7 +900,10 @@ func findFormFromDbTx(ctx context.Context, tx *sqldb.Tx, id uint64) (*models.For
 			owner,
 			multi_response,
 			response_resubmission,
-			status
+			status,
+			deadline,
+			max_responses,
+			max_submissions
 		FROM
 			forms
 		WHERE
@@ -674,14 +912,29 @@ func findFormFromDbTx(ctx context.Context, tx *sqldb.Tx, id uint64) (*models.For
 	`
 
 	var form *models.Form = new(models.Form)
-	if err := tx.QueryRow(ctx, query, id).Scan(&form.Id, &form.Title, &form.Description, &form.BackgroundColor, &form.BackgroundImage, &form.Image, &form.CreatedAt, &form.UpdatedAt, &form.Owner, &form.MultiResponse, &form.Resubmission, &form.Status); err != nil {
+	if err := tx.QueryRow(ctx, query, id).Scan(&form.Id, &form.Title, &form.Description, &form.BackgroundColor, &form.BackgroundImage, &form.Image, &form.CreatedAt, &form.UpdatedAt, &form.Owner, &form.MultiResponse, &form.Resubmission, &form.Status, &form.Deadline, &form.MaxResponses, &form.MaxSubmissions); err != nil {
 		return nil, err
 	}
 	return form, nil
 }
 
-func findFormsFromDb(ctx context.Context, page, size int, owner uint64) ([]*models.Form, uint64, error) {
-	query := `
+func findFormsFromDb(ctx context.Context, page, size int, owner uint64, overrides ...uint64) ([]*models.Form, uint64, error) {
+
+	var overrideClause = ""
+	args := make([]any, len(overrides)+3)
+	args[0] = owner
+	args[1] = page * size
+	args[2] = size
+	if len(overrides) > 0 {
+		placeholders := make([]string, len(overrides))
+		for i, id := range overrides {
+			placeholders[i] = fmt.Sprintf("$%d", i+4)
+			args[i+3] = id
+		}
+		overrideClause = fmt.Sprintf("OR (owner=$1 AND id IN (%s)) ", strings.Join(placeholders, ","))
+	}
+
+	query := fmt.Sprintf(`
 		SELECT
 			id,
 			title,
@@ -694,16 +947,23 @@ func findFormsFromDb(ctx context.Context, page, size int, owner uint64) ([]*mode
 			owner,
 			multi_response,
 			response_resubmission,
-			status
+			status,
+			deadline,
+			max_responses,
+			max_submissions
 		FROM
 			forms
 		WHERE
-			owner = $1
+			owner = $1 AND status='published' AND deadline > NOW() %s
 		OFFSET $2
 		LIMIT $3;
-	`
+	`, overrideClause)
 
-	rows, err := formsDb.Query(ctx, query, owner, page*size, size)
+	if size == 0 {
+		args[2] = 100
+	}
+
+	rows, err := formsDb.Query(ctx, query, args...)
 	if errors.Is(err, sqldb.ErrNoRows) {
 		return nil, 0, nil
 	} else if err != nil {
@@ -714,7 +974,7 @@ func findFormsFromDb(ctx context.Context, page, size int, owner uint64) ([]*mode
 	var ans = make([]*models.Form, 0)
 	for rows.Next() {
 		var form = new(models.Form)
-		if err := rows.Scan(&form.Id, &form.Title, &form.Description, &form.BackgroundColor, &form.BackgroundImage, &form.Image, &form.CreatedAt, &form.UpdatedAt, &form.Owner, &form.MultiResponse, &form.Resubmission, &form.Status); err != nil {
+		if err := rows.Scan(&form.Id, &form.Title, &form.Description, &form.BackgroundColor, &form.BackgroundImage, &form.Image, &form.CreatedAt, &form.UpdatedAt, &form.Owner, &form.MultiResponse, &form.Resubmission, &form.Status, &form.Deadline, &form.MaxResponses, &form.MaxSubmissions); err != nil {
 			return nil, 0, err
 		}
 		ans = append(ans, form)
@@ -735,8 +995,16 @@ func findFormsFromDb(ctx context.Context, page, size int, owner uint64) ([]*mode
 	return ans, count, nil
 }
 
+func questionsCacheKey(form uint64) string {
+	uid, _ := auth.UserID()
+	temp := fmt.Sprintf("%d%s", form, uid)
+	sum := md5.Sum([]byte(temp))
+	return hex.EncodeToString(sum[:])
+}
+
 func formsCacheKey(page, size int, ownerType dto.PermissionType, owner uint64) string {
-	temp := fmt.Sprintf("%d%d%s%d", page, size, ownerType, owner)
+	uid, _ := auth.UserID()
+	temp := fmt.Sprintf("%d%d%s%d%s", page, size, ownerType, owner, uid)
 	sum := md5.Sum([]byte(temp))
 	return hex.EncodeToString(sum[:])
 }
@@ -749,6 +1017,12 @@ func findFormsFromCache(ctx context.Context, page, size int, ownerType dto.Permi
 
 func formToDto(f *models.Form) *dto.FormConfig {
 	var bgColor, bgImage, image, description *string
+	var deadline *time.Time
+	var maxResponses, maxSubmissions *uint
+
+	if f.Deadline.Valid {
+		deadline = &f.Deadline.Time
+	}
 
 	if f.BackgroundColor.Valid {
 		bgColor = &f.BackgroundColor.String
@@ -766,6 +1040,16 @@ func formToDto(f *models.Form) *dto.FormConfig {
 		description = &f.Description.String
 	}
 
+	if f.MaxResponses.Valid {
+		tmp := uint(f.MaxResponses.Int32)
+		maxResponses = &tmp
+	}
+
+	if f.MaxSubmissions.Valid {
+		tmp := uint(f.MaxResponses.Int32)
+		maxSubmissions = &tmp
+	}
+
 	return &dto.FormConfig{
 		Id:              f.Id,
 		Title:           f.Title,
@@ -778,6 +1062,9 @@ func formToDto(f *models.Form) *dto.FormConfig {
 		BackgroundColor: bgColor,
 		BackgroundImage: bgImage,
 		Image:           image,
+		Deadline:        deadline,
+		MaxResponses:    maxResponses,
+		MaxSubmissions:  maxSubmissions,
 	}
 }
 
@@ -849,16 +1136,21 @@ func updateForm(ctx context.Context, tx *sqldb.Tx, formId uint64, update dto.Upd
 			meta_bg_img=$4,
 			meta_img=$5,
 			multi_response=$6,
-			response_resubmission=$7
+			response_resubmission=$7,
+			deadline=$9,
+			max_responses=$10,
+			max_submissions=$11
 		WHERE
 			id = $8;
 	`
-
-	if _, err := tx.Exec(ctx, query, &update.Title, &update.Description, &update.BackgroundColor, &update.BackgroundImage, &update.Image, &update.MultiResponse, &update.Resubmission, &formId); err != nil {
+	res, err := tx.Exec(ctx, query, &update.Title, &update.Description, &update.BackgroundColor, &update.BackgroundImage, &update.Image, &update.MultiResponse, &update.Resubmission, &formId, update.Deadline, update.MaxResponses, update.MaxSubmissions)
+	if err != nil {
 		return err
+	} else if res.RowsAffected() > 0 {
+		return bumpFormTimestamp(ctx, tx, formId)
 	}
 
-	return bumpFormTimestamp(ctx, tx, formId)
+	return nil
 }
 
 func createFormQuestion(ctx context.Context, tx *sqldb.Tx, formId uint64, req dto.UpdateFormQuestionRequest) error {
@@ -1172,5 +1464,373 @@ func deleteFormQuestionGroups(ctx context.Context, tx *sqldb.Tx, form uint64, id
 		return bumpFormTimestamp(ctx, tx, form)
 	}
 
+	return nil
+}
+
+func findUserResponses(ctx context.Context, user, form uint64) ([]*models.FormResponse, error) {
+	query := `
+		SELECT
+			fr.id,
+			fr.responder,
+			fr.submitted_at,
+			fr.created_at,
+			fr.updated_at,
+			COALESCE(json_agg(json_build_object(
+				'id', ra.id,
+				'question', ra.question,
+				'value', ra.value,
+				'response', ra.response
+			)) FILTER (WHERE ra.response IS NOT NULL), '[]') as answers,
+			fr.form
+		FROM
+			form_responses fr
+		LEFT JOIN
+			response_answers ra
+				ON ra.response=fr.id
+		WHERE
+			fr.responder=$1 AND fr.form=$2
+		GROUP BY
+			fr.id;
+	`
+
+	rows, err := formsDb.Query(ctx, query, user, form)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var responses = make([]*models.FormResponse, 0)
+	for rows.Next() {
+		var response = new(models.FormResponse)
+		var answersJson string
+		if err := rows.Scan(&response.Id, &response.Responder, &response.SubmittedAt, &response.CreatedAt, &response.UpdatedAt, &answersJson, &response.Form); err != nil {
+			return nil, err
+		}
+
+		if err := json.Unmarshal([]byte(answersJson), &response.Answers); err != nil {
+			return nil, err
+		}
+
+		responses = append(responses, response)
+	}
+
+	return responses, nil
+}
+
+func responsesToDto(r ...*models.FormResponse) []dto.UserFormResponse {
+	var ans = make([]dto.UserFormResponse, len(r))
+
+	for i, v := range r {
+		var res dto.UserFormResponse
+		res.Id = v.Id
+		res.CreatedAt = v.CreatedAt
+		res.UpdatedAt = v.UpdatedAt
+		res.Responsder = v.Responder
+		if v.SubmittedAt.Valid {
+			res.SubmittedAt = &v.SubmittedAt.Time
+		}
+
+		res.Answers = make([]dto.FormAnswer, len(v.Answers))
+		for j, w := range v.Answers {
+			var a dto.FormAnswer
+			a.Id = w.Id
+			a.Question = w.Question
+			a.Response = w.Response
+			a.CreatedAt = w.CreatedAt
+			a.UpdatedAt = w.UpdatedAt
+			a.Value = w.Value
+
+			res.Answers[j] = a
+		}
+
+		ans[i] = res
+	}
+
+	return ans
+}
+
+func createUserFormResponse(ctx context.Context, tx *sqldb.Tx, form, user uint64) error {
+	query := `
+		INSERT INTO
+			form_responses(responder,form)
+		VALUES
+			($1,$2);
+	`
+
+	if _, err := tx.Exec(ctx, query, user, form); err != nil {
+		return err
+	}
+	return nil
+}
+
+func countUserResponses(ctx context.Context, form, user uint64) (uint, uint, error) {
+	query := `
+		SELECT
+			COUNT(id),
+			(
+				SELECT 
+					COUNT(id) 
+				FROM
+					form_responses
+				WHERE
+					responder=$1 AND form=$2 AND submitted_at IS NOT NULL
+			)
+		FROM
+			form_responses
+		WHERE
+			responder=$1 AND form=$2;
+	`
+
+	var total, submitted uint
+	if err := formsDb.QueryRow(ctx, query, user, form).Scan(&total, &submitted); err != nil {
+		return 0, 0, err
+	}
+	return total, submitted, nil
+}
+
+func findUserResponseById(ctx context.Context, form, user, response uint64) (*models.FormResponse, error) {
+	query := `
+		SELECT
+			fr.id,
+			fr.responder,
+			fr.submitted_at,
+			fr.created_at,
+			fr.updated_at,
+			COALESCE(json_agg(json_build_object(
+				'id', ra.id,
+				'question', ra.question,
+				'value', ra.value,
+				'response', ra.response
+			)) FILTER (WHERE ra.response IS NOT NULL), '[]') as answers,
+			fr.form
+		FROM
+			form_responses fr
+		LEFT JOIN
+			response_answers ra
+				ON ra.response=fr.id
+		WHERE
+			fr.responder=$1 AND fr.form=$2 AND fr.id=$3
+		GROUP BY
+			fr.id;
+	`
+
+	var r = new(models.FormResponse)
+	var answersJson string
+	if err := formsDb.QueryRow(ctx, query, user, form, response).Scan(&r.Id, &r.Responder, &r.SubmittedAt, &r.CreatedAt, &r.UpdatedAt, &answersJson, &r.Form); err != nil {
+		return nil, err
+	}
+
+	if err := json.Unmarshal([]byte(answersJson), &r.Answers); err != nil {
+		return nil, err
+	}
+
+	return r, nil
+}
+
+func bumpFormResponseTimestamp(ctx context.Context, tx *sqldb.Tx, id uint64) error {
+	query := `
+		UPDATE
+			form_responses
+		SET
+			updated_at=DEFAULT
+		WHERE
+			id=$1;
+	`
+	if _, err := tx.Exec(ctx, query, id); err != nil {
+		return err
+	}
+	return nil
+}
+
+type questionConstraints struct {
+	IsRequired bool
+}
+
+func updateUserResponseAnswers(ctx context.Context, tx *sqldb.Tx, form, response uint64, req ...dto.FormAnswerUpdate) error {
+	args := make([]any, len(req)+1)
+	placeholders := make([]string, len(req))
+	args[0] = form
+
+	for i, v := range req {
+		args[i+1] = v.Question
+		placeholders[i] = fmt.Sprintf("$%d", i+2)
+	}
+
+	query := fmt.Sprintf(`
+		SELECT
+			id,
+			is_required
+		FROM
+			form_questions
+		WHERE
+			form=$1 AND id IN (%s);
+	`, strings.Join(placeholders, ","))
+
+	rows, err := tx.Query(ctx, query, args...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	var constraints = make(map[uint64]questionConstraints)
+	for rows.Next() {
+		var constraint questionConstraints
+		var id uint64
+		if err := rows.Scan(&id, &constraint.IsRequired); err != nil {
+			return err
+		}
+		constraints[id] = constraint
+	}
+
+	answersQuery := `
+		SELECT
+			question,id
+		FROM
+			response_answers
+		WHERE
+			response=$1;
+	`
+
+	var qs = make(map[uint64]uint64)
+	rows, err = tx.Query(ctx, answersQuery, response)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var q, id uint64
+		if err := rows.Scan(&q, &id); err != nil {
+			return err
+		}
+		qs[q] = id
+	}
+
+	for _, v := range req {
+		constraint, ok := constraints[v.Question]
+		if !ok {
+			return &errs.Error{
+				Code:    errs.Aborted,
+				Message: fmt.Sprintf("No question with ID = %d", v.Question),
+			}
+		}
+
+		if constraint.IsRequired && v.Value == nil || v.Value != nil && len(*v.Value) == 0 {
+			return &errs.Error{
+				Code:    errs.Aborted,
+				Message: fmt.Sprintf("Question with ID=%d is required", v.Question),
+			}
+		}
+
+		answerId, ok := qs[v.Question]
+		if ok {
+			updateQuery := `
+				UPDATE
+					response_answers
+				SET
+					value=$1,
+					updated_at=DEFAULT
+				WHERE
+					response=$2 AND question=$3 AND id=$4;
+			`
+			if _, err := tx.Exec(ctx, updateQuery, v.Value, response, v.Question, answerId); err != nil {
+				return err
+			}
+		} else {
+			insertQuery := `
+				INSERT INTO
+					response_answers(value,question,response)
+				VALUES
+					($1,$2,$3);				
+			`
+			if _, err := tx.Exec(ctx, insertQuery, v.Value, v.Question, response); err != nil {
+				return err
+			}
+		}
+	}
+
+	return bumpFormResponseTimestamp(ctx, tx, response)
+}
+
+func verifyUserOwnedResponse(ctx context.Context, user, response, form uint64) bool {
+	query := `
+		SELECT
+			COUNT(id)
+		FROM
+			form_responses
+		WHERE
+			id=$1 AND responder=$2 AND form=$3
+	`
+
+	var cnt int
+	if err := formsDb.QueryRow(ctx, query, response, user, form).Scan(&cnt); err != nil {
+		return false
+	}
+	return cnt > 0
+}
+
+func deleteResponseAnswers(ctx context.Context, tx *sqldb.Tx, form, response uint64, req ...uint64) error {
+	args := make([]any, len(req)+2)
+	var placeholders = make([]string, len(args))
+	args[0], args[1], placeholders[0], placeholders[1] = response, form, "$1", "$2"
+
+	for i, v := range req {
+		args[i+2], placeholders[i+2] = v, fmt.Sprintf("$%d", i+3)
+	}
+
+	query := fmt.Sprintf(`
+		DELETE FROM
+			response_answers
+		WHERE
+			response=$1 AND form=$2 AND question IN (%s);
+	`, strings.Join(placeholders, ","))
+
+	if _, err := tx.Exec(ctx, query, args...); err != nil {
+		return err
+	}
+	return bumpFormResponseTimestamp(ctx, tx, response)
+}
+
+func submitUserResponse(ctx context.Context, tx *sqldb.Tx, form, user, response uint64) error {
+
+	invalidAnswersQuery := `
+		SELECT
+			COUNT(ra.id)
+		FROM
+			response_answers ra
+		JOIN
+			form_questions fq
+				ON ra.question=fq.id
+		WHERE
+			ra.response=$1 AND 
+			fq.form=$2 AND 
+			fq.is_required=true AND 
+			ra.value IS NULL;
+	`
+
+	var cnt int
+	if err := tx.QueryRow(ctx, invalidAnswersQuery, response, form).Scan(&cnt); err != nil {
+		return err
+	} else if cnt > 0 {
+		return &errs.Error{
+			Code:    errs.FailedPrecondition,
+			Message: "Cannot submit. There are invalid answers in this submission",
+		}
+	}
+
+	query := `
+		UPDATE
+			form_responses
+		SET
+			submitted_at=NOW()
+		WHERE
+			responder=$1 AND submitted_at IS NULL AND form=$2 AND id=$3;
+	`
+
+	res, err := tx.Exec(ctx, query, user, form, response)
+	if err != nil {
+		return err
+	} else if res.RowsAffected() > 0 {
+		return bumpFormResponseTimestamp(ctx, tx, response)
+	}
 	return nil
 }

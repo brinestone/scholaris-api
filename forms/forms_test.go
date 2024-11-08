@@ -6,12 +6,15 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"strings"
 	"testing"
+	"time"
 
 	crypto "crypto/rand"
 
 	"encore.dev/beta/auth"
 	"encore.dev/et"
+	"github.com/brianvoe/gofakeit/v6"
 	sAuth "github.com/brinestone/scholaris/core/auth"
 	"github.com/brinestone/scholaris/core/permissions"
 	"github.com/brinestone/scholaris/dto"
@@ -34,26 +37,141 @@ func TestMain(t *testing.M) {
 	t.Run()
 }
 
-func TestForms(t *testing.T) {
-	uid := uint64(rand.Int63n(400))
-	captchaToken := randomString(20)
-
-	randomUserId := auth.UID(fmt.Sprintf("%d", uid))
-	ctx := auth.WithContext(context.Background(), randomUserId, &sAuth.AuthClaims{
-		Email:    "john@example.com",
-		FullName: "John Doe",
+func makeUser() (auth.UID, sAuth.AuthClaims) {
+	uid := uint64(rand.Int63n(1000))
+	userData := sAuth.AuthClaims{
+		Email:    gofakeit.Person().Contact.Email,
+		Avatar:   gofakeit.Person().Image,
+		FullName: gofakeit.Name(),
 		Sub:      uid,
-	})
-	ownerId := uint64(rand.Int63n(400))
+	}
+	return auth.UID(fmt.Sprintf("%d", uid)), userData
+}
+
+type makeFormOptionName string
+
+const (
+	questionCount makeFormOptionName = "question-count"
+)
+
+type makeFormOption struct {
+	name  makeFormOptionName
+	value any
+}
+
+func withOption(name makeFormOptionName, value any) makeFormOption {
+	return makeFormOption{
+		name:  name,
+		value: value,
+	}
+}
+
+func makeFormQuestions(ctx context.Context, form uint64, count uint) error {
+	var gErr error
+	for i := uint(0); i < count; i++ {
+		questionRequest := dto.UpdateFormQuestionRequest{
+			Prompt:     gofakeit.LoremIpsumSentence(gofakeit.IntRange(3, 15)),
+			IsRequired: gofakeit.Bool(),
+			Type:       gofakeit.RandomString([]string{string(dto.QTDate), string(dto.QTEmail), string(dto.QTFile), string(dto.QTGeoPoint), string(dto.QTMCQ), string(dto.QTMultiline), string(dto.QTSingleChoice), string(dto.QTSingleline), string(dto.QTTel)}),
+		}
+		q, err := forms.CreateQuestion(ctx, form, questionRequest)
+		if err != nil {
+			gErr = err
+			break
+		}
+
+		if questionRequest.Type == dto.QTMCQ || questionRequest.Type == dto.QTSingleChoice {
+			optionRequest := dto.UpdateFormQuestionOptionsRequest{}
+			cnt := gofakeit.IntRange(1, 30)
+			for j := 0; j < cnt; j++ {
+				var img, val *string
+
+				if gofakeit.Bool() {
+					tmp := gofakeit.ImageURL(48, 48)
+					img = &tmp
+				}
+
+				if questionRequest.IsRequired || gofakeit.Bool() {
+					tmp := strings.ToLower(gofakeit.LoremIpsumWord())
+					val = &tmp
+				}
+
+				op := dto.NewQuestionOption{
+					Caption:   gofakeit.LoremIpsumSentence(gofakeit.IntRange(2, 5)),
+					IsDefault: gofakeit.Bool(),
+					Value:     val,
+					Image:     img,
+				}
+
+				optionRequest.Added = append(optionRequest.Added, op)
+			}
+			_, err = forms.UpdateFormQuestionOptions(ctx, form, q.Questions[len(q.Questions)-1].Id, optionRequest)
+			if err != nil {
+				gErr = err
+				break
+			}
+		}
+	}
+	return gErr
+}
+
+func makeForm(ctx context.Context, options ...makeFormOption) (owner uint64, _ *dto.FormConfig, _ error) {
+	ownerId := uint64(rand.Int63n(10000))
+	desc := gofakeit.LoremIpsumParagraph(1, rand.Intn(20), rand.Intn(100), "\n")
+	var deadline *time.Time
+	if gofakeit.Bool() {
+		tmp := gofakeit.FutureDate()
+		deadline = &tmp
+	}
+	var image, bg, bgImg *string
+	if gofakeit.Bool() {
+		tmp := gofakeit.ImageURL(100, 100)
+		image = &tmp
+	}
+	if gofakeit.Bool() {
+		tmp := gofakeit.HexColor()
+		bg = &tmp
+	}
+	if gofakeit.Bool() {
+		tmp := gofakeit.ImageURL(640, 640)
+		bgImg = &tmp
+	}
 
 	form, err := forms.NewForm(ctx, dto.NewFormInput{
-		Title:           "Test Form",
-		Description:     nil,
-		BackgroundColor: nil,
-		CaptchaToken:    string(captchaToken),
+		Title:           gofakeit.LoremIpsumSentence(gofakeit.IntRange(1, 10)),
+		Description:     &desc,
+		CaptchaToken:    randomString(20),
 		Owner:           ownerId,
-		OwnerType:       string(dto.PTInstitution),
+		OwnerType:       gofakeit.RandomString([]string{string(dto.PTInstitution), string(dto.PTTenant)}),
+		Deadline:        deadline,
+		MultiResponse:   gofakeit.Bool(),
+		Resubmission:    gofakeit.Bool(),
+		Image:           image,
+		BackgroundColor: bg,
+		BackgroundImage: bgImg,
 	})
+
+	if len(options) > 0 {
+		for _, v := range options {
+			switch makeFormOptionName(v.name) {
+			case questionCount:
+				cnt, ok := v.value.(uint)
+				if !ok {
+					cnt = gofakeit.UintRange(1, 20)
+				}
+				makeFormQuestions(ctx, form.Id, cnt)
+			}
+		}
+	}
+
+	return ownerId, form, err
+}
+
+func TestForms(t *testing.T) {
+	user, userData := makeUser()
+	ctx := auth.WithContext(context.TODO(), user, &userData)
+
+	ownerId, form, err := makeForm(ctx)
 	if err != nil {
 		t.Error(err)
 	}
@@ -444,4 +562,254 @@ func testFormQuestionGrouping(t *testing.T, ctx context.Context, formId uint64, 
 		assert.NotNil(t, res)
 		assert.NotEqual(t, updatedLabel, res.Groups[0].Label)
 	})
+}
+
+func TestResponses(t *testing.T) {
+	uid, userData := makeUser()
+	ctx := auth.WithContext(context.TODO(), uid, &userData)
+	_, form, err := makeForm(ctx, withOption(questionCount, gofakeit.UintRange(1, 5)))
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	otherUid, otherUserData := makeUser()
+	et.OverrideAuthInfo(otherUid, &otherUserData)
+
+	passed := t.Run("Status=draft", func(t *testing.T) {
+		testCreateFormResponseWhileInDraft(t, ctx, form.Id)
+	})
+
+	if passed {
+		et.OverrideAuthInfo(uid, &userData)
+		form, err = forms.ToggleFormStatus(ctx, form.Id)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+
+		t.Run("Status=published", func(t *testing.T) {
+			et.OverrideAuthInfo(otherUid, &otherUserData)
+			testCreateFormResponseWhilePublished(t, ctx, form.Id)
+		})
+
+		req := dto.UpdateFormRequest{
+			MultiResponse:   true,
+			Title:           form.Title,
+			Description:     form.Description,
+			BackgroundColor: form.BackgroundColor,
+			BackgroundImage: form.BackgroundImage,
+			Image:           form.Image,
+			Resubmission:    form.Resubmission,
+			CaptchaToken:    randomString(20),
+			Deadline:        form.Deadline,
+			MaxResponses:    form.MaxResponses,
+			MaxSubmissions:  form.MaxSubmissions,
+		}
+		form, err := forms.UpdateForm(ctx, form.Id, req)
+
+		if err != nil {
+			t.Error(err)
+			return
+		}
+
+		if form.MultiResponse && form.MaxResponses == nil {
+			t.Run("Multiresponse&unlimited", func(t *testing.T) {
+				testCreateMultiResponseUnlimited(t, ctx, form.Id)
+			})
+		}
+
+		if form.MaxResponses == nil {
+			tmp := gofakeit.UintRange(5, 20)
+			req.MaxResponses = &tmp
+			form, err = forms.UpdateForm(ctx, form.Id, req)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+		}
+
+		if form.MultiResponse && form.MaxResponses != nil && *form.MaxResponses > 0 {
+			t.Run("MultiResponse&limited", func(t *testing.T) {
+				testCreateMultiResponseLimited(t, ctx, form.Id, *form.MaxResponses)
+			})
+		}
+
+		t.Run("GetAllResponses", func(t *testing.T) {
+			testGetUserResponses(t, ctx, form.Id)
+		})
+		t.Run("GetSingleResponse", func(t *testing.T) {
+			testGetUserResponse(t, ctx, form.Id)
+		})
+
+		t.Run("UpdateAnswers", func(t *testing.T) {
+			testUpdateResponseAnswers(t, ctx, form.Id)
+		})
+
+		t.Run("SubmitResponse", func(t *testing.T) {
+			testResponseSubmission(t, ctx, form.Id)
+		})
+	}
+}
+
+func testResponseSubmission(t *testing.T, ctx context.Context, form uint64) {
+	responses, err := forms.GetUserResponses(ctx, form)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	chosenIndex := gofakeit.IntRange(0, len(responses.Responses)-1)
+	response := responses.Responses[chosenIndex]
+	res, err := forms.SubmitResponse(ctx, form, response.Id)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	assert.NotNil(t, res)
+	assert.NotNil(t, res.SubmittedAt)
+}
+
+func testUpdateResponseAnswers(t *testing.T, ctx context.Context, form uint64) {
+	questions, err := forms.FindFormQuestions(ctx, form)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	req := dto.UpdateUserAnswersRequest{}
+	questionMap := make(map[uint64]dto.FormQuestion)
+	for _, v := range questions.Questions {
+		questionMap[v.Id] = v
+		var ans = dto.FormAnswerUpdate{
+			Question: v.Id,
+		}
+
+		switch v.Type {
+		case dto.QTSingleline:
+			tmp := gofakeit.LoremIpsumSentence(gofakeit.IntRange(1, 5))
+			ans.Value = &tmp
+		case dto.QTDate:
+			tmp := gofakeit.Date().String()
+			ans.Value = &tmp
+		case dto.QTEmail:
+			tmp := gofakeit.Email()
+			ans.Value = &tmp
+		case dto.QTFile:
+			tmp := gofakeit.URL()
+			ans.Value = &tmp
+		case dto.QTGeoPoint:
+			tmp := fmt.Sprintf("%f,%f", gofakeit.Longitude(), gofakeit.Latitude())
+			ans.Value = &tmp
+		case dto.QTMultiline:
+			tmp := gofakeit.LoremIpsumParagraph(1, 2, 20, "\n")
+			ans.Value = &tmp
+		case dto.QTTel:
+			tmp := gofakeit.Phone()
+			ans.Value = &tmp
+		case dto.QTMCQ, dto.QTSingleChoice:
+			cnt := 1
+			if v.Type == dto.QTMCQ {
+				cnt = gofakeit.IntRange(1, 10)
+			}
+
+			chosenOptions := make([]string, 0)
+			for i := 0; i < cnt; i++ {
+				index := gofakeit.IntRange(0, len(v.Options)-1)
+				if v.Options[index].Value == nil {
+					i--
+					continue
+				}
+				chosenOptions = append(chosenOptions, *v.Options[index].Value)
+			}
+
+			tmp := strings.Join(chosenOptions, ",")
+			ans.Value = &tmp
+		default:
+			ans.Value = nil
+		}
+
+		req.Updated = append(req.Updated, ans)
+	}
+
+	res, err := forms.UpdateResponseAnswers(ctx, form, 1, &req)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	assert.NotNil(t, res)
+	assert.NotEmpty(t, res.Answers)
+}
+
+func testGetUserResponse(t *testing.T, ctx context.Context, form uint64) {
+	r, err := forms.GetUserResponse(ctx, form, 1)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	assert.NotNil(t, r)
+	assert.Equal(t, uint64(1), r.Id)
+}
+
+func testGetUserResponses(t *testing.T, ctx context.Context, form uint64) {
+	r, err := forms.GetUserResponses(ctx, form)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	assert.NotNil(t, r)
+	assert.NotEmpty(t, r.Responses)
+}
+
+func testCreateMultiResponseLimited(t *testing.T, ctx context.Context, form uint64, max uint) {
+	var r *dto.UserFormResponses
+	var err error
+	var created uint
+
+	for i := uint(0); i < max+10; i++ {
+		r, err = forms.CreateFormResponse(ctx, form)
+		if err == nil {
+			created++
+		}
+	}
+
+	if r != nil {
+		assert.LessOrEqual(t, len(r.Responses), max)
+	} else {
+		assert.NotNil(t, err)
+	}
+}
+
+func testCreateMultiResponseUnlimited(t *testing.T, ctx context.Context, form uint64) {
+	var r *dto.UserFormResponses
+	var cnt = gofakeit.IntRange(5, 20)
+
+	for i := 0; i < cnt; i++ {
+		var err error
+		r, err = forms.CreateFormResponse(ctx, form)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+	}
+
+	assert.NotNil(t, r)
+	assert.GreaterOrEqual(t, len(r.Responses), 6)
+}
+
+func testCreateFormResponseWhilePublished(t *testing.T, ctx context.Context, form uint64) {
+	responses, err := forms.CreateFormResponse(ctx, form)
+	assert.NotNil(t, responses)
+	assert.Nil(t, err)
+	assert.NotEmpty(t, responses.Responses)
+}
+
+func testCreateFormResponseWhileInDraft(t *testing.T, ctx context.Context, form uint64) {
+	responses, err := forms.CreateFormResponse(ctx, form)
+
+	assert.Nil(t, responses)
+	assert.NotNil(t, err)
 }

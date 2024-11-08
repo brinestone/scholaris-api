@@ -18,6 +18,9 @@ type Form struct {
 	MultiResponse   bool
 	Resubmission    bool
 	Status          string
+	Deadline        sql.NullTime
+	MaxResponses    sql.NullInt32
+	MaxSubmissions  sql.NullInt32
 }
 
 type FormQuestionOption struct {
@@ -53,13 +56,15 @@ type FormResponse struct {
 	SubmittedAt sql.NullTime
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
+	Form        uint64
+	Answers     []FormResponseAnswer
 }
 
 type FormResponseAnswer struct {
-	Id        uint64
-	Question  uint64
-	Value     sql.NullString
-	Response  uint64
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	Id        uint64    `json:"id"`
+	Question  uint64    `json:"question"`
+	Value     *string   `json:"value,omitempty" encore:"optional"`
+	Response  uint64    `json:"response"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }

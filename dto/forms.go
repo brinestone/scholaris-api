@@ -7,6 +7,13 @@ import (
 	"time"
 )
 
+// Form statuses
+const (
+	FSDraft     = "draft"
+	FSPublished = "published"
+)
+
+// Form question types
 const (
 	QTSingleline   string = "text"
 	QTSingleChoice string = "single-choice"
@@ -15,20 +22,88 @@ const (
 	QTDate         string = "date"
 	QTGeoPoint     string = "coords"
 	QTEmail        string = "email"
-	QTMultiline    string = "multi-line"
+	QTMultiline    string = "multiline"
 	QTTel          string = "tel"
 )
 
 var questionTypes = []string{QTSingleline, QTSingleChoice, QTMCQ, QTFile, QTDate, QTGeoPoint, QTEmail, QTMultiline, QTTel}
 
+type FormAnswerUpdate struct {
+	Question uint64  `json:"question"`
+	Value    *string `json:"value,omitempty" encore:"optional"`
+}
+
+func (f FormAnswerUpdate) Validate() error {
+	if f.Question == 0 {
+		return fmt.Errorf("invalid question ID: %d", f.Question)
+	}
+	return nil
+}
+
+type UpdateUserAnswersRequest struct {
+	Removed []uint64           `json:"removed,omitempty" encore:"optional"`
+	Updated []FormAnswerUpdate `json:"updated,omitempty" encore:"optional"`
+}
+
+func (f UpdateUserAnswersRequest) Validate() error {
+	msgs := make([]string, 0)
+
+	if len(f.Removed) > 0 {
+		for i, v := range f.Removed {
+			if v == 0 {
+				msgs = append(msgs, fmt.Sprintf("Invalid Answer ID at removed[%d]: %d", i, v))
+			}
+		}
+	}
+
+	if len(f.Updated) > 0 {
+		for i, v := range f.Updated {
+			if err := v.Validate(); err != nil {
+				msgs = append(msgs, fmt.Sprintf("invalid update at updated[%d] - %s", i, err.Error()))
+			}
+		}
+	}
+
+	if len(f.Updated) == 0 && len(f.Removed) == 0 {
+		msgs = append(msgs, "At least one of the fields updated,removed must be populated")
+	}
+
+	if len(msgs) > 0 {
+		return errors.New(strings.Join(msgs, "\n"))
+	}
+	return nil
+}
+
+type FormAnswer struct {
+	Id        uint64    `json:"id"`
+	Question  uint64    `json:"question"`
+	Value     *string   `json:"value,omitempty" encore:"optional"`
+	CreatedAt time.Time `json:"answeredAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+	Response  uint64    `json:"response"`
+}
+
+type UserFormResponse struct {
+	Id          uint64       `json:"id"`
+	Responsder  uint64       `json:"responder"`
+	CreatedAt   time.Time    `json:"createdAt"`
+	UpdatedAt   time.Time    `json:"updatedAt"`
+	SubmittedAt *time.Time   `json:"submittedAt,omitempty" encore:"optional"`
+	Answers     []FormAnswer `json:"answers,omitempty" encore:"optional"`
+}
+
+type UserFormResponses struct {
+	Responses []UserFormResponse `json:"responses"`
+}
+
 type DeleteFormQuestionGroupsRequest struct {
-	Ids []uint64 `json:"ids,omitempty"`
+	Ids []uint64 `json:"ids,omitempty" encore:"optional"`
 }
 
 type UpdateFormQuestionGroupRequest struct {
-	Label       *string `json:"label,omitempty"`
-	Description *string `json:"description,omitempty"`
-	Image       *string `json:"image,omitempty"`
+	Label       *string `json:"label,omitempty" encore:"optional"`
+	Description *string `json:"description,omitempty" encore:"optional"`
+	Image       *string `json:"image,omitempty" encore:"optional"`
 }
 
 type DeleteQuestionsRequest struct {
@@ -55,9 +130,9 @@ func (d DeleteQuestionsRequest) Validate() error {
 
 type NewQuestionOption struct {
 	Caption   string  `json:"caption"`
-	Value     *string `json:"value,omitempty"`
+	Value     *string `json:"value,omitempty" encore:"optional"`
 	IsDefault bool    `json:"isDefault"`
-	Image     *string `json:"image,omitempty"`
+	Image     *string `json:"image,omitempty" encore:"optional"`
 }
 
 func (n NewQuestionOption) Validate() error {
@@ -70,7 +145,7 @@ func (n NewQuestionOption) Validate() error {
 type FormQuestionOptionUpdate struct {
 	Id        uint64  `json:"id"`
 	Caption   string  `json:"caption"`
-	Value     *string `json:"value,omitempty"`
+	Value     *string `json:"value,omitempty" encore:"optional"`
 	Image     *string `json:"image"`
 	IsDefault bool    `json:"isDefault"`
 }
@@ -146,7 +221,7 @@ type UpdateFormQuestionRequest struct {
 	IsRequired    bool    `json:"isRequired"`
 	Type          string  `json:"type"`
 	LayoutVariant *string `json:"layoutVariant"`
-	Group         uint64  `json:"group,omitempty"`
+	Group         uint64  `json:"group,omitempty" encore:"optional"`
 	// Options       []NewQuestionOption `json:"options"`
 }
 
@@ -178,16 +253,17 @@ func (n UpdateFormQuestionRequest) Validate() error {
 }
 
 type UpdateFormRequest struct {
-	// AddedQuestions   []FormQuestion `json:"addedQuestions,omitempty"`
-	// RemovedQuestions []uint64       `json:"removedQuestions,omitempty"`
-	Title           string  `json:"title,omitempty"`
-	Description     *string `json:"description,omitempty"`
-	BackgroundColor *string `json:"backgroundColor,omitempty"`
-	BackgroundImage *string `json:"backgroundImage,omitempty"`
-	Image           *string `json:"image,omitempty"`
-	MultiResponse   bool    `json:"multiResponse"`
-	Resubmission    bool    `json:"resubmission"`
-	CaptchaToken    string  `header:"x-ver-token"`
+	Title           string     `json:"title,omitempty" encore:"optional"`
+	Description     *string    `json:"description,omitempty" encore:"optional"`
+	BackgroundColor *string    `json:"backgroundColor,omitempty" encore:"optional"`
+	BackgroundImage *string    `json:"backgroundImage,omitempty" encore:"optional"`
+	Image           *string    `json:"image,omitempty" encore:"optional"`
+	MultiResponse   bool       `json:"multiResponse"`
+	Resubmission    bool       `json:"resubmission"`
+	CaptchaToken    string     `header:"x-ver-token"`
+	Deadline        *time.Time `json:"deadline,omitempty" encore:"optional"`
+	MaxResponses    *uint      `json:"maxResponses,omitempty" encore:"optional"`
+	MaxSubmissions  *uint      `json:"maxSubmissions,omitempty" encore:"optional"`
 }
 
 func (n UpdateFormRequest) Validate() error {
@@ -215,8 +291,8 @@ func (n UpdateFormRequest) Validate() error {
 type QuestionOption struct {
 	Id        uint64  `json:"id"`
 	Caption   string  `json:"caption"`
-	Value     *string `json:"value,omitempty"`
-	Image     *string `json:"image,omitempty"`
+	Value     *string `json:"value,omitempty" encore:"optional"`
+	Image     *string `json:"image,omitempty" encore:"optional"`
 	IsDefault bool    `json:"isDefault"`
 }
 
@@ -225,14 +301,14 @@ type FormQuestion struct {
 	Prompt        string           `json:"prompt"`
 	Type          string           `json:"type"`
 	IsRequired    bool             `json:"isRequired"`
-	LayoutVariant string           `json:"layoutVariant,omitempty"`
-	Options       []QuestionOption `json:"options,omitempty"`
-	Group         uint64           `json:"group,omitempty"`
+	LayoutVariant string           `json:"layoutVariant,omitempty" encore:"optional"`
+	Options       []QuestionOption `json:"options,omitempty" encore:"optional"`
+	Group         uint64           `json:"group,omitempty" encore:"optional"`
 }
 
 type FormQuestionGroup struct {
 	Id          uint64  `json:"id"`
-	Label       *string `json:"label,omitempty"`
+	Label       *string `json:"label,omitempty" encore:"optional"`
 	Form        uint64  `json:"form"`
 	Description *string `json:"description"`
 	Image       *string `json:"image"`
@@ -269,16 +345,19 @@ func (i GetFormsInput) Validate() error {
 }
 
 type NewFormInput struct {
-	Title           string  `json:"title"`
-	Description     *string `json:"description,omitempty"`
-	BackgroundColor *string `json:"backgroundColor,omitempty"`
-	BackgroundImage *string `json:"backgroundImage,omitempty"`
-	Image           *string `json:"image,omitempty"`
-	MultiResponse   bool    `json:"multiResponse"`
-	Resubmission    bool    `json:"resubmission"`
-	CaptchaToken    string  `header:"x-ver-token"`
-	Owner           uint64  `header:"x-owner"`
-	OwnerType       string  `header:"x-owner-type"`
+	Title           string     `json:"title"`
+	Description     *string    `json:"description,omitempty" encore:"optional"`
+	BackgroundColor *string    `json:"backgroundColor,omitempty" encore:"optional"`
+	BackgroundImage *string    `json:"backgroundImage,omitempty" encore:"optional"`
+	Image           *string    `json:"image,omitempty" encore:"optional"`
+	MultiResponse   bool       `json:"multiResponse"`
+	Resubmission    bool       `json:"resubmission"`
+	CaptchaToken    string     `header:"x-ver-token"`
+	Owner           uint64     `header:"x-owner"`
+	OwnerType       string     `header:"x-owner-type"`
+	Deadline        *time.Time `json:"deadline,omitempty" encore:"optional"`
+	MaxResponses    uint       `json:"maxResponses"`
+	MaxSubmissions  uint       `json:"maxSubmissions"`
 }
 
 func (n NewFormInput) GetCaptchaToken() string {
@@ -287,6 +366,10 @@ func (n NewFormInput) GetCaptchaToken() string {
 
 func (n NewFormInput) Validate() error {
 	var msgs = make([]string, 0)
+
+	if n.Deadline != nil && n.Deadline.Before(time.Now()) {
+		msgs = append(msgs, "The value for deadline must be a future date/time")
+	}
 
 	if len(n.Title) == 0 {
 		msgs = append(msgs, "The title field is required")
@@ -303,7 +386,7 @@ func (n NewFormInput) Validate() error {
 	}
 
 	if n.Owner == 0 {
-		msgs = append(msgs, "The x-owner field is required")
+		msgs = append(msgs, "The x-owner header is required")
 	}
 
 	if len(msgs) > 0 {
@@ -313,15 +396,18 @@ func (n NewFormInput) Validate() error {
 }
 
 type FormConfig struct {
-	Id              uint64    `json:"id"`
-	Title           string    `json:"title"`
-	Description     *string   `json:"description,omitempty"`
-	BackgroundColor *string   `json:"backgroundColor,omitempty"`
-	Status          string    `json:"status"`
-	BackgroundImage *string   `json:"backgroundImage,omitempty"`
-	Image           *string   `json:"image,omitempty"`
-	MultiResponse   bool      `json:"multiResponse"`
-	Resubmission    bool      `json:"resubmission"`
-	CreatedAt       time.Time `json:"createdAt"`
-	UpdateAt        time.Time `json:"updatedAt"`
+	Id              uint64     `json:"id"`
+	Title           string     `json:"title"`
+	Description     *string    `json:"description,omitempty" encore:"optional"`
+	BackgroundColor *string    `json:"backgroundColor,omitempty" encore:"optional"`
+	Status          string     `json:"status"`
+	BackgroundImage *string    `json:"backgroundImage,omitempty" encore:"optional"`
+	Image           *string    `json:"image,omitempty" encore:"optional"`
+	MultiResponse   bool       `json:"multiResponse"`
+	Resubmission    bool       `json:"resubmission"`
+	CreatedAt       time.Time  `json:"createdAt"`
+	UpdateAt        time.Time  `json:"updatedAt"`
+	Deadline        *time.Time `json:"deadline,omitempty" encore:"optional"`
+	MaxResponses    *uint      `json:"maxResponses,omitempty" encore:"optional"`
+	MaxSubmissions  *uint      `json:"maxSubmissions,omitempty" encore:"optional"`
 }

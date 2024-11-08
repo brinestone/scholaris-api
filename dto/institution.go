@@ -9,11 +9,11 @@ import (
 
 type InstitutionDto struct {
 	Name        string    `json:"name"`
-	Description *string   `json:"description,omitempty"`
-	Logo        *string   `json:"logo,omitempty"`
+	Description *string   `json:"description,omitempty" encore:"optional"`
+	Logo        *string   `json:"logo,omitempty" encore:"optional"`
 	Visible     bool      `json:"visible"`
 	Slug        string    `json:"slug"`
-	Id          uint64    `json:"id,omitempty"`
+	Id          uint64    `json:"id,omitempty" encore:"optional"`
 	TenantId    uint64    `json:"-"`
 	CreatedAt   time.Time `json:"createdAt"`
 	UpdatedAt   time.Time `json:"updatedAt"`
@@ -23,11 +23,11 @@ type InstitutionDto struct {
 
 type InstitutionLookup struct {
 	Name        string    `json:"name"`
-	Description *string   `json:"description,omitempty"`
-	Logo        *string   `json:"logo,omitempty"`
+	Description *string   `json:"description,omitempty" encore:"optional"`
+	Logo        *string   `json:"logo,omitempty" encore:"optional"`
 	Visible     bool      `json:"visible"`
 	Slug        string    `json:"slug"`
-	Id          uint64    `json:"id,omitempty"`
+	Id          uint64    `json:"id,omitempty" encore:"optional"`
 	TenantId    uint64    `json:"-"`
 	CreatedAt   time.Time `json:"createdAt"`
 	UpdatedAt   time.Time `json:"updatedAt"`
@@ -38,9 +38,9 @@ type NewInstitutionRequest struct {
 	// The institution's name
 	Name string `json:"name"`
 	// The institution's description (optional)
-	Description string `json:"description,omitempty"`
+	Description string `json:"description,omitempty" encore:"optional"`
 	// The institution's logo (optional)
-	Logo string `json:"logo,omitempty"`
+	Logo string `json:"logo,omitempty" encore:"optional"`
 	// The institution's slug
 	Slug string `json:"slug"`
 	// The institution's tenant ID
