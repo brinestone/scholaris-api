@@ -36,7 +36,7 @@ func initService() (*Service, error) {
 	switch encore.Meta().Environment.Cloud {
 	case encore.CloudAWS, encore.EncoreCloud, encore.CloudAzure, encore.CloudGCP:
 		config.Credentials = &credentials.Credentials{
-			Method: credentials.CredentialsMethodApiToken,
+			Method: credentials.CredentialsMethodClientCredentials,
 			Config: &credentials.Config{
 				ClientCredentialsClientId:       secrets.FgaClientId,
 				ClientCredentialsClientSecret:   secrets.FgaClientSecret,
