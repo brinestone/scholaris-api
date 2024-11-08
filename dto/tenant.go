@@ -15,7 +15,7 @@ type FindTenantsRequest struct {
 }
 type TenantLookup struct {
 	Name         string    `json:"name"`
-	Id           uint64    `json:"id,omitempty"`
+	Id           uint64    `json:"id,omitempty" encore:"optional"`
 	CreatedAt    time.Time `json:"createdAt"`
 	UpdatedAt    time.Time `json:"updatedAt"`
 	Subscription uint64    `json:"-"`
@@ -29,7 +29,7 @@ type NewSubscriptionPlan struct {
 
 type NewTenantRequest struct {
 	Name               string `json:"name"`
-	SubscriptionPlanId uint64 `json:"subscriptionPlan,omitempty"`
+	SubscriptionPlanId uint64 `json:"subscriptionPlan,omitempty" encore:"optional"`
 	CaptchaToken       string `json:"captchaToken"`
 }
 

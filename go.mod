@@ -4,15 +4,18 @@ go 1.23.0
 
 require (
 	encore.dev v1.41.9
+	github.com/brianvoe/gofakeit/v6 v6.28.0
 	github.com/openfga/go-sdk v0.6.3
+	github.com/stretchr/testify v1.9.0
 )
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
+	github.com/kr/text v0.2.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/stretchr/testify v1.9.0 // indirect
+	github.com/rogpeppe/go-internal v1.13.1 // indirect
 	go.opentelemetry.io/otel v1.31.0 // indirect
 	go.opentelemetry.io/otel/metric v1.31.0 // indirect
 	go.opentelemetry.io/otel/trace v1.31.0 // indirect

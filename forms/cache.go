@@ -18,7 +18,7 @@ var formsCache = cache.NewStructKeyspace[string, dto.PaginatedResponse[dto.FormC
 	DefaultExpiry: cache.ExpireIn(2 * time.Hour),
 })
 
-var questionsCache = cache.NewStructKeyspace[uint64, dto.GetFormQuestionsResponse](pkg.CacheCluster, cache.KeyspaceConfig{
+var questionsCache = cache.NewStructKeyspace[string, dto.GetFormQuestionsResponse](pkg.CacheCluster, cache.KeyspaceConfig{
 	KeyPattern:    "form-questions/:key",
 	DefaultExpiry: cache.ExpireIn(5 * time.Minute),
 })

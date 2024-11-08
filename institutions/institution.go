@@ -90,7 +90,7 @@ func NewInstitution(ctx context.Context, req dto.NewInstitutionRequest) (*dto.In
 	if err := permissions.SetPermissions(ctx, dto.UpdatePermissionsRequest{
 		Updates: []dto.PermissionUpdate{
 			{
-				Subject:  fmt.Sprintf("%s:%d", dto.PTTenant, req.TenantId),
+				Actor:    fmt.Sprintf("%s:%d", dto.PTTenant, req.TenantId),
 				Relation: models.PermParent,
 				Target:   fmt.Sprintf("%s:%d", dto.PTInstitution, i.Id),
 			},
@@ -326,7 +326,7 @@ func lookupInstitutions(ctx context.Context, page uint, size uint, uid *auth.UID
 
 	if uid != nil {
 		memberedInstitutions, err := permissions.ListRelations(ctx, dto.ListRelationsRequest{
-			Subject:  fmt.Sprintf("%s:%v", dto.PTUser, *uid),
+			Actor:    fmt.Sprintf("%s:%v", dto.PTUser, *uid),
 			Relation: models.PermMember,
 			Type:     string(dto.PTInstitution),
 		})

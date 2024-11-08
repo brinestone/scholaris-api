@@ -63,7 +63,7 @@ type NewUserRequest struct {
 	// The user's first name
 	FirstName string `json:"firstName"`
 	// The user's last name (optional)
-	LastName string `json:"lastName,omitempty"`
+	LastName string `json:"lastName,omitempty" encore:"optional"`
 	// The user's email address
 	Email string `json:"email"`
 	// The user's date of birth (YYYY/MM/DD)
@@ -73,9 +73,9 @@ type NewUserRequest struct {
 	// Password verification
 	ConfirmPassword string `json:"confirmPassword"`
 	// The user's phone number in IE64 format
-	Phone string `json:"phone,omitempty"`
+	Phone string `json:"phone,omitempty" encore:"optional"`
 	// The user's gender
-	Gender Gender `json:"gender,omitempty"`
+	Gender Gender `json:"gender,omitempty" encore:"optional"`
 	// The captcha token for the request
 	CaptchaToken string `json:"captchaToken"`
 }

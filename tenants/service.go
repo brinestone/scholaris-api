@@ -83,7 +83,7 @@ func DeleteTenant(ctx context.Context, id uint64) error {
 	if err = permissions.DeletePermissions(timeout, dto.UpdatePermissionsRequest{
 		Updates: []dto.PermissionUpdate{
 			{
-				Subject:  fmt.Sprintf("user:%s", userId),
+				Actor:    fmt.Sprintf("user:%s", userId),
 				Relation: "owner",
 				Target:   fmt.Sprintf("tenant:%d", id),
 			},
@@ -162,7 +162,7 @@ func FindTenants(ctx context.Context, req dto.FindTenantsRequest) (*dto.Paginate
 func getSubscribedTenants(ctx context.Context, uid auth.UID, after uint64, size uint) ([]*models.Tenant, uint, error) {
 	ans := make([]*models.Tenant, 0)
 	response, err := permissions.ListRelations(ctx, dto.ListRelationsRequest{
-		Subject:  fmt.Sprintf("%s:%s", dto.PTUser, uid),
+		Actor:    fmt.Sprintf("%s:%s", dto.PTUser, uid),
 		Relation: "can_view",
 		Type:     string(dto.PTTenant),
 	})
@@ -303,12 +303,12 @@ func createTenant(ctx context.Context, tx *sqldb.Tx, req dto.NewTenantRequest, o
 	if err = permissions.SetPermissions(ctx, dto.UpdatePermissionsRequest{
 		Updates: []dto.PermissionUpdate{
 			{
-				Subject:  fmt.Sprintf("%s:%s", dto.PTUser, string(*owner)),
+				Actor:    fmt.Sprintf("%s:%s", dto.PTUser, string(*owner)),
 				Relation: models.PermOwner,
 				Target:   fmt.Sprintf("%s:%d", dto.PTTenant, tenant.Id),
 			},
 			{
-				Subject:  fmt.Sprintf("%s:%d", dto.PTTenant, tenant.Id),
+				Actor:    fmt.Sprintf("%s:%d", dto.PTTenant, tenant.Id),
 				Relation: models.PermOwner,
 				Target:   fmt.Sprintf("%s:%d", dto.PTSubscription, *subId),
 			},

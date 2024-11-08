@@ -60,7 +60,7 @@ func initService() (*Service, error) {
 //encore:api private method=POST path=/permissions/related
 func (s *Service) ListRelations(ctx context.Context, req dto.ListRelationsRequest) (*dto.ListRelationsResponse, error) {
 	reqBody := client.ClientListObjectsRequest{
-		User:     req.Subject,
+		User:     req.Actor,
 		Relation: req.Relation,
 		Type:     string(req.Type),
 	}
@@ -87,7 +87,7 @@ func (s *Service) ListRelations(ctx context.Context, req dto.ListRelationsReques
 
 // Checks whether a permission is valid or not.
 //
-//encore:api private method=GET path=/permissions/check
+//encore:api private method=POST path=/permissions/check
 func (s *Service) CheckPermission(ctx context.Context, req dto.RelationCheckRequest) (*dto.RelationCheckResponse, error) {
 	res, err := s.fgaClient.Check(ctx).Body(client.ClientCheckRequest{
 		User:     req.Actor,
@@ -131,7 +131,7 @@ func toOpenFgaDeletes(updates []dto.PermissionUpdate) []openfga.TupleKeyWithoutC
 
 	for _, u := range updates {
 		ans = append(ans, client.ClientTupleKeyWithoutCondition{
-			User:     u.Subject,
+			User:     u.Actor,
 			Relation: u.Relation,
 			Object:   u.Target,
 		})
@@ -158,7 +158,7 @@ func toOpenFgaWrites(updates []dto.PermissionUpdate) []openfga.TupleKey {
 		}
 
 		ans = append(ans, client.ClientTupleKey{
-			User:      u.Subject,
+			User:      u.Actor,
 			Relation:  u.Relation,
 			Object:    u.Target,
 			Condition: condition,
