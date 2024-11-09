@@ -24,7 +24,7 @@ type ResponseSubmitted struct {
 	Timestamp time.Time
 }
 
-var NewForms = pubsub.NewTopic[FormEvent]("new-form", pubsub.TopicConfig{
+var NewForms = pubsub.NewTopic[FormEvent]("form-created", pubsub.TopicConfig{
 	DeliveryGuarantee: pubsub.AtLeastOnce,
 })
 
@@ -36,6 +36,6 @@ var DeletedForms = pubsub.NewTopic[FormDeleted]("form-deleted", pubsub.TopicConf
 	DeliveryGuarantee: pubsub.AtLeastOnce,
 })
 
-var FormSubmissions = pubsub.NewTopic[ResponseSubmitted]("form-submitted", pubsub.TopicConfig{
+var FormSubmissions = pubsub.NewTopic[ResponseSubmitted]("response-submitted", pubsub.TopicConfig{
 	DeliveryGuarantee: pubsub.AtLeastOnce,
 })
