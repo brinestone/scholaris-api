@@ -163,7 +163,7 @@ func getSubscribedTenants(ctx context.Context, uid auth.UID, after uint64, size 
 	ans := make([]*models.Tenant, 0)
 	response, err := permissions.ListRelations(ctx, dto.ListRelationsRequest{
 		Actor:    fmt.Sprintf("%s:%s", dto.PTUser, uid),
-		Relation: "can_view",
+		Relation: models.PermCanView,
 		Type:     string(dto.PTTenant),
 	})
 	if err != nil {
@@ -172,6 +172,15 @@ func getSubscribedTenants(ctx context.Context, uid auth.UID, after uint64, size 
 
 	if len(response.Relations) == 0 {
 		return nil, 0, nil
+	}
+
+	var args = make([]any, len(response.Relations[dto.PTTenant])+2)
+	var placeholders = make([]string, len(response.Relations[dto.PTTenant]))
+	args[0], args[1] = after, size
+
+	for i, v := range response.Relations[dto.PTTenant] {
+		args[i+2] = v
+		placeholders[i] = fmt.Sprintf("$%d", i+2)
 	}
 
 	query := fmt.Sprintf(`
@@ -183,9 +192,9 @@ func getSubscribedTenants(ctx context.Context, uid auth.UID, after uint64, size 
 			id IN (%s) AND id > $1
 		OFFSET 0
 		LIMIT $2;
-	`, tenantFields, strings.Join(response.Relations[dto.PTTenant], ","))
+	`, tenantFields, strings.Join(placeholders, ","))
 
-	rows, err := tenantDb.Query(ctx, query, after, size)
+	rows, err := tenantDb.Query(ctx, query, args...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -204,12 +213,20 @@ func getSubscribedTenants(ctx context.Context, uid auth.UID, after uint64, size 
 		ans = append(ans, tenant)
 	}
 
+	placeholders = make([]string, len(response.Relations[dto.PTTenant]))
+	args = make([]any, len(placeholders))
+
+	for i, v := range response.Relations[dto.PTTenant] {
+		args[i] = v
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+	}
+
 	q2 := fmt.Sprintf(`
 		SELECT COUNT(id) FROM tenants WHERE id IN (%s);
-	`, strings.Join(response.Relations[dto.PTTenant], ","))
+	`, strings.Join(placeholders, ","))
 
 	var cnt uint = 0
-	if err := tenantDb.QueryRow(ctx, q2).Scan(&cnt); err != nil {
+	if err := tenantDb.QueryRow(ctx, q2, args...).Scan(&cnt); err != nil {
 		return nil, 0, err
 	}
 

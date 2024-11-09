@@ -15,10 +15,10 @@ type SettingOption struct {
 }
 
 type SettingValue struct {
-	Id      uint64    `json:"id"`
-	Setting uint64    `json:"setting"`
-	SetAt   time.Time `json:"setAt"`
-	SetBy   uint64    `json:"setBy"`
+	Id      uint64     `json:"id"`
+	Setting uint64     `json:"setting"`
+	SetAt   *time.Time `json:"setAt"`
+	SetBy   uint64     `json:"setBy"`
 }
 
 type Setting struct {
@@ -36,6 +36,7 @@ type Setting struct {
 	CreatedBy       uint64          `json:"createdBy"`
 	Options         []SettingOption `json:"options,omitempty"`
 	Values          []SettingValue  `json:"values,omitempty"`
+	Parent          *uint64         `json:"parent,omitempty" encore:"optional"`
 }
 
 type SettingOptionUpdate struct {
@@ -63,18 +64,21 @@ func (s SettingOptionUpdate) Validate() error {
 }
 
 type SettingUpdate struct {
-	Key             *string               `json:"key"`
+	Key             *string               `json:"key,omitempty" encore:"optional"`
 	Label           string                `json:"label"`
 	Description     *string               `json:"description,omitempty" encore:"optional"`
 	MultiValues     bool                  `json:"multiValues"`
 	SystemGenerated bool                  `json:"systemGenerated"`
 	Parent          *uint64               `json:"parent,omitempty" encore:"optional"`
-	OwnerType       string                `header:"x-owner-type"`
 	Options         []SettingOptionUpdate `json:"options,omitempty" encore:"optional"`
 }
 
 func (s SettingUpdate) Validate() error {
 	msgs := make([]string, 0)
+
+	if len(s.Label) == 0 {
+		msgs = append(msgs, "The label field is required")
+	}
 
 	if s.Parent != nil && *s.Parent == 0 {
 		msgs = append(msgs, "The parent field is invalid")
@@ -88,10 +92,6 @@ func (s SettingUpdate) Validate() error {
 		}
 	}
 
-	if len(s.OwnerType) == 0 {
-		msgs = append(msgs, "The ownerType field is required")
-	}
-
 	if s.Key != nil && len(*s.Key) == 0 {
 		msgs = append(msgs, "The key field is required")
 	}
@@ -103,7 +103,30 @@ func (s SettingUpdate) Validate() error {
 }
 
 type UpdateSettingsRequest struct {
-	Updates []SettingUpdate `json:"updates"`
+	OwnerType    string          `header:"x-owner-type"`
+	CaptchaToken string          `header:"x-ver-token"`
+	Updates      []SettingUpdate `json:"updates"`
+}
+
+func (u UpdateSettingsRequest) GetCaptchaToken() string {
+	return u.CaptchaToken
+}
+
+func (u UpdateSettingsRequest) Validate() error {
+	msgs := make([]string, 0)
+
+	if len(u.CaptchaToken) == 0 {
+		msgs = append(msgs, "The x-ver-token header is required")
+	}
+
+	if len(u.OwnerType) == 0 {
+		msgs = append(msgs, "The x-owner-type header is required")
+	}
+
+	if len(msgs) > 0 {
+		return errors.New(strings.Join(msgs, "\n"))
+	}
+	return nil
 }
 
 type GetSettingsResponse struct {

@@ -2,6 +2,7 @@ package permissions
 
 import (
 	"context"
+	"strconv"
 	"strings"
 
 	"encore.dev"
@@ -72,12 +73,13 @@ func (s *Service) ListRelations(ctx context.Context, req dto.ListRelationsReques
 		return nil, err
 	}
 
-	resultMap := make(map[dto.PermissionType][]string)
+	resultMap := make(map[dto.PermissionType][]uint64)
 
 	for _, rel := range data.GetObjects() {
 		arr := strings.Split(rel, ":")
 		p, _ := dto.PermissionTypeFromString(arr[0])
-		resultMap[p] = append(resultMap[p], arr[1])
+		id, _ := strconv.ParseUint(arr[1], 10, 64)
+		resultMap[p] = append(resultMap[p], id)
 	}
 
 	return &dto.ListRelationsResponse{

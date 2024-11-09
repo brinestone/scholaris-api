@@ -7,6 +7,6 @@ const (
 	PermDestination    = "destination"
 	PermCanCreateForms = "can_create_forms"
 	PermFormResponder  = "responder"
-	PermCanViewForm    = "can_view"
+	PermCanView        = "can_view"
 	PermEditor         = "editor"
 )

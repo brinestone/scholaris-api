@@ -36,7 +36,7 @@ func TestMain(t *testing.M) {
 	})
 	et.MockEndpoint(permissions.ListRelations, func(ctx context.Context, req dto.ListRelationsRequest) (*dto.ListRelationsResponse, error) {
 		return &dto.ListRelationsResponse{
-			Relations: map[dto.PermissionType][]string{
+			Relations: map[dto.PermissionType][]uint64{
 				dto.PTForm: {},
 			},
 		}, nil

@@ -336,7 +336,7 @@ func lookupInstitutions(ctx context.Context, page uint, size uint, uid *auth.UID
 
 		for _, i := range ans {
 			for _, j := range memberedInstitutions.Relations[dto.PTInstitution] {
-				i.IsMember = fmt.Sprintf("%d", i.Id) == j
+				i.IsMember = i.Id == j
 			}
 		}
 	}

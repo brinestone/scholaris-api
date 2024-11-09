@@ -26,6 +26,8 @@ func PermissionTypeFromString(s string) (PermissionType, bool) {
 		return PTForm, true
 	case string(PTSubscription):
 		return PTSubscription, true
+	case string(PTSetting):
+		return PTSetting, true
 	default:
 		return unknown, false
 	}
@@ -38,12 +40,13 @@ const (
 	PTForm         PermissionType = "form"
 	PTEnrollment   PermissionType = "enrollment"
 	PTSubscription PermissionType = "subscription"
+	PTSetting      PermissionType = "setting"
 	unknown        PermissionType = ""
 )
 
 type ListRelationsResponse struct {
 	// The valid relations
-	Relations map[PermissionType][]string `json:"relations"`
+	Relations map[PermissionType][]uint64 `json:"relations"`
 }
 
 type ListRelationsRequest struct {

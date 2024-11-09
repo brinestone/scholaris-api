@@ -13,10 +13,10 @@ type SettingOption struct {
 }
 
 type SettingValue struct {
-	Id      uint64    `json:"id"`
-	Setting uint64    `json:"setting"`
-	SetAt   time.Time `json:"setAt"`
-	SetBy   uint64    `json:"setBy"`
+	Id      uint64     `json:"id"`
+	Setting uint64     `json:"setting"`
+	SetAt   *time.Time `json:"setAt"`
+	SetBy   uint64     `json:"setBy"`
 }
 
 type Setting struct {

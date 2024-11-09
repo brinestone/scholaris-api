@@ -307,7 +307,7 @@ func GetFormInfo(ctx context.Context, form uint64) (*dto.FormConfig, error) {
 
 	perm, err := permissions.CheckPermission(ctx, dto.RelationCheckRequest{
 		Actor:    dto.IdentifierString(dto.PTUser, uid),
-		Relation: models.PermCanViewForm,
+		Relation: models.PermCanView,
 		Target:   dto.IdentifierString(dto.PTForm, form),
 	})
 
@@ -594,7 +594,7 @@ func FindFormQuestions(ctx context.Context, id uint64) (*dto.GetFormQuestionsRes
 //encore:api public method=GET path=/forms
 func FindForms(ctx context.Context, params dto.GetFormsInput) (*dto.PaginatedResponse[dto.FormConfig], error) {
 	ownerType, _ := dto.PermissionTypeFromString(params.OwnerType)
-	overrides := make([]uint64, 0)
+	var overrides []uint64
 	uid, authed := auth.UserID()
 	if authed {
 		res, err := permissions.ListRelations(ctx, dto.ListRelationsRequest{
@@ -606,14 +606,7 @@ func FindForms(ctx context.Context, params dto.GetFormsInput) (*dto.PaginatedRes
 			rlog.Error(util.MsgCallError, "msg", err.Error())
 			return nil, &util.ErrUnknown
 		}
-		arr, ok := res.Relations[dto.PTForm]
-		if ok && len(arr) > 0 {
-			for _, id := range arr {
-				if i, err := strconv.ParseUint(id, 10, 64); err == nil {
-					overrides = append(overrides, i)
-				}
-			}
-		}
+		overrides, _ = res.Relations[dto.PTForm]
 	}
 
 	res, err := findFormsFromCache(ctx, int(params.Page), int(params.Size), ownerType, params.Owner)
