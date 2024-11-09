@@ -71,6 +71,7 @@ type SettingUpdate struct {
 	SystemGenerated bool                  `json:"systemGenerated"`
 	Parent          *uint64               `json:"parent,omitempty" encore:"optional"`
 	Options         []SettingOptionUpdate `json:"options,omitempty" encore:"optional"`
+	Overridable     bool                  `json:"overrridable"`
 }
 
 func (s SettingUpdate) Validate() error {
@@ -105,7 +106,16 @@ func (s SettingUpdate) Validate() error {
 type UpdateSettingsRequest struct {
 	OwnerType    string          `header:"x-owner-type"`
 	CaptchaToken string          `header:"x-ver-token"`
+	Owner        uint64          `header:"x-owner"`
 	Updates      []SettingUpdate `json:"updates"`
+}
+
+func (u UpdateSettingsRequest) GetOwnerType() string {
+	return u.OwnerType
+}
+
+func (u UpdateSettingsRequest) GetOwner() uint64 {
+	return u.Owner
 }
 
 func (u UpdateSettingsRequest) GetCaptchaToken() string {
@@ -115,12 +125,46 @@ func (u UpdateSettingsRequest) GetCaptchaToken() string {
 func (u UpdateSettingsRequest) Validate() error {
 	msgs := make([]string, 0)
 
+	if u.Owner == 0 {
+		msgs = append(msgs, "The x-owner header is required")
+	}
+
 	if len(u.CaptchaToken) == 0 {
 		msgs = append(msgs, "The x-ver-token header is required")
 	}
 
 	if len(u.OwnerType) == 0 {
 		msgs = append(msgs, "The x-owner-type header is required")
+	} else if _, ok := PermissionTypeFromString(u.OwnerType); !ok {
+		msgs = append(msgs, "The x-owner-type header value is invalid")
+	}
+
+	if len(u.Updates) == 0 {
+		msgs = append(msgs, "The updates field cannot be empty")
+	}
+
+	if len(msgs) > 0 {
+		return errors.New(strings.Join(msgs, "\n"))
+	}
+	return nil
+}
+
+type GetSettingsRequest struct {
+	Owner     uint64 `header:"x-owner"`
+	OwnerType string `header:"x-owher-type"`
+}
+
+func (g GetSettingsRequest) Validate() error {
+	msgs := make([]string, 0)
+
+	if g.Owner == 0 {
+		msgs = append(msgs, "The x-owner header is required")
+	}
+
+	if len(g.OwnerType) == 0 {
+		msgs = append(msgs, "The x-owner-type header is required")
+	} else if _, ok := PermissionTypeFromString(g.OwnerType); !ok {
+		msgs = append(msgs, "The x-owner-type header value is invalid")
 	}
 
 	if len(msgs) > 0 {

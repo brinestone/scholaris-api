@@ -6,11 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
+	"time"
 
 	"encore.dev/beta/auth"
 	"encore.dev/rlog"
 	"encore.dev/storage/cache"
+	"encore.dev/storage/sqldb"
 	"github.com/brinestone/scholaris/core/permissions"
 	"github.com/brinestone/scholaris/dto"
 	"github.com/brinestone/scholaris/models"
@@ -19,19 +22,46 @@ import (
 
 // Updates a setting
 //
-//encore:api auth method=POST path=/settings/:owner tag:can_update_settings
-func UpdateSetting(ctx context.Context, owner uint64, req dto.UpdateSettingsRequest) error {
+//encore:api auth method=POST path=/settings tag:can_update_settings tag:needs_captcha_ver
+func UpdateSettings(ctx context.Context, req dto.UpdateSettingsRequest) error {
+	uid, _ := auth.UserID()
+	user, _ := strconv.ParseUint(string(uid), 10, 64)
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		return &util.ErrUnknown
+	}
+
+	ids, err := updateSettings(ctx, tx, req.Owner, user, req.OwnerType)
+	if err != nil {
+		tx.Rollback()
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		return &util.ErrUnknown
+	}
+	if err := tx.Commit(); err != nil {
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		return &util.ErrUnknown
+	}
+
+	if len(ids) > 0 {
+		UpdatedSettings.Publish(ctx, SettingUpdatedEvent{
+			Owner:     req.Owner,
+			Ids:       ids,
+			OwnerType: req.OwnerType,
+			Timestamp: time.Now(),
+		})
+	}
 	return nil
 }
 
 // Gets an owner's settings
 //
-//encore:api auth method=GET path=/settings/:owner tag:can_view_settings
-func GetSettings(ctx context.Context, owner uint64) (*dto.GetSettingsResponse, error) {
+//encore:api auth method=GET path=/settings tag:can_view_settings
+func FindSettings(ctx context.Context, req dto.GetSettingsRequest) (*dto.GetSettingsResponse, error) {
 	var settings *dto.GetSettingsResponse
 	var err error
 	uid, _ := auth.UserID()
-	s, err := settingsCache.Get(ctx, cacheKey(uid, owner))
+	s, err := settingsCache.Get(ctx, cacheKey(uid, req.Owner, req.OwnerType))
 	if errors.Is(err, cache.Miss) {
 		perms, err := permissions.ListRelations(ctx, dto.ListRelationsRequest{
 			Actor:    dto.IdentifierString(dto.PTUser, uid),
@@ -48,7 +78,7 @@ func GetSettings(ctx context.Context, owner uint64) (*dto.GetSettingsResponse, e
 			return &dto.GetSettingsResponse{}, nil
 		}
 
-		mods, err := findSettingsFromDb(ctx, owner, ids...)
+		mods, err := findSettingsFromDb(ctx, req.Owner, req.OwnerType, ids...)
 		if err != nil {
 			rlog.Error(util.MsgDbAccessError, "msg", err.Error())
 			return nil, &util.ErrUnknown
@@ -59,7 +89,7 @@ func GetSettings(ctx context.Context, owner uint64) (*dto.GetSettingsResponse, e
 			Settings: dtos,
 		}
 
-		if err := settingsCache.Set(ctx, cacheKey(uid, owner), *settings); err != nil {
+		if err := settingsCache.Set(ctx, cacheKey(uid, req.Owner, req.OwnerType), *settings); err != nil {
 			rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
 		}
 	} else if err != nil {
@@ -71,14 +101,14 @@ func GetSettings(ctx context.Context, owner uint64) (*dto.GetSettingsResponse, e
 	return settings, nil
 }
 
-func findSettingsFromDb(ctx context.Context, owner uint64, ids ...uint64) ([]*models.Setting, error) {
-	args := make([]any, len(ids)+1)
-	args[0] = owner
+func findSettingsFromDb(ctx context.Context, owner uint64, ownerType string, ids ...uint64) ([]*models.Setting, error) {
+	args := make([]any, len(ids)+2)
+	args[0], args[1] = owner, ownerType
 	placeholders := make([]string, len(ids))
 
 	for i, v := range ids {
-		placeholders[i] = fmt.Sprintf("$%d", i+1)
-		args[i+1] = v
+		placeholders[i] = fmt.Sprintf("$%d", i+3)
+		args[i+2] = v
 	}
 
 	query := fmt.Sprintf(`
@@ -199,4 +229,52 @@ func settingsToDto(s ...*models.Setting) []dto.Setting {
 	}
 
 	return ans
+}
+
+func updateSettings(ctx context.Context, tx *sqldb.Tx, owner, user uint64, ownerType string, req ...dto.SettingUpdate) ([]uint64, error) {
+	var ids []uint64
+	for _, v := range req {
+		query := `
+			INSERT INTO
+				settings(
+					label,
+					description,
+					key,
+					multi_values,
+					system_generated,
+					parent,
+					owner,
+					owner_type,
+					created_by,
+					overridable
+				)
+			VALUES
+				($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+			ON CONFLICT 
+				(owner,owner_type,key)
+			DO
+				UPDATE SET
+					label=$1,
+					description=$2,
+					multi_values=$4,
+					system_generated=$5,
+					parent=$6,
+					updated_at=DEFAULT,
+					overridable=$10
+				WHERE
+					owner=EXCLUDED.owner AND 
+					owner_type=EXCLUDED.owner_type AND
+					key=EXCLUDED.key
+			RETURNING id
+			;
+		`
+
+		var id uint64
+		if err := tx.QueryRow(ctx, query, v.Label, v.Description, v.Key, v.MultiValues, v.SystemGenerated, v.Parent, owner, ownerType, user, v.Overridable).Scan(&id); err != nil {
+			return nil, err
+		}
+
+		ids = append(ids, id)
+	}
+	return ids, nil
 }

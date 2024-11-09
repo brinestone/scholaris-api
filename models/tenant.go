@@ -1,6 +1,9 @@
 package models
 
-import "time"
+import (
+	"database/sql"
+	"time"
+)
 
 type Tenant struct {
 	Name         string    `json:"name"`
@@ -11,10 +14,10 @@ type Tenant struct {
 }
 
 type SubscriptionPlanBenefit struct {
-	Name     string     `json:"name"`
-	Details  string     `json:"details"`
-	MinCount *NullInt32 `json:"minCount"`
-	MaxCount *NullInt32 `json:"maxCount"`
+	Name     string        `json:"name"`
+	Details  string        `json:"details"`
+	MinCount sql.NullInt32 `json:"minCount"`
+	MaxCount sql.NullInt32 `json:"maxCount"`
 }
 
 type SubscriptionPlan struct {

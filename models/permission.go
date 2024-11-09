@@ -9,4 +9,5 @@ const (
 	PermFormResponder  = "responder"
 	PermCanView        = "can_view"
 	PermEditor         = "editor"
+	PermCanEdit        = "can_edit"
 )

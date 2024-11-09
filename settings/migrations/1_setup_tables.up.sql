@@ -14,7 +14,7 @@ CREATE TABLE
         created_by BIGINT NOT NULL,
         overridable BOOLEAN DEFAULT true,
         PRIMARY KEY (id),
-        UNIQUE (owner, owner_Type, key)
+        UNIQUE (owner, owner_type, key)
     );
 
 CREATE TABLE

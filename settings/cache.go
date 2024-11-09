@@ -15,7 +15,7 @@ var settingsCache = cache.NewStructKeyspace[string, dto.GetSettingsResponse](pkg
 	KeyPattern: "settings/:key",
 })
 
-func cacheKey(user auth.UID, owner uint64) string {
-	arg := md5.Sum([]byte(fmt.Sprintf("%v", []any{user, owner})))
+func cacheKey(user auth.UID, owner uint64, ownerType string) string {
+	arg := md5.Sum([]byte(fmt.Sprintf("%v", []any{user, owner, ownerType})))
 	return hex.EncodeToString(arg[:])
 }
