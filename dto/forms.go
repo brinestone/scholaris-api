@@ -97,7 +97,7 @@ type UserFormResponses struct {
 }
 
 type DeleteFormQuestionGroupsRequest struct {
-	Ids []uint64 `json:"ids,omitempty" encore:"optional"`
+	Ids []uint64 `json:"ids,omitempty"`
 }
 
 type UpdateFormQuestionGroupRequest struct {
