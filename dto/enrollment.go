@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // Enrollment statuses
@@ -17,6 +18,14 @@ const (
 	// The enrollment has been approved.
 	ESApproved = "approved"
 )
+
+// The request body for creating an institution's enrollment form.
+type NewEnrollmentFormRequest struct {
+	// The time window users would be able to apply
+	Window time.Duration `json:"window"`
+	// The title of the form
+	Title string `json:"title"`
+}
 
 type EnrollmentQuestionOption struct {
 	Label     string `json:"label"`

@@ -2,13 +2,11 @@ package institutions
 
 import (
 	"context"
-
-	"github.com/brinestone/scholaris/dto"
 )
 
-// Creates a new Enrollment
+// Creates an enrollment form
 //
-//encore:api method=POST auth path=/institutions/:institution/enroll
-func NewEnrollment(ctx context.Context, institution uint64) (*dto.GetFormQuestionsResponse, error) {
-	return nil, nil
+//encore:api auth method=POST path=/institutions/:institution/forms/enrollment
+func CreateEnrollmentForm(ctx context.Context) error {
+	return nil
 }
