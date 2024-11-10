@@ -64,14 +64,14 @@ func (s SettingOptionUpdate) Validate() error {
 }
 
 type SettingUpdate struct {
-	Key             *string               `json:"key,omitempty" encore:"optional"`
-	Label           string                `json:"label"`
-	Description     *string               `json:"description,omitempty" encore:"optional"`
-	MultiValues     bool                  `json:"multiValues"`
-	SystemGenerated bool                  `json:"systemGenerated"`
-	Parent          *uint64               `json:"parent,omitempty" encore:"optional"`
-	Options         []SettingOptionUpdate `json:"options,omitempty" encore:"optional"`
-	Overridable     bool                  `json:"overrridable"`
+	Key         string  `json:"key,omitempty"`
+	Label       string  `json:"label"`
+	Description *string `json:"description,omitempty" encore:"optional"`
+	MultiValues bool    `json:"multiValues"`
+	// SystemGenerated bool                  `json:"systemGenerated"`
+	Parent      *uint64               `json:"parent,omitempty" encore:"optional"`
+	Options     []SettingOptionUpdate `json:"options,omitempty" encore:"optional"`
+	Overridable bool                  `json:"overrridable"`
 }
 
 func (s SettingUpdate) Validate() error {
@@ -93,7 +93,7 @@ func (s SettingUpdate) Validate() error {
 		}
 	}
 
-	if s.Key != nil && len(*s.Key) == 0 {
+	if len(s.Key) == 0 {
 		msgs = append(msgs, "The key field is required")
 	}
 

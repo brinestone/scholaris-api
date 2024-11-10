@@ -32,7 +32,7 @@ func UpdateSettings(ctx context.Context, req dto.UpdateSettingsRequest) error {
 		return &util.ErrUnknown
 	}
 
-	ids, err := updateSettings(ctx, tx, req.Owner, user, req.OwnerType)
+	ids, err := updateSettings(ctx, tx, req.Owner, user, req.OwnerType, req.Updates...)
 	if err != nil {
 		tx.Rollback()
 		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
@@ -75,7 +75,7 @@ func FindSettings(ctx context.Context, req dto.GetSettingsRequest) (*dto.GetSett
 
 		ids := perms.Relations[dto.PTSetting]
 		if len(ids) == 0 {
-			return &dto.GetSettingsResponse{}, nil
+			return nil, &util.ErrNotFound
 		}
 
 		mods, err := findSettingsFromDb(ctx, req.Owner, req.OwnerType, ids...)
@@ -147,9 +147,9 @@ func findSettingsFromDb(ctx context.Context, owner uint64, ownerType string, ids
 			setting_values sv
 				ON sv.setting = s.id
 		WHERE
-			s.owner = $1 AND s.system_generated=false AND id IN (%s)
+			s.owner = $1 AND s.system_generated=false AND s.id IN (%s) AND s.owner_type=$2
 		GROUP BY
-			s.id
+			s.id;
 	`, strings.Join(placeholders, ","))
 
 	rows, err := db.Query(ctx, query, args...)
@@ -241,7 +241,6 @@ func updateSettings(ctx context.Context, tx *sqldb.Tx, owner, user uint64, owner
 					description,
 					key,
 					multi_values,
-					system_generated,
 					parent,
 					owner,
 					owner_type,
@@ -249,7 +248,7 @@ func updateSettings(ctx context.Context, tx *sqldb.Tx, owner, user uint64, owner
 					overridable
 				)
 			VALUES
-				($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+				($1,$2,$3,$4,$5,$6,$7,$8,$9)
 			ON CONFLICT 
 				(owner,owner_type,key)
 			DO
@@ -257,21 +256,30 @@ func updateSettings(ctx context.Context, tx *sqldb.Tx, owner, user uint64, owner
 					label=$1,
 					description=$2,
 					multi_values=$4,
-					system_generated=$5,
-					parent=$6,
+					parent=$5,
 					updated_at=DEFAULT,
-					overridable=$10
-				WHERE
-					owner=EXCLUDED.owner AND 
-					owner_type=EXCLUDED.owner_type AND
-					key=EXCLUDED.key
+					overridable=$9
 			RETURNING id
 			;
 		`
 
 		var id uint64
-		if err := tx.QueryRow(ctx, query, v.Label, v.Description, v.Key, v.MultiValues, v.SystemGenerated, v.Parent, owner, ownerType, user, v.Overridable).Scan(&id); err != nil {
+		if err := tx.QueryRow(ctx, query, v.Label, v.Description, v.Key, v.MultiValues, v.Parent, owner, ownerType, user, v.Overridable).Scan(&id); err != nil {
 			return nil, err
+		}
+
+		if len(v.Options) > 0 {
+			optionQuery := `
+				INSERT INTO
+					setting_options(label,value,setting)
+				VALUES
+					($1,$2,$3);
+			`
+			for _, w := range v.Options {
+				if _, err := tx.Exec(ctx, optionQuery, w.Label, w.Value, id); err != nil {
+					return nil, err
+				}
+			}
 		}
 
 		ids = append(ids, id)

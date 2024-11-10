@@ -11,6 +11,7 @@ import (
 
 	"encore.dev/beta/auth"
 	"encore.dev/et"
+	"encore.dev/rlog"
 	"github.com/brianvoe/gofakeit/v6"
 	sAuth "github.com/brinestone/scholaris/core/auth"
 	"github.com/brinestone/scholaris/core/permissions"
@@ -21,7 +22,7 @@ import (
 
 var mainContext context.Context
 
-func TestMain(t *testing.M) {
+func mockEndpoints() {
 	et.MockEndpoint(permissions.CheckPermission, func(ctx context.Context, req dto.RelationCheckRequest) (*dto.RelationCheckResponse, error) {
 		return &dto.RelationCheckResponse{
 			Allowed: true,
@@ -40,9 +41,12 @@ func TestMain(t *testing.M) {
 			},
 		}, nil
 	})
+}
+
+func TestMain(t *testing.M) {
+	mockEndpoints()
 	uid, data := makeUser()
 	mainContext = auth.WithContext(context.TODO(), uid, &data)
-
 	t.Run()
 }
 
@@ -74,12 +78,8 @@ func TestGetSettings(t *testing.T) {
 		Owner:     ownerId,
 		OwnerType: ownerType,
 	})
-	if err != nil {
-		t.Error(err)
-		return
-	}
-
-	assert.NotNil(t, res)
+	assert.NotNil(t, err)
+	assert.Nil(t, res)
 }
 
 func TestUpdateSettings(t *testing.T) {
@@ -89,24 +89,101 @@ func TestUpdateSettings(t *testing.T) {
 		testUpdateSettingsWithNoUpdates(t, mainContext, owner, ownerType)
 	})
 
-	t.Run("NewSettings", func(t *testing.T) {
+	passed := t.Run("NewSettings", func(t *testing.T) {
 		testUpdateSettingsWithNewSettings(t, mainContext, owner, ownerType)
+		mockEndpoints()
 	})
+
+	if passed {
+		et.MockEndpoint(permissions.ListRelations, func(ctx context.Context, p dto.ListRelationsRequest) (*dto.ListRelationsResponse, error) {
+			return &dto.ListRelationsResponse{
+				Relations: map[dto.PermissionType][]uint64{
+					dto.PTSetting: {1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+				},
+			}, nil
+		})
+		res, err := settings.FindSettings(mainContext, dto.GetSettingsRequest{
+			Owner:     owner,
+			OwnerType: ownerType,
+		})
+		if err != nil {
+			t.Error(err)
+			return
+		}
+
+		t.Run("ExistingSetting", func(t *testing.T) {
+			index := gofakeit.IntRange(0, len(res.Settings)-1)
+			if index < 0 || index >= len(res.Settings) {
+				rlog.Debug("test", "index", index, "len", len(res.Settings))
+				t.FailNow()
+				return
+			}
+			setting := res.Settings[index]
+
+			testUpdateUsingExistingSetting(t, mainContext, owner, ownerType, setting.Key)
+			mockEndpoints()
+		})
+	}
 }
 
-func makeUpdates() []dto.SettingUpdate {
-	cnt := gofakeit.IntRange(1, 20)
+func testUpdateUsingExistingSetting(t *testing.T, ctx context.Context, owner uint64, ownerType, key string) {
+	updates := makeUpdates(1)
+	updates[0].Key = key
+	req := dto.UpdateSettingsRequest{
+		OwnerType:    ownerType,
+		CaptchaToken: randomString(30),
+		Owner:        owner,
+		Updates:      updates,
+	}
+
+	err := settings.UpdateSettings(ctx, req)
+	assert.Nil(t, err)
+	et.MockEndpoint(permissions.ListRelations, func(ctx context.Context, p dto.ListRelationsRequest) (*dto.ListRelationsResponse, error) {
+		return &dto.ListRelationsResponse{
+			Relations: map[dto.PermissionType][]uint64{
+				dto.PTSetting: {1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+			},
+		}, nil
+	})
+
+	res, err := settings.FindSettings(mainContext, dto.GetSettingsRequest{
+		Owner:     owner,
+		OwnerType: ownerType,
+	})
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	assert.NotNil(t, res)
+	assert.NotEmpty(t, res.Settings)
+
+	var target *dto.Setting
+	for _, v := range res.Settings {
+		if v.Key == key {
+			target = &v
+			break
+		}
+	}
+
+	assert.NotNil(t, target)
+	assert.Equal(t, key, target.Key)
+	assert.Equal(t, owner, target.Owner)
+	assert.Equal(t, ownerType, target.OwnerType)
+	assert.True(t, target.UpdatedAt.After(target.CreatedAt))
+}
+
+func makeUpdates(cnt int) []dto.SettingUpdate {
 	var ans []dto.SettingUpdate
 	for i := 0; i < cnt; i++ {
-		key := gofakeit.UUID()
 		update := dto.SettingUpdate{
-			Key:             &key,
-			Label:           gofakeit.LoremIpsumSentence(5),
-			Description:     nil,
-			MultiValues:     gofakeit.Bool(),
-			SystemGenerated: gofakeit.Bool(),
-			Parent:          nil,
-			Overridable:     gofakeit.Bool(),
+			Key:         gofakeit.UUID(),
+			Label:       gofakeit.LoremIpsumSentence(5),
+			Description: nil,
+			MultiValues: gofakeit.Bool(),
+			// SystemGenerated: gofakeit.Bool(),
+			Parent:      nil,
+			Overridable: gofakeit.Bool(),
 		}
 		if update.MultiValues {
 			cnt2 := gofakeit.IntRange(1, 5)
@@ -129,15 +206,24 @@ func makeUpdates() []dto.SettingUpdate {
 }
 
 func testUpdateSettingsWithNewSettings(t *testing.T, ctx context.Context, owner uint64, ownerType string) {
+	maxCnt := gofakeit.IntRange(1, 10)
 	req := dto.UpdateSettingsRequest{
 		OwnerType:    ownerType,
 		CaptchaToken: randomString(20),
 		Owner:        owner,
-		Updates:      makeUpdates(),
+		Updates:      makeUpdates(maxCnt),
 	}
 
 	err := settings.UpdateSettings(ctx, req)
 	assert.Nil(t, err)
+
+	et.MockEndpoint(permissions.ListRelations, func(ctx context.Context, p dto.ListRelationsRequest) (*dto.ListRelationsResponse, error) {
+		return &dto.ListRelationsResponse{
+			Relations: map[dto.PermissionType][]uint64{
+				dto.PTSetting: {1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+			},
+		}, nil
+	})
 
 	res, err := settings.FindSettings(mainContext, dto.GetSettingsRequest{
 		Owner:     owner,
@@ -149,7 +235,7 @@ func testUpdateSettingsWithNewSettings(t *testing.T, ctx context.Context, owner 
 	}
 
 	assert.NotNil(t, res)
-	assert.NotEmpty(t, res.Settings)
+	assert.True(t, assert.LessOrEqual(t, len(res.Settings), 10) && assert.GreaterOrEqual(t, len(res.Settings), 1))
 }
 
 func testUpdateSettingsWithNoUpdates(t *testing.T, ctx context.Context, owner uint64, ownerType string) {
