@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"encore.dev/beta/auth"
+	"encore.dev/beta/errs"
 	"encore.dev/rlog"
 	"encore.dev/storage/cache"
 	"encore.dev/storage/sqldb"
@@ -19,6 +20,32 @@ import (
 	"github.com/brinestone/scholaris/models"
 	"github.com/brinestone/scholaris/util"
 )
+
+// Sets the value(s) of a setting
+//
+//encore:api auth method=PUT path=/settings/set tag:can_set_setting
+func SetSettingValues(ctx context.Context, req dto.SetSettingValueRequest) error {
+	userId, _ := auth.UserID()
+	uid, _ := strconv.ParseUint(string(userId), 10, 64)
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		rlog.Error(util.MsgDbAccessError, "err", err)
+		return &util.ErrUnknown
+	}
+
+	if err := updateSettingValues(ctx, tx, req.Owner, uid, req.OwnerType, req.Updates...); err != nil {
+		tx.Rollback()
+		if errs.Convert(err) == nil {
+			return err
+		} else {
+			rlog.Error(util.MsgDbAccessError, "err", err)
+		}
+		return &util.ErrUnknown
+	}
+
+	defer tx.Commit()
+	return nil
+}
 
 // Updates a setting
 //
@@ -61,7 +88,7 @@ func FindSettings(ctx context.Context, req dto.GetSettingsRequest) (*dto.GetSett
 	var settings *dto.GetSettingsResponse
 	var err error
 	uid, _ := auth.UserID()
-	s, err := settingsCache.Get(ctx, cacheKey(uid, req.Owner, req.OwnerType))
+	s, err := settingsCache.Get(ctx, cacheKey(req.Owner, req.OwnerType))
 	if errors.Is(err, cache.Miss) {
 		perms, err := permissions.ListRelations(ctx, dto.ListRelationsRequest{
 			Actor:    dto.IdentifierString(dto.PTUser, uid),
@@ -89,7 +116,7 @@ func FindSettings(ctx context.Context, req dto.GetSettingsRequest) (*dto.GetSett
 			Settings: dtos,
 		}
 
-		if err := settingsCache.Set(ctx, cacheKey(uid, req.Owner, req.OwnerType), *settings); err != nil {
+		if err := settingsCache.Set(ctx, cacheKey(req.Owner, req.OwnerType), *settings); err != nil {
 			rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
 		}
 	} else if err != nil {
@@ -136,7 +163,8 @@ func findSettingsFromDb(ctx context.Context, owner uint64, ownerType string, ids
 				'setting', sv.setting,
 				'value', sv.value,
 				'setAt', sv.set_at,
-				'setBy', sv.set_by
+				'setBy', sv.set_by,
+				'index', sv.value_index
 			)) FILTER (WHERE sv.setting IS NOT NULL), '[]') as values
 		FROM
 			settings s
@@ -221,7 +249,7 @@ func settingsToDto(s ...*models.Setting) []dto.Setting {
 			value.SetAt = w.SetAt
 			value.SetBy = w.SetBy
 			value.Setting = w.Setting
-
+			value.Index = w.Index
 			setting.Values[j] = value
 		}
 
@@ -285,4 +313,52 @@ func updateSettings(ctx context.Context, tx *sqldb.Tx, owner, user uint64, owner
 		ids = append(ids, id)
 	}
 	return ids, nil
+}
+
+func updateSettingValues(ctx context.Context, tx *sqldb.Tx, owner, user uint64, ownerType string, req ...dto.SettingValueUpdate) error {
+	for _, v := range req {
+		q1 := `
+			SELECT
+				id
+			FROM
+				settings
+			WHERE
+				key=$1 AND owner=$2 AND owner_type=$3 AND system_generated=false;
+		`
+		var settingId uint64
+		if err := db.QueryRow(ctx, q1, v.Key, owner, ownerType).Scan(&settingId); err != nil {
+			if errors.Is(err, sqldb.ErrNoRows) {
+				return &errs.Error{
+					Code:    errs.FailedPrecondition,
+					Message: fmt.Sprintf("unknown setting %s", v.Key),
+				}
+			}
+		}
+
+		query := `
+			INSERT INTO
+				setting_values(
+					set_by,
+					value,
+					set_at,
+					setting
+					value_index
+				)
+			VALUES
+				($1,$2,DEFAULT,$3,COALESCE($4, DEFAULT))
+			ON CONFLICT 
+				(setting,value_index)
+			DO
+				UPDATE SET
+					value=$2,
+					set_by=$1,
+					set_at=DEFAULT;
+		`
+		for _, value := range v.Value {
+			if _, err := tx.Exec(ctx, query, user, value, settingId, value.Index); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

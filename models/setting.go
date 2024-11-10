@@ -14,6 +14,7 @@ type SettingOption struct {
 
 type SettingValue struct {
 	Id      uint64     `json:"id"`
+	Index   uint       `json:"index"`
 	Setting uint64     `json:"setting"`
 	SetAt   *time.Time `json:"setAt"`
 	SetBy   uint64     `json:"setBy"`

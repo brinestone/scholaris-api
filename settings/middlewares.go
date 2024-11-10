@@ -1,7 +1,7 @@
 package settings
 
 import (
-	"strconv"
+	"context"
 
 	eAuth "encore.dev/beta/auth"
 	"encore.dev/middleware"
@@ -13,36 +13,28 @@ import (
 	"github.com/brinestone/scholaris/util"
 )
 
+// Verifies whethe the user can set the value of a setting.
+//
+//encore:middleware target=tag:can_set_setting
+func UserCanSetSettingValue(req middleware.Request, next middleware.Next) middleware.Response {
+	var ownerInfo = req.Data().Payload.(models.OwnerInfo)
+	if err := doPermissionCheck(req.Context(), ownerInfo, models.PermCanSetSettingValue); err != nil {
+		return middleware.Response{
+			Err: err,
+		}
+	}
+
+	return next(req)
+}
+
 // Verifies whether the user can update an owner's settings.
 //
 //encore:middleware target=tag:can_update_settings
 func UserCanUpdateSettings(req middleware.Request, next middleware.Next) middleware.Response {
-	uid, authed := eAuth.UserID()
-	if !authed {
+	var ownerInfo = req.Data().Payload.(models.OwnerInfo)
+	if err := doPermissionCheck(req.Context(), ownerInfo, models.PermCanEditSettings); err != nil {
 		return middleware.Response{
-			Err: &util.ErrForbidden,
-		}
-	}
-
-	ownerInfo, _ := req.Data().Payload.(models.OwnerInfo)
-	parsed, _ := dto.PermissionTypeFromString(ownerInfo.GetOwnerType())
-	perms, err := permissions.CheckPermission(req.Context(), dto.RelationCheckRequest{
-		Relation: models.PermCanEdit,
-		Actor:    dto.IdentifierString(dto.PTUser, uid),
-		Target:   dto.IdentifierString(parsed, ownerInfo.GetOwner()),
-	})
-
-	if err != nil {
-		rlog.Warn(util.MsgCallError, "msg", err.Error())
-	}
-
-	if perms != nil && !perms.Allowed {
-		return middleware.Response{
-			Err: &util.ErrForbidden,
-		}
-	} else if perms == nil {
-		return middleware.Response{
-			Err: &util.ErrUnknown,
+			Err: err,
 		}
 	}
 
@@ -53,35 +45,10 @@ func UserCanUpdateSettings(req middleware.Request, next middleware.Next) middlew
 //
 //encore:middleware target=tag:can_view_settings
 func UserCanViewSettings(req middleware.Request, next middleware.Next) middleware.Response {
-	uid, authed := eAuth.UserID()
-	if !authed {
+	var ownerInfo = req.Data().Payload.(models.OwnerInfo)
+	if err := doPermissionCheck(req.Context(), ownerInfo, models.PermCanViewSettings); err != nil {
 		return middleware.Response{
-			Err: &util.ErrForbidden,
-		}
-	}
-
-	var ownerId uint64
-	var ownerType string
-	ownerId, _ = strconv.ParseUint(req.Data().Headers.Get("x-owner"), 10, 64)
-	ownerType = req.Data().Headers.Get("x-owner-type")
-	parsed, _ := dto.PermissionTypeFromString(ownerType)
-	perms, err := permissions.CheckPermission(req.Context(), dto.RelationCheckRequest{
-		Relation: models.PermCanView,
-		Actor:    dto.IdentifierString(dto.PTUser, uid),
-		Target:   dto.IdentifierString(parsed, ownerId),
-	})
-
-	if err != nil {
-		rlog.Warn(util.MsgCallError, "msg", err.Error())
-	}
-
-	if perms != nil && !perms.Allowed {
-		return middleware.Response{
-			Err: &util.ErrForbidden,
-		}
-	} else if perms == nil {
-		return middleware.Response{
-			Err: &util.ErrUnknown,
+			Err: err,
 		}
 	}
 
@@ -106,4 +73,30 @@ func VerifyCaptcha(req middleware.Request, next middleware.Next) middleware.Resp
 	}
 
 	return next(req)
+}
+
+func doPermissionCheck(ctx context.Context, oi models.OwnerInfo, perm string) error {
+	uid, authed := eAuth.UserID()
+	if !authed {
+		return &util.ErrForbidden
+	}
+
+	parsed, _ := dto.PermissionTypeFromString(oi.GetOwnerType())
+	perms, err := permissions.CheckPermission(ctx, dto.RelationCheckRequest{
+		Relation: perm,
+		Actor:    dto.IdentifierString(dto.PTUser, uid),
+		Target:   dto.IdentifierString(parsed, oi.GetOwner()),
+	})
+
+	if err != nil {
+		rlog.Warn(util.MsgCallError, "msg", err.Error())
+	}
+
+	if perms != nil && !perms.Allowed {
+		return &util.ErrForbidden
+	} else if perms == nil {
+		return &util.ErrUnknown
+	}
+
+	return nil
 }

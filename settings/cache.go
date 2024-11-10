@@ -4,6 +4,7 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
+	"time"
 
 	"encore.dev/beta/auth"
 	"encore.dev/storage/cache"
@@ -12,10 +13,12 @@ import (
 )
 
 var settingsCache = cache.NewStructKeyspace[string, dto.GetSettingsResponse](pkg.CacheCluster, cache.KeyspaceConfig{
-	KeyPattern: "settings/:key",
+	KeyPattern:    "settings/:key",
+	DefaultExpiry: cache.ExpireIn(time.Second * 30),
 })
 
-func cacheKey(user auth.UID, owner uint64, ownerType string) string {
-	arg := md5.Sum([]byte(fmt.Sprintf("%v", []any{user, owner, ownerType})))
+func cacheKey(owner uint64, ownerType string) string {
+	uid, _ := auth.UserID()
+	arg := md5.Sum([]byte(fmt.Sprintf("%v", []any{uid, owner, ownerType})))
 	return hex.EncodeToString(arg[:])
 }

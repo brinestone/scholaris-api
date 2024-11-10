@@ -7,6 +7,65 @@ import (
 	"time"
 )
 
+type SetValue struct {
+	Value *string `json:"value,omitempty" encore:"optional"`
+	Index *uint   `json:"id,omitempty" encore:"optional"`
+}
+
+type SettingValueUpdate struct {
+	Key   string     `json:"key"`
+	Value []SetValue `json:"value,omitempty" encore:"optional"`
+}
+
+func (s SettingValueUpdate) Validate() error {
+	if len(s.Key) == 0 {
+		return errors.New("the key field is required")
+	}
+	return nil
+}
+
+type SetSettingValueRequest struct {
+	Owner     uint64               `header:"x-owner"`
+	OwnerType string               `header:"x-owner-type"`
+	Updates   []SettingValueUpdate `json:"updates"`
+}
+
+func (s SetSettingValueRequest) Validate() error {
+	msgs := make([]string, 0)
+	if s.Owner == 0 {
+		msgs = append(msgs, "The x-owner header is required")
+	}
+
+	if len(s.OwnerType) == 0 {
+		msgs = append(msgs, "The x-owner-type header is required")
+	} else if _, ok := PermissionTypeFromString(s.OwnerType); !ok {
+		msgs = append(msgs, "The x-owner-type header value is invalid")
+	}
+
+	if len(s.Updates) == 0 {
+		msgs = append(msgs, "The updates field cannot be empty")
+	} else {
+		for i, v := range s.Updates {
+			if err := v.Validate(); err != nil {
+				msgs = append(msgs, fmt.Sprintf("Error at updates[%d] - %s", i, err.Error()))
+			}
+		}
+	}
+
+	if len(msgs) > 0 {
+		return errors.New(strings.Join(msgs, "\n"))
+	}
+	return nil
+}
+
+func (s SetSettingValueRequest) GetOwner() uint64 {
+	return s.Owner
+}
+
+func (s SetSettingValueRequest) GetOwnerType() string {
+	return s.OwnerType
+}
+
 type SettingOption struct {
 	Id      uint64  `json:"id"`
 	Label   string  `json:"label"`
@@ -17,8 +76,10 @@ type SettingOption struct {
 type SettingValue struct {
 	Id      uint64     `json:"id"`
 	Setting uint64     `json:"setting"`
-	SetAt   *time.Time `json:"setAt"`
+	SetAt   *time.Time `json:"setAt,omitempty" encore:"optional"`
 	SetBy   uint64     `json:"setBy"`
+	Value   *string    `json:"value,omitempty" encore:"optional"`
+	Index   uint       `json:"index"`
 }
 
 type Setting struct {
@@ -108,6 +169,7 @@ type UpdateSettingsRequest struct {
 	CaptchaToken string          `header:"x-ver-token"`
 	Owner        uint64          `header:"x-owner"`
 	Updates      []SettingUpdate `json:"updates"`
+	Deletes      []string        `json:"deletes,omitempty" encore:"optional"`
 }
 
 func (u UpdateSettingsRequest) GetOwnerType() string {
@@ -124,6 +186,14 @@ func (u UpdateSettingsRequest) GetCaptchaToken() string {
 
 func (u UpdateSettingsRequest) Validate() error {
 	msgs := make([]string, 0)
+
+	if len(u.Deletes) > 0 {
+		for i, v := range u.Deletes {
+			if len(v) == 0 {
+				msgs = append(msgs, fmt.Sprintf("Invalid value at deletes[%d]", i))
+			}
+		}
+	}
 
 	if u.Owner == 0 {
 		msgs = append(msgs, "The x-owner header is required")
@@ -143,6 +213,16 @@ func (u UpdateSettingsRequest) Validate() error {
 		msgs = append(msgs, "The updates field cannot be empty")
 	}
 
+	if len(u.Updates) > 0 && len(u.Deletes) > 0 {
+		for i := 0; i < len(u.Updates); i++ {
+			for j := 0; j < len(u.Deletes); j++ {
+				if u.Deletes[j] == u.Updates[i].Key {
+					msgs = append(msgs, fmt.Sprintf("Key \"%s\" cannot be marked for update (at updates[%d]) and for deletion (at deletes[%d])", u.Updates[i].Key, i, j))
+				}
+			}
+		}
+	}
+
 	if len(msgs) > 0 {
 		return errors.New(strings.Join(msgs, "\n"))
 	}
@@ -151,7 +231,15 @@ func (u UpdateSettingsRequest) Validate() error {
 
 type GetSettingsRequest struct {
 	Owner     uint64 `header:"x-owner"`
-	OwnerType string `header:"x-owher-type"`
+	OwnerType string `header:"x-owner-type"`
+}
+
+func (g GetSettingsRequest) GetOwnerType() string {
+	return g.OwnerType
+}
+
+func (g GetSettingsRequest) GetOwner() uint64 {
+	return g.Owner
 }
 
 func (g GetSettingsRequest) Validate() error {

@@ -34,6 +34,8 @@ CREATE TABLE
         value TEXT,
         set_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         set_by BIGINT NOT NULL,
+        value_index INT DEFAULT 0,
+        UNIQUE (setting, value_index),
         PRIMARY KEY (id),
         FOREIGN KEY (setting) REFERENCES settings (id) ON DELETE CASCADE
     );
