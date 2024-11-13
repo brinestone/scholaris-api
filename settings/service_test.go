@@ -241,7 +241,7 @@ func testUpdateSettingsWithNewSettings(t *testing.T, ctx context.Context, owner 
 	}
 
 	assert.NotNil(t, res)
-	assert.True(t, assert.LessOrEqual(t, len(res.Settings), 10) && assert.GreaterOrEqual(t, len(res.Settings), 1))
+	assert.True(t, assert.LessOrEqual(t, len(res.Settings), maxCnt) && assert.GreaterOrEqual(t, len(res.Settings), 1))
 }
 
 func testUpdateSettingsWithNoUpdates(t *testing.T, ctx context.Context, owner uint64, ownerType string) {
