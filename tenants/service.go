@@ -180,7 +180,7 @@ func getSubscribedTenants(ctx context.Context, uid auth.UID, after uint64, size 
 
 	for i, v := range response.Relations[dto.PTTenant] {
 		args[i+2] = v
-		placeholders[i] = fmt.Sprintf("$%d", i+2)
+		placeholders[i] = fmt.Sprintf("$%d", i+3)
 	}
 
 	query := fmt.Sprintf(`

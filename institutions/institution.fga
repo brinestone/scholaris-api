@@ -1,0 +1,55 @@
+module institution
+
+type institution
+  relations
+    define admin: [user] or admin from parent
+    define can_create_forms: maintainer or admin
+    define can_create_academic_year: maintainer or admin
+    define can_edit_academic_year: can_create_academic_year
+    define can_create_settings: admin
+    define can_edit_settings: [user] or can_create_settings or can_create_settings from parent
+    define can_set_setting_value: [user] or can_edit_settings or can_set_setting_value from parent
+    define can_update: can_update from parent or maintainer or admin or owner
+    define can_view: [user:* with institution_visible] or member
+    define can_view_settings: can_edit_settings or can_create_settings
+    define maintainer: [user] or maintainer from parent or admin
+    define member: student or teacher or staff or maintainer
+    define owner: owner from parent
+    define parent: [tenant]
+    define staff: [user]
+    define student: [user]
+    define teacher: [user]
+
+type enrollment
+  relations
+    define can_view: draft_viewer or published_viewer
+    define destination: [institution]
+    define draft_viewer: [user] or owner
+    define owner: [user]
+    define published_viewer: [institution#maintainer with enrollment_published, institution#staff with enrollment_published] or owner
+
+type academicYear
+  relations
+    define owner: [institution]
+    define viewer: can_view from owner
+    define can_view: viewer
+    define editor: can_edit_academic_year from owner
+    define can_edit: editor
+    define can_delete: can_create_academic_year from owner
+    
+type academicTerm
+  relations
+    define owner: [academicYear]
+define viewer: can_view from owner
+    define can_view: viewer
+    define editor: editor from owner
+    define can_edit: editor
+    define can_delete: editor from owner
+
+condition enrollment_published(is_draft: bool) {
+  !is_draft
+}
+
+condition institution_visible(visibility: bool) {
+  visibility
+}

@@ -261,6 +261,12 @@ func (g GetSettingsRequest) Validate() error {
 	return nil
 }
 
+type GetSettingsInternalRequest struct {
+	Owner     uint64 `header:"x-owner"`
+	OwnerType string `header:"x-owner-type"`
+	Ids       []uint64
+}
+
 type GetSettingsResponse struct {
 	Settings []Setting `json:"settings,omitempty"`
 }

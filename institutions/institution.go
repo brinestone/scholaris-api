@@ -4,6 +4,7 @@ package institutions
 import (
 	"context"
 	"crypto/md5"
+	_ "embed"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -19,8 +20,10 @@ import (
 	"github.com/brinestone/scholaris/core/permissions"
 	"github.com/brinestone/scholaris/dto"
 	"github.com/brinestone/scholaris/models"
+	"github.com/brinestone/scholaris/settings"
 	"github.com/brinestone/scholaris/tenants"
 	"github.com/brinestone/scholaris/util"
+	"gopkg.in/yaml.v3"
 )
 
 // API Functions
@@ -28,7 +31,7 @@ import (
 // Gets more information for an institution
 //
 //encore:api public method=GET path=/institutions/:identifier
-func GetInstitution(ctx context.Context, identifier string) (*dto.InstitutionDto, error) {
+func GetInstitution(ctx context.Context, identifier string) (*dto.Institution, error) {
 	return findInstitutionByGenericIdentifier(ctx, identifier)
 }
 
@@ -139,7 +142,7 @@ func NewInstitution(ctx context.Context, req dto.NewInstitutionRequest) (*dto.In
 
 // Private section
 
-const institutionFields = "id,name,description,logo,visible,slug,tenant,created_at,updated_at"
+const institutionFields = "id,name,description,logo,visible,slug,tenant,created_at,updated_at,verified"
 
 // const enrollmentFields = "id,owner,approved_by,approved_at,payment_transaction,service_transaction,created_at,updated_at,status,destination"
 
@@ -190,15 +193,15 @@ func createInstitution(ctx context.Context, tx *sqldb.Tx, req dto.NewInstitution
 	return newId, nil
 }
 
-func findInstitutionBySlugFromCache(ctx context.Context, slug string) (*dto.InstitutionDto, error) {
+func findInstitutionBySlugFromCache(ctx context.Context, slug string) (*dto.Institution, error) {
 	return findInstitutionByKeyFromCache(ctx, "slug", slug)
 }
 
-func findInstitutionByIdFromCache(ctx context.Context, id uint64) (*dto.InstitutionDto, error) {
+func findInstitutionByIdFromCache(ctx context.Context, id uint64) (*dto.Institution, error) {
 	return findInstitutionByKeyFromCache(ctx, "id", id)
 }
 
-func findInstitutionByKeyFromCache(ctx context.Context, key string, value any) (*dto.InstitutionDto, error) {
+func findInstitutionByKeyFromCache(ctx context.Context, key string, value any) (*dto.Institution, error) {
 	sum := md5.Sum([]byte(fmt.Sprintf("%s=%v", key, value)))
 	ans, err := institutionCache.Get(ctx, hex.EncodeToString(sum[:]))
 	if err != nil {
@@ -217,7 +220,7 @@ func findInstitutionByKeyFromDbTrx(ctx context.Context, trx *sqldb.Tx, key strin
 		WHERE
 			%s = $1;
 	`, institutionFields, key)
-	if err := trx.QueryRow(ctx, query, value).Scan(&i.Id, &i.Name, &i.Description, &i.Logo, &i.Visible, &i.Slug, &i.TenantId, &i.CreatedAt, &i.UpdatedAt); err != nil {
+	if err := trx.QueryRow(ctx, query, value).Scan(&i.Id, &i.Name, &i.Description, &i.Logo, &i.Visible, &i.Slug, &i.TenantId, &i.CreatedAt, &i.UpdatedAt, &i.Verified); err != nil {
 		return nil, err
 	}
 
@@ -256,12 +259,12 @@ func findInstitutionByKeyFromDb(ctx context.Context, key string, value any) (*mo
 	return i, nil
 }
 
-func toInstitutionDto(in *models.Institution) *dto.InstitutionDto {
+func toInstitutionDto(in *models.Institution) *dto.Institution {
 	if in == nil {
 		return nil
 	}
 
-	ans := &dto.InstitutionDto{
+	ans := &dto.Institution{
 		Name:      in.Name,
 		Visible:   in.Visible,
 		Slug:      in.Slug,
@@ -344,7 +347,7 @@ func lookupInstitutions(ctx context.Context, page uint, size uint, uid *auth.UID
 	return ans, cnt, nil
 }
 
-func findInstitutionByGenericIdentifier(ctx context.Context, identifier string) (*dto.InstitutionDto, error) {
+func findInstitutionByGenericIdentifier(ctx context.Context, identifier string) (*dto.Institution, error) {
 	if match, _ := regexp.MatchString(`^\d+$`, identifier); match {
 		id, _ := strconv.ParseUint(identifier, 10, 64)
 		ans, err := findInstitutionByIdFromCache(ctx, id)
@@ -381,4 +384,77 @@ func findInstitutionByGenericIdentifier(ctx context.Context, identifier string) 
 		}
 		return ans, nil
 	}
+}
+
+//go:embed default-settings.yml
+var defSettings []byte
+
+type DefaultSetting struct {
+	Label       string   `yaml:"label"`
+	Value       []string `yaml:"value"`
+	Description string   `yaml:"description"`
+	MultiValues bool     `yaml:"multiValues"`
+	Parent      string   `yaml:"parent"`
+}
+
+type DefaultSettings struct {
+	Settings map[string]DefaultSetting `yaml:"settings"`
+}
+
+func defineInstitutionDefaultSettings(ctx context.Context, id uint64) error {
+	var sMap DefaultSettings
+	if err := yaml.Unmarshal(defSettings, sMap); err != nil {
+		return err
+	}
+
+	req := dto.UpdateSettingsRequest{
+		OwnerType: string(dto.PTInstitution),
+		Owner:     id,
+	}
+
+	for k, v := range sMap.Settings {
+		req.Updates = append(req.Updates, dto.SettingUpdate{
+			Key:         k,
+			Label:       v.Label,
+			Description: &v.Description,
+			MultiValues: v.MultiValues,
+		})
+	}
+	if err := settings.UpdateSettingsInternal(ctx, req); err != nil {
+		return err
+	}
+
+	req2 := dto.SetSettingValueRequest{
+		Owner:     id,
+		OwnerType: string(dto.PTInstitution),
+	}
+
+	for k, v := range sMap.Settings {
+		s := dto.SettingValueUpdate{
+			Key: k,
+		}
+		for _, v := range v.Value {
+			s.Value = append(s.Value, dto.SetValue{
+				Value: &v,
+			})
+		}
+		req2.Updates = append(req2.Updates, s)
+	}
+
+	return settings.SetSettingValues(ctx, req2)
+}
+
+func getInstitutionStats(ctx context.Context) (*models.InstitutionStatistics, error) {
+	var ans models.InstitutionStatistics
+	query := `
+		SELECT
+			total,verified,unverified
+		FROM
+			vw_InstitutionStatistics
+		;
+	`
+	if err := db.QueryRow(ctx, query).Scan(&ans.TotalInstitutions, &ans.TotalVerified, &ans.TotalUnverified); err != nil {
+		return nil, err
+	}
+	return &ans, nil
 }

@@ -206,7 +206,7 @@ func makeUpdates(cnt int) []dto.SettingUpdate {
 }
 
 func testUpdateSettingsWithNewSettings(t *testing.T, ctx context.Context, owner uint64, ownerType string) {
-	maxCnt := gofakeit.IntRange(1, 10)
+	maxCnt := gofakeit.IntRange(1, 15)
 	req := dto.UpdateSettingsRequest{
 		OwnerType:    ownerType,
 		CaptchaToken: randomString(20),
@@ -218,9 +218,15 @@ func testUpdateSettingsWithNewSettings(t *testing.T, ctx context.Context, owner 
 	assert.Nil(t, err)
 
 	et.MockEndpoint(permissions.ListRelations, func(ctx context.Context, p dto.ListRelationsRequest) (*dto.ListRelationsResponse, error) {
+		var settingIds []uint64
+		var i = 0
+		for i < maxCnt {
+			settingIds = append(settingIds, uint64(i+1))
+			i++
+		}
 		return &dto.ListRelationsResponse{
 			Relations: map[dto.PermissionType][]uint64{
-				dto.PTSetting: {1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+				dto.PTSetting: settingIds,
 			},
 		}, nil
 	})

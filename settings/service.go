@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	"encore.dev/beta/auth"
@@ -19,9 +18,25 @@ import (
 	"github.com/brinestone/scholaris/dto"
 	"github.com/brinestone/scholaris/models"
 	"github.com/brinestone/scholaris/util"
+	"github.com/lib/pq"
 )
 
-// Sets the value(s) of a setting
+// Internally fetches settings
+//
+//encore:api private method=GET path=/settings/internal
+func GetSettingsInternal(ctx context.Context, req dto.GetSettingsInternalRequest) (*dto.GetSettingsResponse, error) {
+	mods, err := findSettingsFromDb(ctx, req.Owner, req.OwnerType, true, req.Ids...)
+	if err != nil {
+		return nil, err
+	}
+
+	dtos := settingsToDto(mods...)
+	return &dto.GetSettingsResponse{
+		Settings: dtos,
+	}, nil
+}
+
+// Sets the value(s) of a setting.  Intended for internal APIs
 //
 //encore:api auth method=PUT path=/settings/set tag:can_set_setting
 func SetSettingValues(ctx context.Context, req dto.SetSettingValueRequest) error {
@@ -47,7 +62,61 @@ func SetSettingValues(ctx context.Context, req dto.SetSettingValueRequest) error
 	return nil
 }
 
-// Updates a setting
+// Updates settings. Intended for internal APIs
+//
+//encore:api private method=POST path=/settings/internal
+func UpdateSettingsInternal(ctx context.Context, req dto.UpdateSettingsRequest) error {
+	var uid uint64 = 0
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		return &util.ErrUnknown
+	}
+
+	ids, err := updateSettings(ctx, tx, req.Owner, uid, req.OwnerType, req.Updates...)
+	if err != nil {
+		tx.Rollback()
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		return &util.ErrUnknown
+	}
+
+	var updates []dto.PermissionUpdate
+	for _, id := range ids {
+		updates = append(updates,
+			dto.PermissionUpdate{
+				Actor:    dto.IdentifierString(dto.PermissionType(req.GetOwnerType()), req.Owner),
+				Relation: models.PermOwner,
+				Target:   dto.IdentifierString(dto.PTSetting, id),
+			}, dto.PermissionUpdate{
+				Actor:    dto.IdentifierString(dto.PTUser, uid),
+				Relation: models.PermEditor,
+				Target:   dto.IdentifierString(dto.PTSetting, id),
+			})
+	}
+
+	if err := permissions.SetPermissions(ctx, dto.UpdatePermissionsRequest{
+		Updates: updates,
+	}); err != nil {
+		tx.Rollback()
+		rlog.Error(util.MsgDbAccessError, "err", err)
+		return &util.ErrUnknown
+	} else if err := tx.Commit(); err != nil {
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		return &util.ErrUnknown
+	}
+
+	if len(ids) > 0 {
+		UpdatedSettings.Publish(ctx, SettingUpdatedEvent{
+			Owner:     req.Owner,
+			Ids:       ids,
+			OwnerType: req.OwnerType,
+			Timestamp: time.Now(),
+		})
+	}
+	return nil
+}
+
+// Updates settings (public API)
 //
 //encore:api auth method=POST path=/settings tag:can_update_settings tag:needs_captcha_ver
 func UpdateSettings(ctx context.Context, req dto.UpdateSettingsRequest) error {
@@ -105,7 +174,7 @@ func FindSettings(ctx context.Context, req dto.GetSettingsRequest) (*dto.GetSett
 			return nil, &util.ErrNotFound
 		}
 
-		mods, err := findSettingsFromDb(ctx, req.Owner, req.OwnerType, ids...)
+		mods, err := findSettingsFromDb(ctx, req.Owner, req.OwnerType, false, ids...)
 		if err != nil {
 			rlog.Error(util.MsgDbAccessError, "msg", err.Error())
 			return nil, &util.ErrUnknown
@@ -128,59 +197,9 @@ func FindSettings(ctx context.Context, req dto.GetSettingsRequest) (*dto.GetSett
 	return settings, nil
 }
 
-func findSettingsFromDb(ctx context.Context, owner uint64, ownerType string, ids ...uint64) ([]*models.Setting, error) {
-	args := make([]any, len(ids)+2)
-	args[0], args[1] = owner, ownerType
-	placeholders := make([]string, len(ids))
-
-	for i, v := range ids {
-		placeholders[i] = fmt.Sprintf("$%d", i+3)
-		args[i+2] = v
-	}
-
-	query := fmt.Sprintf(`
-		SELECT
-			s.id,
-			s.label,
-			s.description,
-			s.key,
-			s.multi_values,
-			s.created_at,
-			s.updated_at,
-			s.parent,
-			s.owner,
-			s.owner_type,
-			s.created_by,
-			s.overridable,
-			COALESCE(json_agg(json_build_object(
-				'id', so.id,
-				'label', so.label,
-				'value', so.label,
-				'setting', so.setting
-			)) FILTER (WHERE so.setting IS NOT NULL), '[]') as options,
-			COALESCE(json_agg(json_build_object(
-				'id', sv.id,
-				'setting', sv.setting,
-				'value', sv.value,
-				'setAt', sv.set_at,
-				'setBy', sv.set_by,
-				'index', sv.value_index
-			)) FILTER (WHERE sv.setting IS NOT NULL), '[]') as values
-		FROM
-			settings s
-		LEFT JOIN
-			setting_options so
-				ON so.setting = s.id
-		LEFT JOIN
-			setting_values sv
-				ON sv.setting = s.id
-		WHERE
-			s.owner = $1 AND s.system_generated=false AND s.id IN (%s) AND s.owner_type=$2
-		GROUP BY
-			s.id;
-	`, strings.Join(placeholders, ","))
-
-	rows, err := db.Query(ctx, query, args...)
+func findSettingsFromDb(ctx context.Context, owner uint64, ownerType string, internal bool, ids ...uint64) ([]*models.Setting, error) {
+	query := "SELECT * FROM func_get_owner_settings($1,$2,$3,$4,$4);"
+	rows, err := db.Query(ctx, query, pq.Array(ids), owner, ownerType, internal)
 	if err != nil {
 		return nil, err
 	}
@@ -188,21 +207,21 @@ func findSettingsFromDb(ctx context.Context, owner uint64, ownerType string, ids
 
 	var settings []*models.Setting
 	for rows.Next() {
-		setting := new(models.Setting)
+		s := new(models.Setting)
 		var optionsJson, valuesJson string
-		if err := rows.Scan(&setting.Id, &setting.Label, &setting.Description, &setting.Key, &setting.MultiValues, &setting.CreatedAt, &setting.UpdatedAt, &setting.Parent, &setting.Owner, &setting.OwnerType, &setting.CreatedBy, &setting.Overridable, &optionsJson, &valuesJson); err != nil {
+		if err := rows.Scan(&s.Id, &s.Description, &s.Key, &s.MultiValues, &s.CreatedAt, &s.UpdatedAt, &s.Parent, &s.Owner, &s.OwnerType, &s.CreatedBy, &s.Overridable, &s.SystemGenerated, &optionsJson, &valuesJson); err != nil {
 			return nil, err
 		}
 
-		if err := json.Unmarshal([]byte(valuesJson), &setting.Values); err != nil {
+		if err := json.Unmarshal([]byte(valuesJson), &s.Values); err != nil {
 			return nil, err
 		}
 
-		if err := json.Unmarshal([]byte(optionsJson), &setting.Options); err != nil {
+		if err := json.Unmarshal([]byte(optionsJson), &s.Options); err != nil {
 			return nil, err
 		}
 
-		settings = append(settings, setting)
+		settings = append(settings, s)
 	}
 
 	return settings, nil
@@ -345,7 +364,7 @@ func updateSettingValues(ctx context.Context, tx *sqldb.Tx, owner, user uint64, 
 					value_index
 				)
 			VALUES
-				($1,$2,DEFAULT,$3,COALESCE($4, DEFAULT))
+				($1,$2,DEFAULT,$3,$4)
 			ON CONFLICT 
 				(setting,value_index)
 			DO
