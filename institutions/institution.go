@@ -93,9 +93,9 @@ func NewInstitution(ctx context.Context, req dto.NewInstitutionRequest) (*dto.In
 	if err := permissions.SetPermissions(ctx, dto.UpdatePermissionsRequest{
 		Updates: []dto.PermissionUpdate{
 			{
-				Actor:    fmt.Sprintf("%s:%d", dto.PTTenant, req.TenantId),
+				Actor:    dto.IdentifierString(dto.PTTenant, req.TenantId),
 				Relation: models.PermParent,
-				Target:   fmt.Sprintf("%s:%d", dto.PTInstitution, i.Id),
+				Target:   dto.IdentifierString(dto.PTInstitution, i.Id),
 			},
 		},
 	}); err != nil {
