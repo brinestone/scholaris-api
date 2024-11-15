@@ -268,5 +268,5 @@ type GetSettingsInternalRequest struct {
 }
 
 type GetSettingsResponse struct {
-	Settings []Setting `json:"settings,omitempty"`
+	Settings map[string]Setting `json:"settings,omitempty"`
 }

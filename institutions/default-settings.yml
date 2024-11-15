@@ -38,3 +38,8 @@ settings:
     value:
       - 2 weeks
       - 2 weeks
+  defaultEnrollmentResponseWindow:
+    label: Default enrollment window
+    description: The default time window for accepting enrollments.
+    value:
+      - 3 months

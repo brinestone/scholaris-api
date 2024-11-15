@@ -2,50 +2,68 @@ package dto
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 )
 
-// Enrollment statuses
-const (
-	// The enrollment is in draft mode.
-	ESDraft = "draft"
-	// The enrollment has pending.
-	ESPending = "pending"
-	// The enrollment has been rejected.
-	ESRejected = "rejected"
-	// The enrollment has been approved.
-	ESApproved = "approved"
-)
-
-type EnrollmentQuestionOption struct {
-	Label     string `json:"label"`
-	Value     string `json:"value"`
-	IsDefault bool   `json:"isDefault"`
+type NewEnrollmentFormRequest struct {
+	Institution  uint64 `header:"x-owner"`
+	CaptchaToken string `json:"captcha"`
 }
 
-type EnrollmentQuestion struct {
-	Id              uint64                      `json:"id"`
-	Prompt          string                      `json:"prompt"`
-	QuestionType    string                      `json:"questionType"`
-	AnswerType      string                      `json:"answerType"`
-	IsRequired      bool                        `json:"isRequired"`
-	ChoiceDelimiter string                      `json:"choiceDelimiter"`
-	Options         []*EnrollmentQuestionOption `json:"options,omitempty" encore:"optional"`
+func (n NewEnrollmentFormRequest) GetCaptchaToken() string {
+	return n.CaptchaToken
 }
 
-type EnrollmentQuestions struct {
-	Questions []*EnrollmentQuestion `json:"questions"`
+func (n NewEnrollmentFormRequest) GetOwner() uint64 {
+	return n.Institution
 }
 
-type NewEnrollment struct {
-	Destination             string `json:"institution"`
-	ServiceTransactionToken string `json:"serviceTransactionToken"`
+func (n NewEnrollmentFormRequest) GetOwnerType() string {
+	return string(PTInstitution)
 }
 
-func (ne NewEnrollment) Validate() error {
+func (n NewEnrollmentFormRequest) Validate() (err error) {
+	msgs := make([]string, 0)
+	if n.Institution == 0 {
+		msgs = append(msgs, "The x-owner header is required")
+	}
+
+	if len(n.CaptchaToken) == 0 {
+		msgs = append(msgs, "Invalid captcha token")
+	}
+
+	if len(msgs) > 0 {
+		err = errors.New(strings.Join(msgs, "\n"))
+	}
+	return
+}
+
+type NewEnrollmentRequest struct {
+	Destination             uint64 `header:"x-owner"`
+	ServiceTransactionToken string `header:"x-service-transaction"`
+	CaptchaToken            string `json:"captcha"`
+}
+
+func (n NewEnrollmentRequest) GetCaptchaToken() string {
+	return n.CaptchaToken
+}
+
+func (n NewEnrollmentRequest) GetOwner() uint64 {
+	return n.Destination
+}
+
+func (n NewEnrollmentRequest) GetOwnerType() string {
+	return string(PTInstitution)
+}
+
+func (ne NewEnrollmentRequest) Validate() error {
 	var msgs = make([]string, 0)
-	if len(ne.Destination) == 0 {
+
+	if len(ne.CaptchaToken) == 0 {
+		msgs = append(msgs, "Invalid captcha token")
+	}
+
+	if ne.Destination == 0 {
 		msgs = append(msgs, "Invalid institution ID")
 	}
 
@@ -57,45 +75,4 @@ func (ne NewEnrollment) Validate() error {
 		return errors.New(strings.Join(msgs, "\n"))
 	}
 	return nil
-}
-
-type UpdateEnrollment struct {
-	Destination uint64 `json:"institution"`
-	Answers     []struct {
-		Value    string `json:"value,omitempty" encore:"optional"`
-		Question uint64 `json:"question"`
-	} `json:"answers,omitempty" encore:"optional"`
-	RemovedAnswers   []int
-	AddedDocuments   []string `json:"addedDocuments,omitempty" encore:"optional"`
-	RemovedDocuments []string `json:"removedDocuments,omitempty" encore:"optional"`
-}
-
-func (ue UpdateEnrollment) Validate() error {
-	var msgs = make([]string, 0)
-	if ue.Destination == 0 {
-		msgs = append(msgs, "invalid institution ID")
-	}
-
-	if len(ue.Answers) > 0 {
-		for i, a := range ue.Answers {
-			if a.Question == 0 {
-				msgs = append(msgs, fmt.Sprintf("Invalid Question at %d", i))
-			}
-		}
-	}
-
-	if len(msgs) > 0 {
-		return errors.New(strings.Join(msgs, "\n"))
-	}
-	return nil
-}
-
-type EnrollmentState struct {
-	Id          uint64 `json:"id"`
-	Destination uint64 `json:"institution"`
-	Answers     []struct {
-		Value    []*string `json:"value,omitempty" encore:"optional"`
-		Question uint64    `json:"question"`
-	} `json:"answers,omitempty" encore:"optional"`
-	Documents []string `json:"documents,omitempty" encore:"optional"`
 }

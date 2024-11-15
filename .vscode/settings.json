@@ -1,6 +1,6 @@
 {
   "plpgsqlLanguageServer.host": "localhost",
-  "plpgsqlLanguageServer.port": 60896,
+  "plpgsqlLanguageServer.port": 55555,
   "plpgsqlLanguageServer.migrations": {
     "upFiles": [
       "**/*.up.sql",

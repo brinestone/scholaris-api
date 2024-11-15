@@ -12,6 +12,42 @@ import (
 	"github.com/brinestone/scholaris/util"
 )
 
+// Validates a user's permission to create an enrollment form
+//
+//encore:middleware target=tag:can_create_enrollment_form
+func AllowedToCreateEnrollmentForm(request middleware.Request, next middleware.Next) (ans middleware.Response) {
+	ans = next(request)
+
+	uid, _ := auth.UserID()
+	ownerInfo, ok := request.Data().Payload.(models.OwnerInfo)
+	if !ok {
+		rlog.Debug("here")
+		return middleware.Response{
+			Err: &util.ErrForbidden,
+		}
+	}
+
+	req := dto.RelationCheckRequest{
+		Actor:    dto.IdentifierString(dto.PTUser, uid),
+		Relation: "can_create_enrollment_forms",
+		Target:   dto.IdentifierString(dto.PTInstitution, ownerInfo.GetOwner()),
+	}
+	res, err := permissions.CheckPermission(request.Context(), req)
+	if err != nil {
+		rlog.Error(util.MsgCallError, "err", err)
+		return middleware.Response{
+			Err: &util.ErrUnknown,
+		}
+	}
+	if !res.Allowed {
+		return middleware.Response{
+			Err: &util.ErrForbidden,
+		}
+	}
+
+	return
+}
+
 // Validates a user's permission to create an academic year
 //
 //encore:middleware target=tag:can_create_academic_year
