@@ -24,16 +24,22 @@ import (
 // Internally fetches settings
 //
 //encore:api private method=GET path=/settings/internal
-func GetSettingsInternal(ctx context.Context, req dto.GetSettingsInternalRequest) (*dto.GetSettingsResponse, error) {
+func GetSettingsInternal(ctx context.Context, req dto.GetSettingsInternalRequest) (res *dto.GetSettingsResponse, err error) {
 	mods, err := findSettingsFromDb(ctx, req.Owner, req.OwnerType, true, req.Ids...)
 	if err != nil {
-		return nil, err
+		return
 	}
 
 	dtos := settingsToDto(mods...)
-	return &dto.GetSettingsResponse{
-		Settings: dtos,
-	}, nil
+	res = &dto.GetSettingsResponse{
+		Settings: make(map[string]dto.Setting),
+	}
+
+	for _, d := range dtos {
+		res.Settings[d.Key] = d
+	}
+
+	return
 }
 
 // Sets the value(s) of a setting.  Intended for internal APIs
@@ -182,7 +188,11 @@ func FindSettings(ctx context.Context, req dto.GetSettingsRequest) (*dto.GetSett
 
 		dtos := settingsToDto(mods...)
 		settings = &dto.GetSettingsResponse{
-			Settings: dtos,
+			Settings: make(map[string]dto.Setting),
+		}
+
+		for _, d := range dtos {
+			settings.Settings[d.Key] = d
 		}
 
 		if err := settingsCache.Set(ctx, cacheKey(req.Owner, req.OwnerType), *settings); err != nil {

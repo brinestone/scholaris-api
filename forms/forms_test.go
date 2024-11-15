@@ -22,7 +22,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestMain(t *testing.M) {
+func mockEndpoints() {
 	et.MockEndpoint(permissions.CheckPermission, func(ctx context.Context, req dto.RelationCheckRequest) (*dto.RelationCheckResponse, error) {
 		return &dto.RelationCheckResponse{
 			Allowed: true,
@@ -41,6 +41,10 @@ func TestMain(t *testing.M) {
 			},
 		}, nil
 	})
+}
+
+func TestMain(t *testing.M) {
+	mockEndpoints()
 	t.Run()
 }
 
@@ -124,7 +128,7 @@ func makeFormQuestions(ctx context.Context, form uint64, count uint) error {
 
 func makeForm(ctx context.Context, options ...makeFormOption) (owner uint64, _ *dto.FormConfig, _ error) {
 	ownerId := uint64(rand.Int63n(10000))
-	desc := gofakeit.LoremIpsumParagraph(1, rand.Intn(20), rand.Intn(100), "\n")
+	desc := gofakeit.LoremIpsumParagraph(1, rand.Intn(3), rand.Intn(10), "\n")
 	var deadline *time.Time
 	if gofakeit.Bool() {
 		tmp := gofakeit.FutureDate()
@@ -144,7 +148,14 @@ func makeForm(ctx context.Context, options ...makeFormOption) (owner uint64, _ *
 		bgImg = &tmp
 	}
 
-	form, err := forms.NewForm(ctx, dto.NewFormInput{
+	var tagsCount = gofakeit.IntRange(0, 10)
+	var tags []string
+
+	for i := 0; i < tagsCount; i++ {
+		tags = append(tags, gofakeit.LoremIpsumWord())
+	}
+
+	res, err := forms.NewForm(ctx, dto.NewFormInput{
 		Title:           gofakeit.LoremIpsumSentence(gofakeit.IntRange(1, 10)),
 		Description:     &desc,
 		CaptchaToken:    randomString(20),
@@ -155,8 +166,12 @@ func makeForm(ctx context.Context, options ...makeFormOption) (owner uint64, _ *
 		Resubmission:    gofakeit.Bool(),
 		Image:           image,
 		BackgroundColor: bg,
+		Tags:            tags,
 		BackgroundImage: bgImg,
 	})
+	if err != nil {
+		return 0, nil, err
+	}
 
 	if len(options) > 0 {
 		for _, v := range options {
@@ -166,9 +181,14 @@ func makeForm(ctx context.Context, options ...makeFormOption) (owner uint64, _ *
 				if !ok {
 					cnt = gofakeit.UintRange(1, 20)
 				}
-				makeFormQuestions(ctx, form.Id, cnt)
+				makeFormQuestions(ctx, res.Id, cnt)
 			}
 		}
+	}
+
+	form, err := forms.GetFormInfo(ctx, res.Id)
+	if err != nil {
+		return ownerId, nil, err
 	}
 
 	return ownerId, form, err
@@ -181,6 +201,7 @@ func TestForms(t *testing.T) {
 	ownerId, form, err := makeForm(ctx)
 	if err != nil {
 		t.Error(err)
+		return
 	}
 
 	assert.NotNil(t, form)
@@ -196,7 +217,14 @@ func TestForms(t *testing.T) {
 	})
 
 	t.Run("TestFindForms_Owned", func(t *testing.T) {
+		et.MockEndpoint(permissions.ListRelations, func(ctx context.Context, p dto.ListRelationsRequest) (ans *dto.ListRelationsResponse, err error) {
+			ans = new(dto.ListRelationsResponse)
+			ans.Relations = make(map[dto.PermissionType][]uint64)
+			ans.Relations[dto.PermissionType(p.Type)] = []uint64{form.Id}
+			return
+		})
 		testFindOwnedForms(t, ownerId, ctx, dto.PTInstitution)
+		mockEndpoints()
 	})
 
 	t.Run("TestFindForms_Unowned", func(t *testing.T) {
@@ -447,7 +475,7 @@ func testCreateQuestions(t *testing.T, ctx context.Context, refId, group uint64)
 }
 
 func testFindUnOwnedForms(t *testing.T, owner uint64, ctx context.Context, ownerType dto.PermissionType, refId uint64) {
-	res, err := forms.FindForms(ctx, dto.GetFormsInput{
+	res, err := forms.FindForms(ctx, dto.FindFormsRequest{
 		Page:      0,
 		Size:      10,
 		Owner:     owner + 1,
@@ -459,13 +487,13 @@ func testFindUnOwnedForms(t *testing.T, owner uint64, ctx context.Context, owner
 	}
 
 	assert.NotNil(t, res)
-	for _, v := range res.Data {
+	for _, v := range res.Forms {
 		assert.NotEqual(t, refId, v.Id)
 	}
 }
 
 func testFindOwnedForms(t *testing.T, owner uint64, ctx context.Context, ownerType dto.PermissionType) {
-	res, err := forms.FindForms(ctx, dto.GetFormsInput{
+	res, err := forms.FindForms(ctx, dto.FindFormsRequest{
 		Page:      0,
 		Size:      10,
 		Owner:     owner,
@@ -473,10 +501,11 @@ func testFindOwnedForms(t *testing.T, owner uint64, ctx context.Context, ownerTy
 	})
 	if err != nil {
 		t.Error(err)
+		return
 	}
 
 	assert.NotNil(t, res)
-	assert.Greater(t, res.Meta.Total, uint(0))
+	assert.NotEmpty(t, res.Forms)
 }
 
 func testUpdateForm(t *testing.T, ctx context.Context, form *dto.FormConfig) {
@@ -494,6 +523,7 @@ func testUpdateForm(t *testing.T, ctx context.Context, form *dto.FormConfig) {
 	res, err := forms.UpdateForm(ctx, form.Id, request)
 	if err != nil {
 		t.Error(err)
+		return
 	}
 
 	assert.NotNil(t, res)
@@ -574,7 +604,7 @@ func testFormQuestionGrouping(t *testing.T, ctx context.Context, formId uint64, 
 func TestResponses(t *testing.T) {
 	uid, userData := makeUser()
 	ctx := auth.WithContext(context.TODO(), uid, &userData)
-	_, form, err := makeForm(ctx, withOption(questionCount, gofakeit.UintRange(1, 5)))
+	_, form, err := makeForm(ctx, withOption(questionCount, gofakeit.UintRange(1, 15)))
 	if err != nil {
 		t.Error(err)
 		return

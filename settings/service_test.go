@@ -6,7 +6,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"maps"
 	"math/rand"
+	"slices"
 	"testing"
 
 	"encore.dev/beta/auth"
@@ -118,7 +120,7 @@ func TestUpdateSettings(t *testing.T) {
 				t.FailNow()
 				return
 			}
-			setting := res.Settings[index]
+			setting := slices.Collect(maps.Values(res.Settings))[index]
 
 			testUpdateUsingExistingSetting(t, mainContext, owner, ownerType, setting.Key)
 			mockEndpoints()

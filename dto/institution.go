@@ -11,13 +11,14 @@ import (
 
 // Well-known institution setting keys
 const (
-	SKAcademicYearDuration           = "academicYearDuration"
-	SKAcademicTermCount              = "academicTermsCount"
-	SKAcademicYearStartDateOffset    = "academicYearStartDateOffset"
-	SKAcademicTermDurations          = "academicTermDurations"
-	SKVacationDurations              = "vacationDurations"
-	SKAcademicYearAutoCreation       = "academicYearAutoCreation"
-	SKAcademicYearAutoCreationOffset = "academicYearAutoCreationOffset"
+	SKAcademicYearDuration            = "academicYearDuration"
+	SKAcademicTermCount               = "academicTermsCount"
+	SKDefaultEnrollmentResponseWindow = "defaultEnrollmentResponseWindow"
+	SKAcademicYearStartDateOffset     = "academicYearStartDateOffset"
+	SKAcademicTermDurations           = "academicTermDurations"
+	SKVacationDurations               = "vacationDurations"
+	SKAcademicYearAutoCreation        = "academicYearAutoCreation"
+	SKAcademicYearAutoCreationOffset  = "academicYearAutoCreationOffset"
 )
 
 type AcademicTerm struct {

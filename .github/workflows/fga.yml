@@ -4,6 +4,9 @@ on:
     push:
         branches:
           - next
+        paths:
+          - '**/*.fga'
+          - fga.mod
 
 jobs:
   deploy_model:
