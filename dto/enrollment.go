@@ -41,7 +41,12 @@ func (n NewEnrollmentFormRequest) Validate() (err error) {
 type NewEnrollmentRequest struct {
 	Destination             uint64 `header:"x-owner"`
 	ServiceTransactionToken string `header:"x-service-transaction"`
+	Level                   uint64 `json:"level"`
 	CaptchaToken            string `json:"captcha"`
+}
+
+func (n NewEnrollmentRequest) GetLevelRef() uint64 {
+	return n.Level
 }
 
 func (n NewEnrollmentRequest) GetCaptchaToken() string {
@@ -58,6 +63,10 @@ func (n NewEnrollmentRequest) GetOwnerType() string {
 
 func (ne NewEnrollmentRequest) Validate() error {
 	var msgs = make([]string, 0)
+
+	if ne.Level == 0 {
+		msgs = append(msgs, "Invalid level value")
+	}
 
 	if len(ne.CaptchaToken) == 0 {
 		msgs = append(msgs, "Invalid captcha token")

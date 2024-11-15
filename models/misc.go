@@ -10,3 +10,7 @@ type OwnerInfo interface {
 	GetOwner() uint64
 	GetOwnerType() string
 }
+
+type HasLevelIdentifier interface {
+	GetLevelRef() uint64
+}

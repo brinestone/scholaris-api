@@ -272,6 +272,7 @@ func toInstitutionDto(in *models.Institution) *dto.Institution {
 		TenantId:  in.TenantId,
 		CreatedAt: in.CreatedAt,
 		UpdatedAt: in.UpdatedAt,
+		Verified:  in.Verified,
 		IsMember:  false,
 	}
 

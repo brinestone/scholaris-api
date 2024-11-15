@@ -10,13 +10,14 @@ import (
 	"encore.dev/storage/sqldb"
 	"github.com/brinestone/scholaris/dto"
 	"github.com/brinestone/scholaris/forms"
+	"github.com/brinestone/scholaris/models"
 	"github.com/brinestone/scholaris/settings"
 	"github.com/brinestone/scholaris/util"
 )
 
 // Creates an enrollment
 //
-//encore:api auth method=POST path=/institutions/enroll
+//encore:api auth method=POST path=/institutions/enroll tag:can_enroll
 func NewEnrollment(ctx context.Context, req dto.NewEnrollmentRequest) (err error) {
 
 	return
@@ -37,14 +38,14 @@ func NewEnrollmentForm(ctx context.Context, req dto.NewEnrollmentFormRequest) (e
 		return
 	}
 
-	var deadlineSetting dto.Setting
-	var deadline *time.Time
-	deadlineSetting, ok := settings.Settings[dto.SKDefaultEnrollmentResponseWindow]
+	var responseWindowSetting dto.Setting
+	var responseWindow *time.Duration
+	responseWindowSetting, ok := settings.Settings[dto.SKDefaultEnrollmentResponseWindow]
 	if ok {
-		deadlineStr := *deadlineSetting.Values[0].Value
-		d, _ := strconv.ParseInt(strings.Split(deadlineStr, " ")[1], 10, 64)
-		tmp := time.Now().Add(time.Hour * time.Duration(d))
-		deadline = &tmp
+		responseWindowStr := *responseWindowSetting.Values[0].Value
+		d, _ := strconv.ParseInt(strings.Split(responseWindowStr, " ")[1], 10, 64)
+		tmp := time.Hour * time.Duration(d)
+		responseWindow = &tmp
 	}
 
 	formInfo, err := forms.NewForm(ctx, dto.NewFormInput{
@@ -55,7 +56,7 @@ func NewEnrollmentForm(ctx context.Context, req dto.NewEnrollmentFormRequest) (e
 		CaptchaToken:    req.GetCaptchaToken(),
 		Owner:           req.GetOwner(),
 		OwnerType:       req.GetOwnerType(),
-		Deadline:        deadline,
+		ResponseWindow:  responseWindow,
 		MaxResponses:    1,
 		MaxSubmissions:  1,
 		Tags:            []string{"enrollment"},
@@ -92,5 +93,24 @@ func registerEnrollmentForm(ctx context.Context, tx *sqldb.Tx, form, institution
 	`
 
 	_, err = tx.Exec(ctx, query, form, institution)
+	return
+}
+
+func findLevelEnrollmentForm(ctx context.Context, level, institution uint64) (ans *models.Form, err error) {
+	query := `
+		SELECT
+			form
+		FROM
+			enrollment_forms
+		WHERE
+			institution=$1 AND level=$2
+		;
+	`
+	var formId uint64
+	if err = db.QueryRow(ctx, query, institution, level).Scan(&formId); err != nil {
+		return
+	}
+
+	ans, err = forms.GetFormInfoInternal(ctx, formId)
 	return
 }

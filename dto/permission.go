@@ -89,11 +89,11 @@ type RelationCondition struct {
 	Context []ContextEntry
 }
 
-func HavingEntry(name, _type, value string) ContextEntry {
+func HavingEntry(name, _type string, value any) ContextEntry {
 	return ContextEntry{
 		Name:  name,
 		Type:  _type,
-		Value: value,
+		Value: fmt.Sprintf("%v", value),
 	}
 }
 

@@ -1,6 +1,8 @@
--- ! This view is modified in version 10.
+ALTER TABLE forms
+ADD response_window INTERVAL,
+ADD response_start DATE NOT NULL;
 
-CREATE VIEW
+CREATE OR REPLACE VIEW
     vw_AllForms AS
 SELECT
     f.id,
@@ -16,7 +18,7 @@ SELECT
     f.multi_response,
     f.response_resubmission,
     f.status,
-    f.deadline,
+    COALESCE((f.response_start + f.response_window), NULL) AS deadline,
     ARRAY_TO_JSON(
         COALESCE(
             (
@@ -50,7 +52,16 @@ SELECT
             AND _fr.submitted_at IS NOT NULL
     ) AS submission_count,
     ARRAY_TO_JSON(COALESCE(f.tags, '{}')) AS tags,
-    f.max_responses
+    f.max_responses,
+    f.response_start,
+    COALESCE(
+        EXTRACT(
+            EPOCH
+            FROM
+                f.response_window
+        ) * 1000000,
+        NULL
+    ) AS response_window
 FROM
     forms f
     LEFT JOIN form_questions fq ON fq.form = f.id
@@ -58,3 +69,6 @@ FROM
     LEFT JOIN form_responses fr ON fr.form = f.id
 GROUP BY
     f.id;
+
+ALTER TABLE forms
+DROP deadline;

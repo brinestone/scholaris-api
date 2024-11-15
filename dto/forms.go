@@ -253,21 +253,27 @@ func (n UpdateFormQuestionRequest) Validate() error {
 }
 
 type UpdateFormRequest struct {
-	Title           string     `json:"title,omitempty" encore:"optional"`
-	Description     *string    `json:"description,omitempty" encore:"optional"`
-	BackgroundColor *string    `json:"backgroundColor,omitempty" encore:"optional"`
-	BackgroundImage *string    `json:"backgroundImage,omitempty" encore:"optional"`
-	Image           *string    `json:"image,omitempty" encore:"optional"`
-	MultiResponse   bool       `json:"multiResponse"`
-	Resubmission    bool       `json:"resubmission"`
-	CaptchaToken    string     `header:"x-ver-token"`
-	Deadline        *time.Time `json:"deadline,omitempty" encore:"optional"`
-	MaxResponses    *uint      `json:"maxResponses,omitempty" encore:"optional"`
-	MaxSubmissions  *uint      `json:"maxSubmissions,omitempty" encore:"optional"`
+	Title           string         `json:"title,omitempty" encore:"optional"`
+	Description     *string        `json:"description,omitempty" encore:"optional"`
+	BackgroundColor *string        `json:"backgroundColor,omitempty" encore:"optional"`
+	BackgroundImage *string        `json:"backgroundImage,omitempty" encore:"optional"`
+	Image           *string        `json:"image,omitempty" encore:"optional"`
+	MultiResponse   bool           `json:"multiResponse"`
+	Resubmission    bool           `json:"resubmission"`
+	CaptchaToken    string         `header:"x-ver-token"`
+	Deadline        *time.Time     `json:"deadline,omitempty" encore:"optional"`
+	MaxResponses    *uint          `json:"maxResponses,omitempty" encore:"optional"`
+	MaxSubmissions  *uint          `json:"maxSubmissions,omitempty" encore:"optional"`
+	ResponseStart   time.Time      `json:"responseStart"`
+	ResponseWindow  *time.Duration `json:"responseWindow,omitempty" encore:"optional"`
 }
 
 func (n UpdateFormRequest) Validate() error {
 	var msgs = make([]string, 0)
+
+	if n.ResponseWindow != nil && n.ResponseWindow.Hours() <= 0 {
+		msgs = append(msgs, "The value of the repsonseWindow if defined, must be greater than zero")
+	}
 
 	if len(n.Title) == 0 {
 		msgs = append(msgs, "The title field is required")
@@ -353,20 +359,21 @@ type NewFormResponse struct {
 }
 
 type NewFormInput struct {
-	Title           string     `json:"title"`
-	Description     *string    `json:"description,omitempty" encore:"optional"`
-	BackgroundColor *string    `json:"backgroundColor,omitempty" encore:"optional"`
-	BackgroundImage *string    `json:"backgroundImage,omitempty" encore:"optional"`
-	Image           *string    `json:"image,omitempty" encore:"optional"`
-	MultiResponse   bool       `json:"multiResponse"`
-	Resubmission    bool       `json:"resubmission"`
-	CaptchaToken    string     `header:"x-ver-token"`
-	Owner           uint64     `header:"x-owner"`
-	OwnerType       string     `header:"x-owner-type"`
-	Deadline        *time.Time `json:"deadline,omitempty" encore:"optional"`
-	MaxResponses    uint       `json:"maxResponses"`
-	MaxSubmissions  uint       `json:"maxSubmissions"`
-	Tags            []string   `json:"tags,omitempty" encore:"optional"`
+	Title           string         `json:"title"`
+	Description     *string        `json:"description,omitempty" encore:"optional"`
+	BackgroundColor *string        `json:"backgroundColor,omitempty" encore:"optional"`
+	BackgroundImage *string        `json:"backgroundImage,omitempty" encore:"optional"`
+	Image           *string        `json:"image,omitempty" encore:"optional"`
+	MultiResponse   bool           `json:"multiResponse"`
+	Resubmission    bool           `json:"resubmission"`
+	CaptchaToken    string         `header:"x-ver-token"`
+	Owner           uint64         `header:"x-owner"`
+	OwnerType       string         `header:"x-owner-type"`
+	ResponseWindow  *time.Duration `json:"repsonseWindow,omitempty" encore:"optional"`
+	ResponseStart   time.Time      `json:"responseStart"`
+	MaxResponses    uint           `json:"maxResponses"`
+	MaxSubmissions  uint           `json:"maxSubmissions"`
+	Tags            []string       `json:"tags,omitempty" encore:"optional"`
 }
 
 func (n NewFormInput) GetCaptchaToken() string {
@@ -376,8 +383,12 @@ func (n NewFormInput) GetCaptchaToken() string {
 func (n NewFormInput) Validate() error {
 	var msgs = make([]string, 0)
 
-	if n.Deadline != nil && n.Deadline.Before(time.Now()) {
-		msgs = append(msgs, "The value for deadline must be a future date/time")
+	if n.ResponseStart.Before(time.Now()) {
+		msgs = append(msgs, "The responseStart value must be a future date")
+	}
+
+	if n.ResponseWindow != nil && n.ResponseWindow.Hours() == 0 {
+		msgs = append(msgs, "The value for responseWindow cannot be zero")
 	}
 
 	if len(n.Title) == 0 {
@@ -435,7 +446,9 @@ type FormConfig struct {
 	// The maxiumum number of submissions a user can make for the form.
 	MaxSubmissions *uint `json:"maxSubmissions,omitempty" encore:"optional"`
 	// Tags attached to the form
-	Tags        []string `json:"tags,omitempty"`
-	GroupIds    []uint64 `json:"groupIds,omitempty"`
-	QuestionIds []uint64 `json:"questionIds,omitempty"`
+	Tags           []string       `json:"tags,omitempty"`
+	GroupIds       []uint64       `json:"groupIds,omitempty"`
+	QuestionIds    []uint64       `json:"questionIds,omitempty"`
+	ResponseStart  time.Time      `json:"responseStart"`
+	ResponseWindow *time.Duration `json:"responseWindow,omitempty" encore:"optional"`
 }

@@ -111,6 +111,7 @@ type Institution struct {
 	CreatedAt   time.Time `json:"createdAt"`
 	UpdatedAt   time.Time `json:"updatedAt"`
 	IsMember    bool      `json:"isMember"`
+	Verified    bool      `json:"verified"`
 	Members     int       `json:"members"`
 }
 

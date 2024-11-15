@@ -12,6 +12,7 @@ type institution
     define can_set_setting_value: [user] or can_edit_settings or can_set_setting_value from parent
     define can_update: can_update from parent or maintainer
     define can_view: [user:* with institution_visible] or member
+    define can_enroll: [user:* with enrollment_available]
     define can_view_settings: can_edit_settings or can_create_settings
     # roles
     define maintainer: [user] or maintainer from parent or admin
@@ -55,4 +56,8 @@ condition enrollment_published(status: string) {
 
 condition institution_visible(visibility: bool) {
   visibility
+}
+
+condition enrollment_available(institutionVerified: bool, current_time: timestamp, deadline: timestamp) {
+  institutionVerified && (deadline == null || deadline > current_time)
 }
