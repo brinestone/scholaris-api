@@ -5,3 +5,4 @@ encore.gen.cue
 .secrets.local*
 /tmp
 node_modules
+.idea/

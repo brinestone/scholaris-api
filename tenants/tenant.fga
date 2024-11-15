@@ -1,0 +1,26 @@
+module tenant
+
+type tenant
+  relations
+    define admin: [user] or owner
+    define can_change_owner: owner
+    define can_create_forms: maintainer or admin
+    define can_create_institution: admin
+    define can_create_settings: admin
+    define can_delete: owner
+    define can_edit_settings: [user] or can_create_settings
+    define can_set_setting_value: [user] or can_edit_settings
+    define can_update: maintainer or admin
+    define can_update_subscription: maintainer
+    define can_view_settings: can_edit_settings or can_create_settings
+    define maintainer: [user] or admin
+    define member: [user]
+    define owner: [user]
+
+type subscription
+  relations
+    define can_delete: editor
+    define can_suspend: editor
+    define editor: maintainer from owner
+    define owner: [tenant]
+    define viewer: member from owner

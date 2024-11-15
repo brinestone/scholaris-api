@@ -21,6 +21,7 @@ import (
 	"github.com/brinestone/scholaris/dto"
 	"github.com/brinestone/scholaris/models"
 	"github.com/brinestone/scholaris/util"
+	"github.com/lib/pq"
 )
 
 // Submits a user's response
@@ -291,12 +292,12 @@ func GetFormInfo(ctx context.Context, form uint64) (*dto.FormConfig, error) {
 			}
 		}
 
-		ans := formToDto(_cfg)
-		if err := formCache.Set(ctx, form, *ans); err != nil {
+		ans := formsToDto(_cfg)
+		if err := formCache.Set(ctx, form, ans[0]); err != nil {
 			rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
 		}
 
-		cfg = *ans
+		cfg = ans[0]
 	}
 
 	uid, authed := auth.UserID()
@@ -348,8 +349,8 @@ func ToggleFormStatus(ctx context.Context, form uint64) (*dto.FormConfig, error)
 		return nil, &util.ErrUnknown
 	}
 
-	ans := formToDto(f)
-	if err := formCache.Set(ctx, form, *ans); err != nil {
+	ans := formsToDto(f)
+	if err := formCache.Set(ctx, form, ans[0]); err != nil {
 		rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
 	}
 
@@ -359,7 +360,7 @@ func ToggleFormStatus(ctx context.Context, form uint64) (*dto.FormConfig, error)
 			Timestamp: f.UpdatedAt,
 		})
 	}
-	return ans, nil
+	return &ans[0], nil
 }
 
 // Deletes a form
@@ -555,12 +556,12 @@ func UpdateForm(ctx context.Context, id uint64, req dto.UpdateFormRequest) (*dto
 		return nil, &util.ErrUnknown
 	}
 
-	ans := formToDto(form)
-	if err := formCache.Set(ctx, id, *ans); err != nil {
+	ans := formsToDto(form)
+	if err := formCache.Set(ctx, id, ans[0]); err != nil {
 		rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
 	}
 
-	return ans, nil
+	return &ans[0], nil
 }
 
 // Gets an owner's form data
@@ -592,7 +593,7 @@ func FindFormQuestions(ctx context.Context, id uint64) (*dto.GetFormQuestionsRes
 // Gets forms of an owner
 //
 //encore:api public method=GET path=/forms
-func FindForms(ctx context.Context, params dto.GetFormsInput) (*dto.PaginatedResponse[dto.FormConfig], error) {
+func FindForms(ctx context.Context, params dto.FindFormsRequest) (*dto.GetFormsResponse, error) {
 	ownerType, _ := dto.PermissionTypeFromString(params.OwnerType)
 	var overrides []uint64
 	uid, authed := auth.UserID()
@@ -606,28 +607,21 @@ func FindForms(ctx context.Context, params dto.GetFormsInput) (*dto.PaginatedRes
 			rlog.Error(util.MsgCallError, "msg", err.Error())
 			return nil, &util.ErrUnknown
 		}
-		overrides, _ = res.Relations[dto.PTForm]
+		overrides = res.Relations[dto.PTForm]
 	}
 
 	res, err := findFormsFromCache(ctx, int(params.Page), int(params.Size), ownerType, params.Owner)
 	if errors.Is(err, cache.Miss) {
-		formsFromDb, count, err := findFormsFromDb(ctx, int(params.Page), int(params.Size), params.Owner, overrides...)
+		formsFromDb, err := findFormsFromDb(ctx, params.Page, params.Size, params.Owner, params.OwnerType, overrides)
+		rlog.Debug("here", "overrides", overrides)
 		if err != nil {
 			return nil, err
 		}
 
-		var forms []*dto.FormConfig = make([]*dto.FormConfig, len(formsFromDb))
-		for i, v := range formsFromDb {
-			forms[i] = formToDto(v)
-		}
+		var forms = formsToDto(formsFromDb...)
 
-		meta := dto.PaginatedResponseMeta{
-			Total: uint(count),
-		}
-
-		response := &dto.PaginatedResponse[dto.FormConfig]{
-			Data: forms,
-			Meta: meta,
+		response := &dto.GetFormsResponse{
+			Forms: forms,
 		}
 
 		if len(formsFromDb) > 0 {
@@ -647,7 +641,7 @@ func FindForms(ctx context.Context, params dto.GetFormsInput) (*dto.PaginatedRes
 // Creates a new form
 //
 //encore:api auth method=POST path=/forms tag:needs_captcha_ver
-func NewForm(ctx context.Context, req dto.NewFormInput) (*dto.FormConfig, error) {
+func NewForm(ctx context.Context, req dto.NewFormInput) (response dto.NewFormResponse, err error) {
 	uid, _ := auth.UserID()
 	pt, _ := dto.PermissionTypeFromString(req.OwnerType)
 	permission, err := permissions.CheckPermission(ctx, dto.RelationCheckRequest{
@@ -655,29 +649,29 @@ func NewForm(ctx context.Context, req dto.NewFormInput) (*dto.FormConfig, error)
 		Relation: models.PermCanCreateForms,
 		Target:   dto.IdentifierString(pt, req.Owner),
 	})
-	if err != nil {
-		if errs.Convert(err) != nil {
+	if err != nil || !permission.Allowed {
+		if err != nil && errs.Convert(err) != nil {
 			rlog.Warn(util.MsgCallError, "msg", err.Error())
 		}
-		return nil, &util.ErrForbidden
-	} else if !permission.Allowed {
-		return nil, &util.ErrForbidden
+		err = &util.ErrForbidden
+		return
 	}
 
 	tx, err := formsDb.Begin(ctx)
 	if err != nil {
 		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
-		return nil, &util.ErrUnknown
+		err = &util.ErrUnknown
+		return
 	}
 
-	form, err := createForm(ctx, tx, req.Owner, req)
+	response.Id, err = createForm(ctx, tx, req.Owner, req)
 	if err != nil {
 		tx.Rollback()
 		if errs.Convert(err) == nil {
-			return nil, err
+			return
 		} else {
 			rlog.Error(err.Error())
-			return nil, &util.ErrUnknown
+			err = &util.ErrUnknown
 		}
 	}
 
@@ -686,11 +680,11 @@ func NewForm(ctx context.Context, req dto.NewFormInput) (*dto.FormConfig, error)
 			{
 				Actor:    dto.IdentifierString(dto.PermissionType(req.OwnerType), req.Owner),
 				Relation: models.PermOwner,
-				Target:   dto.IdentifierString(dto.PTForm, form.Id),
+				Target:   dto.IdentifierString(dto.PTForm, response.Id),
 			}, {
 				Actor:    dto.IdentifierString(dto.PTUser, uid),
 				Relation: models.PermEditor,
-				Target:   dto.IdentifierString(dto.PTForm, form.Id),
+				Target:   dto.IdentifierString(dto.PTForm, response.Id),
 			},
 		},
 	}
@@ -698,23 +692,18 @@ func NewForm(ctx context.Context, req dto.NewFormInput) (*dto.FormConfig, error)
 	if err := permissions.SetPermissions(ctx, update); err != nil {
 		rlog.Error(err.Error())
 		tx.Rollback()
-		return nil, &util.ErrUnknown
+		err = &util.ErrUnknown
 	}
 	tx.Commit()
 
-	ans := formToDto(form)
-	if err := formCache.Set(ctx, form.Id, *ans); err != nil {
-		rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
-	}
-
 	NewForms.Publish(ctx, FormEvent{
-		Id:        ans.Id,
-		Timestamp: ans.CreatedAt,
+		Id:        response.Id,
+		Timestamp: time.Now(),
 	})
-	return ans, nil
+	return
 }
 
-func createForm(ctx context.Context, tx *sqldb.Tx, owner uint64, input dto.NewFormInput) (*models.Form, error) {
+func createForm(ctx context.Context, tx *sqldb.Tx, owner uint64, input dto.NewFormInput) (id uint64, err error) {
 	query := `
 		INSERT INTO
 			forms(
@@ -728,10 +717,12 @@ func createForm(ctx context.Context, tx *sqldb.Tx, owner uint64, input dto.NewFo
 				response_resubmission,
 				deadline,
 				max_responses,
-				max_submissions
+				max_submissions,
+				owner_type,
+				tags
 			)
 		VALUES
-			($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+			($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
 		RETURNING id;
 	`
 
@@ -761,39 +752,22 @@ func createForm(ctx context.Context, tx *sqldb.Tx, owner uint64, input dto.NewFo
 		deadline = input.Deadline
 	}
 
-	var id uint64
-	if err := tx.QueryRow(ctx, query, input.Title, description, bg, bgImg, img, owner, input.MultiResponse, input.Resubmission, deadline, maxResponses, maxSubmissions).Scan(&id); err != nil {
-		return nil, err
+	if err = tx.QueryRow(ctx, query, input.Title, description, bg, bgImg, img, owner, input.MultiResponse, input.Resubmission, deadline, maxResponses, maxSubmissions, input.OwnerType, pq.Array(input.Tags)).Scan(&id); err != nil {
+		return
 	}
 
-	return findFormFromDbTx(ctx, tx, id)
+	return
 }
 
 func findFormQuestionsFromDb(ctx context.Context, id uint64) ([]*models.FormQuestion, []*models.FormQuestionGroup, error) {
 	questionsQuery := `
 		SELECT
-			fq.id,
-			fq.prompt,
-			fq.is_required,
-			fq.type,
-			fq.layout_variant,
-			COALESCE(json_agg(json_build_object(
-				'id', fqo.id,
-				'caption', fqo.caption,
-				'value', fqo.value,
-				'image', fqo.image,
-				'isDefault', fqo.is_default
-			)) FILTER (WHERE fqo.question IS NOT NULL), '[]') AS options,
-			fq.form_group
+			*
 		FROM
-			form_questions fq
-		LEFT JOIN
-			form_question_options fqo
-				ON fqo.question = fq.id
+			vw_AllQuestionOptions a
 		WHERE
-			fq.form = $1
-		GROUP BY
-			fq.id;
+			a.form = $1
+		;
 	`
 
 	rows, err := formsDb.Query(ctx, questionsQuery, id)
@@ -806,16 +780,16 @@ func findFormQuestionsFromDb(ctx context.Context, id uint64) ([]*models.FormQues
 
 	var ans []*models.FormQuestion = make([]*models.FormQuestion, 0)
 	for rows.Next() {
-		var question = new(models.FormQuestion)
+		var q = new(models.FormQuestion)
 		var optionsJson string
-		if err := rows.Scan(&question.Id, &question.Prompt, &question.IsRequired, &question.Type, &question.LayoutVariant, &optionsJson, &question.Group); err != nil {
+		if err := rows.Scan(&q.Id, &q.Prompt, &q.IsRequired, &q.Type, &q.LayoutVariant, &optionsJson, &q.Group, &q.Form); err != nil {
 			return nil, nil, err
 		}
 
-		if err := json.Unmarshal([]byte(optionsJson), &question.Options); err != nil {
+		if err := json.Unmarshal([]byte(optionsJson), &q.Options); err != nil {
 			return nil, nil, err
 		}
-		ans = append(ans, question)
+		ans = append(ans, q)
 	}
 	var groups []*models.FormQuestionGroup = make([]*models.FormQuestionGroup, 0)
 
@@ -851,145 +825,62 @@ func findFormQuestionsFromDb(ctx context.Context, id uint64) ([]*models.FormQues
 	return ans, groups, nil
 }
 
-func findFormFromDb(ctx context.Context, id uint64) (*models.Form, error) {
-	query := `
-		SELECT
-			id,
-			title,
-			description,
-			meta_background,
-			meta_bg_img,
-			meta_img,
-			created_at,
-			updated_at,
-			owner,
-			multi_response,
-			response_resubmission,
-			status,
-			deadline,
-			max_responses,
-			max_submissions
-		FROM
-			forms
-		WHERE
-			id = $1
-		;
-	`
-
-	var form *models.Form = new(models.Form)
-	if err := formsDb.QueryRow(ctx, query, id).Scan(&form.Id, &form.Title, &form.Description, &form.BackgroundColor, &form.BackgroundImage, &form.Image, &form.CreatedAt, &form.UpdatedAt, &form.Owner, &form.MultiResponse, &form.Resubmission, &form.Status, &form.Deadline, &form.MaxResponses, &form.MaxSubmissions); err != nil {
-		return nil, err
+func findFormFromDb(ctx context.Context, id uint64) (form *models.Form, err error) {
+	query := `SELECT * FROM vw_AllForms WHERE id=$1;`
+	form = new(models.Form)
+	var questionIdsJson, groupIdsJson, tagsJson string
+	if err = formsDb.QueryRow(ctx, query, id).Scan(&form.Id, &form.Title, &form.Description, &form.BackgroundColor, &form.BackgroundImage, &form.Image, &form.CreatedAt, &form.UpdatedAt, &form.Owner, &form.OwnerType, &form.MultiResponse, &form.Resubmission, &form.Status, &form.Deadline, &questionIdsJson, &groupIdsJson, &form.ResponseCount, &form.SubmissionCount, &tagsJson, &form.MaxResponses); err != nil {
+		form = nil
+		return
 	}
-	return form, nil
+
+	if err = json.Unmarshal([]byte(questionIdsJson), &form.QuestionIds); err != nil {
+		return
+	}
+
+	if err = json.Unmarshal([]byte(groupIdsJson), &form.GroupIds); err != nil {
+		return
+	}
+
+	if err = json.Unmarshal([]byte(tagsJson), &form.Tags); err != nil {
+		return
+	}
+	return
 }
 
-func findFormFromDbTx(ctx context.Context, tx *sqldb.Tx, id uint64) (*models.Form, error) {
-	query := `
-		SELECT
-			id,
-			title,
-			description,
-			meta_background,
-			meta_bg_img,
-			meta_img,
-			created_at,
-			updated_at,
-			owner,
-			multi_response,
-			response_resubmission,
-			status,
-			deadline,
-			max_responses,
-			max_submissions
-		FROM
-			forms
-		WHERE
-			id = $1
-		;
-	`
-
-	var form *models.Form = new(models.Form)
-	if err := tx.QueryRow(ctx, query, id).Scan(&form.Id, &form.Title, &form.Description, &form.BackgroundColor, &form.BackgroundImage, &form.Image, &form.CreatedAt, &form.UpdatedAt, &form.Owner, &form.MultiResponse, &form.Resubmission, &form.Status, &form.Deadline, &form.MaxResponses, &form.MaxSubmissions); err != nil {
-		return nil, err
-	}
-	return form, nil
-}
-
-func findFormsFromDb(ctx context.Context, page, size int, owner uint64, overrides ...uint64) ([]*models.Form, uint64, error) {
-
-	var overrideClause = ""
-	args := make([]any, len(overrides)+3)
-	args[0] = owner
-	args[1] = page * size
-	args[2] = size
-	if len(overrides) > 0 {
-		placeholders := make([]string, len(overrides))
-		for i, id := range overrides {
-			placeholders[i] = fmt.Sprintf("$%d", i+4)
-			args[i+3] = id
-		}
-		overrideClause = fmt.Sprintf("OR (owner=$1 AND id IN (%s)) ", strings.Join(placeholders, ","))
-	}
-
-	query := fmt.Sprintf(`
-		SELECT
-			id,
-			title,
-			description,
-			meta_background,
-			meta_bg_img,
-			meta_img,
-			created_at,
-			updated_at,
-			owner,
-			multi_response,
-			response_resubmission,
-			status,
-			deadline,
-			max_responses,
-			max_submissions
-		FROM
-			forms
-		WHERE
-			owner = $1 AND status='published' AND deadline > NOW() %s
-		OFFSET $2
-		LIMIT $3;
-	`, overrideClause)
-
-	if size == 0 {
-		args[2] = 100
-	}
-
-	rows, err := formsDb.Query(ctx, query, args...)
-	if errors.Is(err, sqldb.ErrNoRows) {
-		return nil, 0, nil
-	} else if err != nil {
-		return nil, 0, err
+func findFormsFromDb(ctx context.Context, page, size int, owner uint64, ownerType string, overrides []uint64) (ans []*models.Form, err error) {
+	query := `SELECT * FROM func_find_forms($1,$2,$3,$4,$5);`
+	rows, err := formsDb.Query(ctx, query, owner, ownerType, pq.Array(overrides), page, size)
+	if err != nil {
+		return
 	}
 	defer rows.Close()
 
-	var ans = make([]*models.Form, 0)
+	var cnt = 0
 	for rows.Next() {
+		cnt++
 		var form = new(models.Form)
-		if err := rows.Scan(&form.Id, &form.Title, &form.Description, &form.BackgroundColor, &form.BackgroundImage, &form.Image, &form.CreatedAt, &form.UpdatedAt, &form.Owner, &form.MultiResponse, &form.Resubmission, &form.Status, &form.Deadline, &form.MaxResponses, &form.MaxSubmissions); err != nil {
-			return nil, 0, err
+		var questionIdsJson, groupIdsJson, tagsJson string
+		if err = formsDb.QueryRow(ctx, query, owner, ownerType, pq.Array(overrides), page, size).Scan(&form.Id, &form.Title, &form.Description, &form.BackgroundColor, &form.BackgroundImage, &form.Image, &form.CreatedAt, &form.UpdatedAt, &form.Owner, &form.OwnerType, &form.MultiResponse, &form.Resubmission, &form.Status, &form.Deadline, &questionIdsJson, &groupIdsJson, &form.ResponseCount, &form.SubmissionCount, &tagsJson, &form.MaxResponses); err != nil {
+			form = nil
+			return
+		}
+
+		if err = json.Unmarshal([]byte(questionIdsJson), &form.QuestionIds); err != nil {
+			return
+		}
+
+		if err = json.Unmarshal([]byte(groupIdsJson), &form.GroupIds); err != nil {
+			return
+		}
+
+		if err = json.Unmarshal([]byte(tagsJson), &form.Tags); err != nil {
+			return
 		}
 		ans = append(ans, form)
 	}
-
-	countQuery := `
-		SELECT
-			COUNT(*)
-		FROM
-			forms
-		WHERE
-			owner = $1;
-	`
-	var count uint64
-	if err := formsDb.QueryRow(ctx, countQuery, owner).Scan(&count); err != nil {
-		return nil, 0, err
-	}
-	return ans, count, nil
+	rlog.Debug("test", "ans", ans, "cnt", cnt)
+	return
 }
 
 func questionsCacheKey(form uint64) string {
@@ -1006,63 +897,70 @@ func formsCacheKey(page, size int, ownerType dto.PermissionType, owner uint64) s
 	return hex.EncodeToString(sum[:])
 }
 
-func findFormsFromCache(ctx context.Context, page, size int, ownerType dto.PermissionType, owner uint64) (*dto.PaginatedResponse[dto.FormConfig], error) {
+func findFormsFromCache(ctx context.Context, page, size int, ownerType dto.PermissionType, owner uint64) (*dto.GetFormsResponse, error) {
 	key := formsCacheKey(page, size, ownerType, owner)
 	ans, err := formsCache.Get(ctx, key)
 	return &ans, err
 }
 
-func formToDto(f *models.Form) *dto.FormConfig {
-	var bgColor, bgImage, image, description *string
-	var deadline *time.Time
-	var maxResponses, maxSubmissions *uint
+func formsToDto(v ...*models.Form) (ans []dto.FormConfig) {
+	for _, f := range v {
+		var bgColor, bgImage, image, description *string
+		var deadline *time.Time
+		var maxResponses, maxSubmissions *uint
 
-	if f.Deadline.Valid {
-		deadline = &f.Deadline.Time
-	}
+		if f.Deadline.Valid {
+			deadline = &f.Deadline.Time
+		}
 
-	if f.BackgroundColor.Valid {
-		bgColor = &f.BackgroundColor.String
-	}
+		if f.BackgroundColor.Valid {
+			bgColor = &f.BackgroundColor.String
+		}
 
-	if f.BackgroundImage.Valid {
-		bgImage = &f.BackgroundImage.String
-	}
+		if f.BackgroundImage.Valid {
+			bgImage = &f.BackgroundImage.String
+		}
 
-	if f.Image.Valid {
-		image = &f.Image.String
-	}
+		if f.Image.Valid {
+			image = &f.Image.String
+		}
 
-	if f.Description.Valid {
-		description = &f.Description.String
-	}
+		if f.Description.Valid {
+			description = &f.Description.String
+		}
 
-	if f.MaxResponses.Valid {
-		tmp := uint(f.MaxResponses.Int32)
-		maxResponses = &tmp
-	}
+		if f.MaxResponses.Valid {
+			tmp := uint(f.MaxResponses.Int32)
+			maxResponses = &tmp
+		}
 
-	if f.MaxSubmissions.Valid {
-		tmp := uint(f.MaxResponses.Int32)
-		maxSubmissions = &tmp
-	}
+		if f.MaxSubmissions.Valid {
+			tmp := uint(f.MaxResponses.Int32)
+			maxSubmissions = &tmp
+		}
 
-	return &dto.FormConfig{
-		Id:              f.Id,
-		Title:           f.Title,
-		CreatedAt:       f.CreatedAt,
-		UpdateAt:        f.UpdatedAt,
-		MultiResponse:   f.MultiResponse,
-		Resubmission:    f.Resubmission,
-		Status:          f.Status,
-		Description:     description,
-		BackgroundColor: bgColor,
-		BackgroundImage: bgImage,
-		Image:           image,
-		Deadline:        deadline,
-		MaxResponses:    maxResponses,
-		MaxSubmissions:  maxSubmissions,
+		tmp := dto.FormConfig{
+			Id:              f.Id,
+			Title:           f.Title,
+			CreatedAt:       f.CreatedAt,
+			UpdateAt:        f.UpdatedAt,
+			MultiResponse:   f.MultiResponse,
+			Resubmission:    f.Resubmission,
+			Status:          f.Status,
+			Description:     description,
+			BackgroundColor: bgColor,
+			BackgroundImage: bgImage,
+			Image:           image,
+			Deadline:        deadline,
+			MaxResponses:    maxResponses,
+			MaxSubmissions:  maxSubmissions,
+			Tags:            f.Tags,
+			GroupIds:        f.GroupIds,
+			QuestionIds:     f.QuestionIds,
+		}
+		ans = append(ans, tmp)
 	}
+	return
 }
 
 func formQuestionsToDto(f []*models.FormQuestion) []dto.FormQuestion {

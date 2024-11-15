@@ -5,14 +5,45 @@ import (
 	"time"
 )
 
+type AcademicTerm struct {
+	Id          uint64
+	Year        uint64
+	Institution uint64
+	StartDate   time.Time
+	CreatedAt   time.Time
+	Duration    time.Duration
+	EndDate     time.Time
+	Label       string
+	UpdatedAt   time.Time
+}
+
+type AcademicYear struct {
+	Id          uint64
+	Institution uint64
+	StartDate   time.Time
+	Duration    time.Duration
+	EndDate     time.Time
+	Label       string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	Terms       []AcademicTerm
+}
+
+type InstitutionStatistics struct {
+	TotalInstitutions uint64
+	TotalVerified     uint64
+	TotalUnverified   uint64
+}
+
 type Institution struct {
-	Name        string         `json:"name"`
-	Description sql.NullString `json:"description,omitempty" encore:"optional"`
-	Logo        sql.NullString `json:"logo,omitempty" encore:"optional"`
-	Visible     bool           `json:"visible"`
-	Slug        string         `json:"slug"`
-	Id          uint64         `json:"id,omitempty" encore:"optional"`
-	TenantId    uint64         `json:"tenant"`
-	CreatedAt   time.Time      `json:"createdAt"`
-	UpdatedAt   time.Time      `json:"updatedAt"`
+	Name        string
+	Description sql.NullString
+	Logo        sql.NullString
+	Visible     bool
+	Slug        string
+	Id          uint64
+	TenantId    uint64
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	Verified    bool
 }

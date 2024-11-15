@@ -1,18 +1,29 @@
 {
-    "plpgsqlLanguageServer.host": "localhost",
-    "plpgsqlLanguageServer.port": 5432,
-    "plpgsqlLanguageServer.database": "",
-    "plpgsqlLanguageServer.user": "postgres",
-    "plpgsqlLanguageServer.password": "postgres",
-    "plpgsqlLanguageServer.definitionFiles": [
-      // Support glob.
-      "**/*.sql",
-      "**/*.psql",
-      "**/*.pgsql"
+  "plpgsqlLanguageServer.host": "localhost",
+  "plpgsqlLanguageServer.port": 55555,
+  "plpgsqlLanguageServer.migrations": {
+    "upFiles": [
+      "**/*.up.sql",
+      "**/*.up.psql",
+      "**/*.up.pgsql"
     ],
-    // The supported extention types are ['*.pgsql', '*.psql'].
-    // If you want to use this extension in '*.sql', add the following settings.
-    "files.associations": {
-      "*.sql": "postgres"
-    }
+    "downFiles": [
+      "**/*.down.sql",
+      "**/*.down.psql",
+      "**/*.down.pgsql"
+    ]
+  },
+  "plpgsqlLanguageServer.user": "postgres",
+  "plpgsqlLanguageServer.password": "postgres",
+  "plpgsqlLanguageServer.definitionFiles": [
+    // Support glob.
+    "**/*.sql",
+    "**/*.psql",
+    "**/*.pgsql"
+  ],
+  // The supported extention types are ['*.pgsql', '*.psql'].
+  // If you want to use this extension in '*.sql', add the following settings.
+  "files.associations": {
+    "*.sql": "postgres"
   }
+}

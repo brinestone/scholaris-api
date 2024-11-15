@@ -314,19 +314,23 @@ type FormQuestionGroup struct {
 	Image       *string `json:"image"`
 }
 
+type GetFormsResponse struct {
+	Forms []FormConfig `json:"forms"`
+}
+
 type GetFormQuestionsResponse struct {
 	Questions []FormQuestion      `json:"questions"`
 	Groups    []FormQuestionGroup `json:"groups"`
 }
 
-type GetFormsInput struct {
+type FindFormsRequest struct {
 	Page      int    `query:"page"`
 	Size      int    `query:"size"`
 	Owner     uint64 `header:"x-owner"`
 	OwnerType string `header:"x-owner-type"`
 }
 
-func (i GetFormsInput) Validate() error {
+func (i FindFormsRequest) Validate() error {
 	var msgs []string
 	if len(i.OwnerType) == 0 {
 		msgs = append(msgs, "x-owner-type header is required")
@@ -344,6 +348,10 @@ func (i GetFormsInput) Validate() error {
 	return nil
 }
 
+type NewFormResponse struct {
+	Id uint64 `json:"id"`
+}
+
 type NewFormInput struct {
 	Title           string     `json:"title"`
 	Description     *string    `json:"description,omitempty" encore:"optional"`
@@ -358,6 +366,7 @@ type NewFormInput struct {
 	Deadline        *time.Time `json:"deadline,omitempty" encore:"optional"`
 	MaxResponses    uint       `json:"maxResponses"`
 	MaxSubmissions  uint       `json:"maxSubmissions"`
+	Tags            []string   `json:"tags,omitempty" encore:"optional"`
 }
 
 func (n NewFormInput) GetCaptchaToken() string {
@@ -395,19 +404,38 @@ func (n NewFormInput) Validate() error {
 	return nil
 }
 
+// A form's current configuration.
 type FormConfig struct {
-	Id              uint64     `json:"id"`
-	Title           string     `json:"title"`
-	Description     *string    `json:"description,omitempty" encore:"optional"`
-	BackgroundColor *string    `json:"backgroundColor,omitempty" encore:"optional"`
-	Status          string     `json:"status"`
-	BackgroundImage *string    `json:"backgroundImage,omitempty" encore:"optional"`
-	Image           *string    `json:"image,omitempty" encore:"optional"`
-	MultiResponse   bool       `json:"multiResponse"`
-	Resubmission    bool       `json:"resubmission"`
-	CreatedAt       time.Time  `json:"createdAt"`
-	UpdateAt        time.Time  `json:"updatedAt"`
-	Deadline        *time.Time `json:"deadline,omitempty" encore:"optional"`
-	MaxResponses    *uint      `json:"maxResponses,omitempty" encore:"optional"`
-	MaxSubmissions  *uint      `json:"maxSubmissions,omitempty" encore:"optional"`
+	// The form's ID
+	Id uint64 `json:"id"`
+	// The form's title
+	Title string `json:"title"`
+	// A short description of the form
+	Description *string `json:"description,omitempty" encore:"optional"`
+	// A background color of the form
+	BackgroundColor *string `json:"backgroundColor,omitempty" encore:"optional"`
+	// The status of the form. Possible values are: **draft**, **published**. When published, the form is visible to everyone.
+	Status string `json:"status"`
+	// A background image URL of the form
+	BackgroundImage *string `json:"backgroundImage,omitempty" encore:"optional"`
+	// An image URL for the form.
+	Image *string `json:"image,omitempty" encore:"optional"`
+	// Whether a user can make multiple responses of the form.
+	MultiResponse bool `json:"multiResponse"`
+	// Whether a user can re-submit their a response to the form.
+	Resubmission bool `json:"resubmission"`
+	// The form's creation date.
+	CreatedAt time.Time `json:"createdAt"`
+	// The form's last modified date.
+	UpdateAt time.Time `json:"updatedAt"`
+	// An optional deadline for all response submissions of the form.
+	Deadline *time.Time `json:"deadline,omitempty" encore:"optional"`
+	// The maximum number of responses a user can make for the form.
+	MaxResponses *uint `json:"maxResponses,omitempty" encore:"optional"`
+	// The maxiumum number of submissions a user can make for the form.
+	MaxSubmissions *uint `json:"maxSubmissions,omitempty" encore:"optional"`
+	// Tags attached to the form
+	Tags        []string `json:"tags,omitempty"`
+	GroupIds    []uint64 `json:"groupIds,omitempty"`
+	QuestionIds []uint64 `json:"questionIds,omitempty"`
 }

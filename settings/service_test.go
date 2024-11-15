@@ -6,7 +6,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"maps"
 	"math/rand"
+	"slices"
 	"testing"
 
 	"encore.dev/beta/auth"
@@ -118,7 +120,7 @@ func TestUpdateSettings(t *testing.T) {
 				t.FailNow()
 				return
 			}
-			setting := res.Settings[index]
+			setting := slices.Collect(maps.Values(res.Settings))[index]
 
 			testUpdateUsingExistingSetting(t, mainContext, owner, ownerType, setting.Key)
 			mockEndpoints()
@@ -206,7 +208,7 @@ func makeUpdates(cnt int) []dto.SettingUpdate {
 }
 
 func testUpdateSettingsWithNewSettings(t *testing.T, ctx context.Context, owner uint64, ownerType string) {
-	maxCnt := gofakeit.IntRange(1, 10)
+	maxCnt := gofakeit.IntRange(1, 15)
 	req := dto.UpdateSettingsRequest{
 		OwnerType:    ownerType,
 		CaptchaToken: randomString(20),
@@ -218,9 +220,15 @@ func testUpdateSettingsWithNewSettings(t *testing.T, ctx context.Context, owner 
 	assert.Nil(t, err)
 
 	et.MockEndpoint(permissions.ListRelations, func(ctx context.Context, p dto.ListRelationsRequest) (*dto.ListRelationsResponse, error) {
+		var settingIds []uint64
+		var i = 0
+		for i < maxCnt {
+			settingIds = append(settingIds, uint64(i+1))
+			i++
+		}
 		return &dto.ListRelationsResponse{
 			Relations: map[dto.PermissionType][]uint64{
-				dto.PTSetting: {1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+				dto.PTSetting: settingIds,
 			},
 		}, nil
 	})
@@ -235,7 +243,7 @@ func testUpdateSettingsWithNewSettings(t *testing.T, ctx context.Context, owner 
 	}
 
 	assert.NotNil(t, res)
-	assert.True(t, assert.LessOrEqual(t, len(res.Settings), 10) && assert.GreaterOrEqual(t, len(res.Settings), 1))
+	assert.True(t, assert.LessOrEqual(t, len(res.Settings), maxCnt) && assert.GreaterOrEqual(t, len(res.Settings), 1))
 }
 
 func testUpdateSettingsWithNoUpdates(t *testing.T, ctx context.Context, owner uint64, ownerType string) {

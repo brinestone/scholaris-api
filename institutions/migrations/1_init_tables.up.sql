@@ -13,11 +13,3 @@ CREATE TABLE
     );
 
 CREATE UNIQUE INDEX IDX_UQ_tenant_slug_1 ON institutions (tenant, slug);
-
-CREATE TABLE
-    enrollment_forms (
-        id BIGINT NOT NULL,
-        form BIGINT NOT NULL,
-        institution BIGINT NOT NULL,
-        FOREIGN KEY (institution) REFERENCES institutions (id)
-    );

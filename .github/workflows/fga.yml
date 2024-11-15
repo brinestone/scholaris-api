@@ -1,0 +1,36 @@
+name: Open-FGA authorization model deployment
+
+on:
+    push:
+        branches:
+          - next
+        paths:
+          - '**/*.fga'
+          - fga.mod
+
+jobs:
+  deploy_model:
+    name: Deploy FGA Model
+    runs-on: ubuntu-latest
+    env:
+      FGA_API_URL: ${{ vars.FGA_API_URL }}
+      FGA_STORE_ID: ${{ secrets.FGA_STORE_ID }}
+      FGA_API_TOKEN_ISSUER: ${{ vars.FGA_API_TOKEN_ISSUER }}
+      FGA_API_AUDIENCE: ${{ vars.FGA_API_AUDIENCE }}
+      FGA_CLIENT_ID: ${{ secrets.FGA_CLIENT_ID }}
+      FGA_CLIENT_SECRET: ${{ secrets.FGA_CLIENT_SECRET }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Setup Golang
+        uses: actions/setup-go@v5
+        with:
+          go-version: '>=1.23.0'
+      - run: go version
+      - name: Download & Install OpenFGA CLI
+        run: |
+          git clone --depth 1 --branch v0.6.1 https://github.com/openfga/cli.git cli;
+          cd cli
+          go build -o ../fga ./cmd/fga/main.go
+      - name: Deploy model
+        run: ./fga model write --store-id=$FGA_STORE_ID --file fga.mod

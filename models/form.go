@@ -21,6 +21,12 @@ type Form struct {
 	Deadline        sql.NullTime
 	MaxResponses    sql.NullInt32
 	MaxSubmissions  sql.NullInt32
+	OwnerType       string
+	QuestionIds     []uint64
+	GroupIds        []uint64
+	ResponseCount   uint64
+	Tags            []string
+	SubmissionCount uint64
 }
 
 type FormQuestionOption struct {

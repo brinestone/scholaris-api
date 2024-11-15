@@ -28,6 +28,10 @@ func PermissionTypeFromString(s string) (PermissionType, bool) {
 		return PTSubscription, true
 	case string(PTSetting):
 		return PTSetting, true
+	case string(PTAcademicYear):
+		return PTAcademicYear, true
+	case string(PTAcademicTerm):
+		return PTAcademicTerm, true
 	default:
 		return unknown, false
 	}
@@ -41,6 +45,8 @@ const (
 	PTEnrollment   PermissionType = "enrollment"
 	PTSubscription PermissionType = "subscription"
 	PTSetting      PermissionType = "setting"
+	PTAcademicYear PermissionType = "academicYear"
+	PTAcademicTerm PermissionType = "academicTerm"
 	unknown        PermissionType = ""
 )
 
