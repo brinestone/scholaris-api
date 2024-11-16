@@ -69,9 +69,9 @@ type NewUserRequest struct {
 	// The user's date of birth (YYYY/MM/DD)
 	Dob string `json:"dob"`
 	// The user's plaintext password
-	Password string `json:"password"`
+	Password string `json:"password" encore:"sensitive"`
 	// Password verification
-	ConfirmPassword string `json:"confirmPassword"`
+	ConfirmPassword string `json:"confirmPassword" encore:"sensitive"`
 	// The user's phone number in IE64 format
 	Phone string `json:"phone,omitempty" encore:"optional"`
 	// The user's gender
