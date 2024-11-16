@@ -4,6 +4,7 @@ import (
 	"context"
 	"strconv"
 	"strings"
+	"time"
 
 	"encore.dev"
 	"encore.dev/rlog"
@@ -91,11 +92,38 @@ func (s *Service) ListRelations(ctx context.Context, req dto.ListRelationsReques
 //
 //encore:api private method=POST path=/permissions/check
 func (s *Service) CheckPermission(ctx context.Context, req dto.RelationCheckRequest) (*dto.RelationCheckResponse, error) {
-	res, err := s.fgaClient.Check(ctx).Body(client.ClientCheckRequest{
+	request := client.ClientCheckRequest{
 		User:     req.Actor,
 		Relation: req.Relation,
 		Object:   req.Target,
-	}).Execute()
+	}
+
+	if req.Condition != nil {
+		c := make(map[string]interface{})
+		request.Context = &c
+
+		for _, v := range req.Condition.Context {
+			switch v.Type {
+			case dto.CETBool:
+				c[v.Name], _ = strconv.ParseBool(v.Value)
+			case dto.CETTimestamp:
+				c[v.Name], _ = time.Parse(time.RFC3339, v.Value)
+			case dto.CETDuration:
+				t, err := time.ParseDuration(v.Value)
+				if err != nil {
+					continue
+				}
+				c[v.Name] = t.String()
+			default:
+				c[v.Name] = v.Value
+			}
+		}
+	}
+
+	res, err := s.fgaClient.
+		Check(ctx).
+		Body(request).
+		Execute()
 
 	if err != nil {
 		rlog.Error(err.Error())

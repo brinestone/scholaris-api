@@ -26,6 +26,8 @@ type Form struct {
 	GroupIds        []uint64
 	ResponseCount   uint64
 	Tags            []string
+	ResponseStart   sql.NullTime
+	ResponseWindow  sql.NullFloat64
 	SubmissionCount uint64
 }
 

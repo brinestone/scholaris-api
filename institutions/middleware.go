@@ -1,16 +1,98 @@
 package institutions
 
 import (
+	"errors"
+	"fmt"
+	"time"
+
 	"encore.dev/beta/auth"
 	"encore.dev/beta/errs"
 	"encore.dev/middleware"
 	"encore.dev/rlog"
+	"encore.dev/storage/sqldb"
 	appAuth "github.com/brinestone/scholaris/core/auth"
 	"github.com/brinestone/scholaris/core/permissions"
 	"github.com/brinestone/scholaris/dto"
 	"github.com/brinestone/scholaris/models"
 	"github.com/brinestone/scholaris/util"
 )
+
+// Validates a user's permission to create an enrollment
+//
+//encore:middleware target=tag:can_enroll
+func AllowedToEnroll(request middleware.Request, next middleware.Next) (ans middleware.Response) {
+	ans = next(request)
+
+	uid, _ := auth.UserID()
+	ownerInfo, ok := request.Data().Payload.(models.OwnerInfo)
+	if !ok {
+		ans = middleware.Response{
+			Err: &util.ErrForbidden,
+		}
+		return
+	}
+
+	lookup, err := findInstitutionByGenericIdentifier(request.Context(), fmt.Sprintf("%d", ownerInfo.GetOwner()))
+	if err != nil {
+		rlog.Error(util.MsgCallError, "msg", err.Error())
+		ans = middleware.Response{
+			Err: err,
+		}
+		return
+	}
+
+	levelInfo, ok := request.Data().Payload.(models.HasLevelIdentifier)
+	if !ok {
+		ans = middleware.Response{
+			Err: &util.ErrForbidden,
+		}
+		return
+	}
+
+	formInfo, err := findLevelEnrollmentForm(request.Context(), levelInfo.GetLevelRef(), ownerInfo.GetOwner())
+	if err != nil {
+		if errors.Is(err, sqldb.ErrNoRows) {
+			rlog.Warn("enrollment attempted", "reason", "no form configured", "level", levelInfo.GetLevelRef())
+		}
+		ans = middleware.Response{
+			Err: &util.ErrForbidden,
+		}
+		return
+	}
+
+	var deadline *time.Time
+	if formInfo.Deadline.Valid {
+		deadline = &formInfo.Deadline.Time
+	}
+
+	req := dto.RelationCheckRequest{
+		Actor:    dto.IdentifierString(dto.PTUser, uid),
+		Relation: "can_enroll",
+		Target:   dto.IdentifierString(dto.PTInstitution, ownerInfo.GetOwner()),
+		Condition: &dto.RelationCondition{
+			Name: "enrollment_available",
+			Context: []dto.ContextEntry{
+				dto.HavingEntry("institution_verified", dto.CETBool, lookup.Verified),
+				dto.HavingEntry("current_time", dto.CETTimestamp, time.Now().String()),
+				dto.HavingEntry("deadline", dto.CETTimestamp, deadline),
+			},
+		},
+	}
+	res, err := permissions.CheckPermission(request.Context(), req)
+	if err != nil {
+		rlog.Error(util.MsgCallError, "err", err)
+		return middleware.Response{
+			Err: &util.ErrUnknown,
+		}
+	}
+	if !res.Allowed {
+		return middleware.Response{
+			Err: &util.ErrForbidden,
+		}
+	}
+
+	return
+}
 
 // Validates a user's permission to create an enrollment form
 //
