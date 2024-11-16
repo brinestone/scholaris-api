@@ -370,7 +370,7 @@ type NewFormInput struct {
 	Owner           uint64         `header:"x-owner"`
 	OwnerType       string         `header:"x-owner-type"`
 	ResponseWindow  *time.Duration `json:"repsonseWindow,omitempty" encore:"optional"`
-	ResponseStart   time.Time      `json:"responseStart"`
+	ResponseStart   *time.Time     `json:"responseStart,omitempty" encore:"optional"`
 	MaxResponses    uint           `json:"maxResponses"`
 	MaxSubmissions  uint           `json:"maxSubmissions"`
 	Tags            []string       `json:"tags,omitempty" encore:"optional"`
@@ -383,12 +383,16 @@ func (n NewFormInput) GetCaptchaToken() string {
 func (n NewFormInput) Validate() error {
 	var msgs = make([]string, 0)
 
-	if n.ResponseStart.Before(time.Now()) {
+	if n.ResponseStart != nil && n.ResponseStart.Before(time.Now()) {
 		msgs = append(msgs, "The responseStart value must be a future date")
 	}
 
-	if n.ResponseWindow != nil && n.ResponseWindow.Hours() == 0 {
-		msgs = append(msgs, "The value for responseWindow cannot be zero")
+	if n.ResponseWindow != nil {
+		if n.ResponseWindow.Hours() == 0 {
+			msgs = append(msgs, "The value for responseWindow cannot be zero")
+		} /*  else if n.ResponseStart != nil {
+			msgs = append(msgs, "When responseWindow is set, responseStart must be set also")
+		} */
 	}
 
 	if len(n.Title) == 0 {
@@ -449,6 +453,6 @@ type FormConfig struct {
 	Tags           []string       `json:"tags,omitempty"`
 	GroupIds       []uint64       `json:"groupIds,omitempty"`
 	QuestionIds    []uint64       `json:"questionIds,omitempty"`
-	ResponseStart  time.Time      `json:"responseStart"`
+	ResponseStart  *time.Time     `json:"responseStart,omitempty" encore:"optional"`
 	ResponseWindow *time.Duration `json:"responseWindow,omitempty" encore:"optional"`
 }

@@ -49,10 +49,13 @@ func SubmitResponse(ctx context.Context, form, response uint64) (*dto.UserFormRe
 	tx.Commit()
 
 	defer func() {
+		formInfo, _ := findFormFromDb(ctx, form)
 		FormSubmissions.Publish(ctx, ResponseSubmitted{
 			Form:      form,
 			Response:  response,
 			Timestamp: time.Now(),
+			Owner:     formInfo.Owner,
+			OwnerType: formInfo.OwnerType,
 		})
 	}()
 
@@ -390,6 +393,8 @@ func ToggleFormStatus(ctx context.Context, form uint64) (*dto.FormConfig, error)
 		PublishedForms.Publish(ctx, FormPublished{
 			Id:        f.Id,
 			Timestamp: f.UpdatedAt,
+			Owner:     f.Owner,
+			OwnerType: f.OwnerType,
 		})
 	}
 	return &ans[0], nil
@@ -405,16 +410,29 @@ func DeleteForm(ctx context.Context, form uint64) error {
 		return &util.ErrUnknown
 	}
 
+	formInfo, err := findFormFromDb(ctx, form)
+	if err != nil {
+		if errors.Is(err, sqldb.ErrNoRows) {
+			return &util.ErrNotFound
+		}
+	}
+
 	if err := deleteForm(ctx, tx, form); err != nil {
 		tx.Rollback()
 		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
 		return &util.ErrUnknown
 	}
-	tx.Commit()
+
+	if err := tx.Commit(); err != nil {
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		return &util.ErrUnknown
+	}
 
 	DeletedForms.Publish(ctx, FormDeleted{
 		Id:        form,
 		Timestamp: time.Now(),
+		Owner:     formInfo.Owner,
+		OwnerType: formInfo.OwnerType,
 	})
 
 	return nil
@@ -730,6 +748,8 @@ func NewForm(ctx context.Context, req dto.NewFormInput) (response dto.NewFormRes
 	NewForms.Publish(ctx, FormEvent{
 		Id:        response.Id,
 		Timestamp: time.Now(),
+		Owner:     req.Owner,
+		OwnerType: req.OwnerType,
 	})
 	return
 }
@@ -947,7 +967,10 @@ func formsToDto(v ...*models.Form) (ans []dto.FormConfig) {
 			Tags:          f.Tags,
 			GroupIds:      f.GroupIds,
 			QuestionIds:   f.QuestionIds,
-			ResponseStart: f.ResponseStart,
+		}
+
+		if f.ResponseStart.Valid {
+			tmp.ResponseStart = &f.ResponseStart.Time
 		}
 
 		if f.Deadline.Valid {

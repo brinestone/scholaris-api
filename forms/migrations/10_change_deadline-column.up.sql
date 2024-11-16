@@ -1,6 +1,6 @@
 ALTER TABLE forms
 ADD response_window INTERVAL,
-ADD response_start DATE NOT NULL;
+ADD response_start DATE;
 
 CREATE OR REPLACE VIEW
     vw_AllForms AS

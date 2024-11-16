@@ -151,13 +151,14 @@ func makeForm(ctx context.Context, options ...makeFormOption) (owner uint64, _ *
 	}
 
 	window := time.Hour * time.Duration(gofakeit.IntRange(1, 3000))
+	responseStart := gofakeit.FutureDate()
 	res, err := forms.NewForm(ctx, dto.NewFormInput{
 		Title:           gofakeit.LoremIpsumSentence(gofakeit.IntRange(1, 10)),
 		Description:     &desc,
 		CaptchaToken:    randomString(20),
 		Owner:           ownerId,
 		OwnerType:       gofakeit.RandomString([]string{string(dto.PTInstitution), string(dto.PTTenant)}),
-		ResponseStart:   gofakeit.FutureDate(),
+		ResponseStart:   &responseStart,
 		ResponseWindow:  &window,
 		MultiResponse:   gofakeit.Bool(),
 		Resubmission:    gofakeit.Bool(),

@@ -151,3 +151,15 @@ func createEnrollment(ctx context.Context, tx *sqldb.Tx, response, form, user, i
 	_, err = tx.Exec(ctx, query, response, form, institution, user)
 	return
 }
+
+func deleteEnrollmentFormRegistrationByFormId(ctx context.Context, tx *sqldb.Tx, form, institution uint64) (err error) {
+	query := `
+		DELETE FROM
+			enrollment_forms
+		WHERE
+			form=$1 AND institution=$2
+	`
+
+	_, err = tx.Exec(ctx, query, form, institution)
+	return
+}
