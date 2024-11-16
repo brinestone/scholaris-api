@@ -8,17 +8,17 @@ import (
 )
 
 type User struct {
-	Id           uint64         `json:"id,omitempty" encore:"optional"`
-	FirstName    string         `json:"firstName"`
-	LastName     sql.NullString `json:"lastName,omitempty" encore:"optional"`
-	Email        string         `json:"email"`
-	Dob          time.Time      `json:"dob"`
-	PasswordHash string         `json:"-" encore:"sensitive"`
-	Phone        string         `json:"phone"`
-	CreatedAt    time.Time      `json:"created_at,omitempty" encore:"optional"`
-	UpdatedAt    time.Time      `json:"updated_at,omitempty" encore:"optional"`
-	Gender       string         `json:"gender"`
-	Avatar       sql.NullString `json:"avatar,omitempty" encore:"optional"`
+	Id           uint64
+	FirstName    string
+	LastName     sql.NullString
+	Email        string
+	Dob          time.Time
+	PasswordHash string `encore:"sensitive"`
+	Phone        string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+	Gender       string
+	Avatar       sql.NullString
 }
 
 func (u User) FullName() string {

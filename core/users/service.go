@@ -75,22 +75,38 @@ func VerifyCredentials(ctx context.Context, req dto.LoginRequest) (*models.User,
 // Create a new user account
 //
 //encore:api private method=POST path=/users
-func NewUser(ctx context.Context, req dto.NewUserRequest) (*models.User, error) {
+func NewUser(ctx context.Context, req dto.NewUserRequest) (ans *dto.NewUserResponse, err error) {
+	emailExists, err := userEmailExists(ctx, req.Email)
+	if err != nil {
+		return
+	}
+
+	if emailExists {
+		err = &errs.Error{
+			Code:    errs.AlreadyExists,
+			Message: "email is already in use",
+		}
+	}
+
 	tx, err := userDb.Begin(ctx)
 	if err != nil {
 		rlog.Error(err.Error())
-		return nil, &util.ErrUnknown
+		err = &util.ErrUnknown
 	}
 
-	user, err := createUser(ctx, req, tx)
+	uid, err := createUser(ctx, req, tx)
 	if err != nil {
 		_ = tx.Rollback()
 		rlog.Error(err.Error())
-		return nil, &util.ErrUnknown
+		err = &util.ErrUnknown
 	}
 
-	defer tx.Commit()
-	return user, nil
+	tx.Commit()
+
+	ans = &dto.NewUserResponse{
+		UserId: uid,
+	}
+	return
 }
 
 // Find a user by their ID
@@ -134,32 +150,24 @@ func findUserByIdFromDb(ctx context.Context, id uint64) (*models.User, error) {
 	return ans, nil
 }
 
-func userEmailExists(ctx context.Context, email string, tx *sqldb.Tx) (bool, error) {
+func userEmailExists(ctx context.Context, email string) (ans bool, err error) {
 	query := `
-	SELECT 
-		COUNT(id) 
-	FROM 
-		users
-	WHERE 
-		email = $1;
+		SELECT 
+			COUNT(id) 
+		FROM 
+			users
+		WHERE 
+			email = $1
+		;
 	`
+
 	var cnt = 0
-
-	var row *sqldb.Row
-	if tx != nil {
-		row = tx.QueryRow(ctx, query, email)
-	} else {
-		row = userDb.QueryRow(ctx, query, email)
+	if err = userDb.QueryRow(ctx, query, email).Scan(&cnt); err != nil {
+		return
 	}
+	ans = cnt > 0
 
-	if err := row.Scan(&cnt); err != nil {
-		if errors.Is(err, sqldb.ErrNoRows) {
-			return false, nil
-		}
-		return false, err
-	}
-
-	return cnt > 0, nil
+	return
 }
 
 func findUserByEmailFromDb(ctx context.Context, email string) (*models.User, error) {
@@ -206,24 +214,10 @@ func findAllUsers(ctx context.Context, offset uint64, size uint) ([]*models.User
 	return ans, nil
 }
 
-func createUser(ctx context.Context, req dto.NewUserRequest, tx *sqldb.Tx) (*models.User, error) {
-	emailExists, err := userEmailExists(ctx, req.Email, tx)
-	if err != nil {
-		return nil, err
-	}
-
-	if emailExists {
-		return nil, &errs.Error{
-			Code:    errs.AlreadyExists,
-			Message: "email is already in use",
-		}
-	}
+func createUser(ctx context.Context, req dto.NewUserRequest, tx *sqldb.Tx) (ans uint64, err error) {
 
 	dob, _ := time.Parse("2006/2/1", req.Dob)
-	ph, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-	if err != nil {
-		return nil, err
-	}
+	ph, _ := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 
 	query := `
 		INSERT INTO 
@@ -233,11 +227,11 @@ func createUser(ctx context.Context, req dto.NewUserRequest, tx *sqldb.Tx) (*mod
 		RETURNING
 			id;
 	`
-	var id int64
-	if err = tx.QueryRow(ctx, query, req.FirstName, req.LastName, req.Email, dob, string(ph), req.Phone, req.Gender).Scan(&id); err != nil {
+
+	if err = tx.QueryRow(ctx, query, req.FirstName, req.LastName, req.Email, dob, string(ph), req.Phone, req.Gender).Scan(&ans); err != nil {
 		rlog.Error(err.Error())
-		return nil, &util.ErrUnknown
+		err = &util.ErrUnknown
 	}
 
-	return findUserByIdFromCache(ctx, uint64(id))
+	return
 }

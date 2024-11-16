@@ -120,14 +120,14 @@ func SignUp(ctx context.Context, req dto.NewUserRequest) error {
 		return &util.ErrCaptchaError
 	}
 
-	_, err := users.NewUser(ctx, req)
+	user, err := users.NewUser(ctx, req)
 	if err != nil {
 		return err
 	}
 
 	SignUps.Publish(ctx, &UserSignedUp{
 		Email:  req.Email,
-		UserId: 0,
+		UserId: user.UserId,
 	})
 	return nil
 }

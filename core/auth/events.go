@@ -4,7 +4,7 @@ import "encore.dev/pubsub"
 
 type UserSignedUp struct {
 	Email  string
-	UserId int64
+	UserId uint64
 }
 
 var SignUps = pubsub.NewTopic[*UserSignedUp]("sign-up", pubsub.TopicConfig{

@@ -9,6 +9,19 @@ import (
 	"encore.dev/beta/errs"
 )
 
+type User struct {
+	Id        uint64    `json:"id"`
+	FirstName string    `json:"firstName"`
+	LastName  *string   `json:"lastName,omitempty" encore:"optional"`
+	Email     string    `json:"email"`
+	Dob       time.Time `json:"dob"`
+	Phone     string    `json:"phone"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+	Gender    Gender    `json:"gender"`
+	Avatar    *string   `json:"avatar,omitempty" encore:"optional"`
+}
+
 type LoginRequest struct {
 	// The user's email address
 	Email string `json:"email"`
@@ -58,6 +71,10 @@ const (
 	Male   Gender = "male"
 	Female Gender = "female"
 )
+
+type NewUserResponse struct {
+	UserId uint64 `json:"userId"`
+}
 
 type NewUserRequest struct {
 	// The user's first name
