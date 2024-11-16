@@ -149,6 +149,30 @@ func GetUserResponses(ctx context.Context, form uint64) (*dto.UserFormResponses,
 	}, nil
 }
 
+// Creates a resposne for a form (internal)
+//
+//encore:api private method=POST path=/forms/:form/responses/new/internal
+func CreateFormResponseInternal(ctx context.Context, form uint64) (*models.FormResponse, error) {
+	sub, _ := auth.UserID()
+	uid, _ := strconv.ParseUint(string(sub), 10, 64)
+
+	tx, err := formsDb.Begin(ctx)
+	if err != nil {
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		return nil, &util.ErrUnknown
+	}
+
+	responseId, err := createUserFormResponse(ctx, tx, form, uid)
+	if err != nil {
+		tx.Rollback()
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		return nil, &util.ErrUnknown
+	}
+	tx.Commit()
+
+	return findUserResponseById(ctx, form, uid, responseId)
+}
+
 // Creates a response for a form
 //
 //encore:api auth method=POST path=/forms/:form/responses/new tag:user_can_respond_to_form
@@ -162,7 +186,7 @@ func CreateFormResponse(ctx context.Context, form uint64) (*dto.UserFormResponse
 		return nil, &util.ErrUnknown
 	}
 
-	if err := createUserFormResponse(ctx, tx, form, uid); err != nil {
+	if _, err := createUserFormResponse(ctx, tx, form, uid); err != nil {
 		tx.Rollback()
 		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
 		return nil, &util.ErrUnknown
@@ -858,7 +882,6 @@ func findFormFromDb(ctx context.Context, id uint64) (form *models.Form, err erro
 
 func findFormsFromDb(ctx context.Context, page, size int, owner uint64, ownerType string, overrides []uint64) (ans []*models.Form, err error) {
 	query := `SELECT * FROM func_find_forms($1,$2,$3,$4,$5);`
-	rlog.Debug("finding owned forms", "query", query, "owner", owner, "page", page, "size", size, "owner", owner, "ownerType", ownerType, "overrides", overrides)
 	rows, err := formsDb.Query(ctx, query, owner, ownerType, pq.Array(overrides), page, size)
 	if err != nil {
 		return
@@ -1455,18 +1478,20 @@ func responsesToDto(r ...*models.FormResponse) []dto.UserFormResponse {
 	return ans
 }
 
-func createUserFormResponse(ctx context.Context, tx *sqldb.Tx, form, user uint64) error {
+func createUserFormResponse(ctx context.Context, tx *sqldb.Tx, form, user uint64) (uint64, error) {
 	query := `
 		INSERT INTO
 			form_responses(responder,form)
 		VALUES
-			($1,$2);
+			($1,$2)
+		RETURNING id;
 	`
 
-	if _, err := tx.Exec(ctx, query, user, form); err != nil {
-		return err
+	var i uint64
+	if err := tx.QueryRow(ctx, query, user, form).Scan(&i); err != nil {
+		return 0, err
 	}
-	return nil
+	return i, nil
 }
 
 func countUserResponses(ctx context.Context, form, user uint64) (uint, uint, error) {

@@ -58,6 +58,6 @@ condition institution_visible(visibility: bool) {
   visibility
 }
 
-condition enrollment_available(institutionVerified: bool, current_time: timestamp, deadline: timestamp) {
-  institutionVerified && (deadline == null || deadline > current_time)
+condition enrollment_available(institution_verified: bool, current_time: timestamp, deadline: timestamp) {
+  institution_verified && (deadline == null || deadline > current_time)
 }

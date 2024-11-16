@@ -125,6 +125,7 @@ type InstitutionLookup struct {
 	TenantId    uint64    `json:"-"`
 	CreatedAt   time.Time `json:"createdAt"`
 	UpdatedAt   time.Time `json:"updatedAt"`
+	Verified    bool      `json:"verified"`
 	IsMember    bool      `json:"isMember"`
 }
 

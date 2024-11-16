@@ -250,7 +250,7 @@ func findInstitutionByKeyFromDb(ctx context.Context, key string, value any) (*mo
 	query := fmt.Sprintf("SELECT %s FROM institutions WHERE %s = $1;", institutionFields, key)
 	row := db.QueryRow(ctx, query, value)
 
-	if err := row.Scan(&i.Id, &i.Name, &i.Description, &i.Logo, &i.Visible, &i.Slug, &i.TenantId, &i.CreatedAt, &i.UpdatedAt); err != nil {
+	if err := row.Scan(&i.Id, &i.Name, &i.Description, &i.Logo, &i.Visible, &i.Slug, &i.TenantId, &i.CreatedAt, &i.UpdatedAt, &i.Verified); err != nil {
 		return nil, err
 	}
 
@@ -306,8 +306,6 @@ func lookupInstitutions(ctx context.Context, page uint, size uint, uid *auth.UID
 			%s
 		FROM
 			institutions
-		ORDER BY
-			id ASC
 		OFFSET $1
 		LIMIT $2;
 	`, institutionFields)
@@ -322,7 +320,7 @@ func lookupInstitutions(ctx context.Context, page uint, size uint, uid *auth.UID
 
 	for rows.Next() {
 		var i = new(dto.InstitutionLookup)
-		if err := rows.Scan(&i.Id, &i.Name, &i.Description, &i.Logo, &i.Visible, &i.Slug, &i.TenantId, &i.CreatedAt, &i.UpdatedAt); err != nil {
+		if err := rows.Scan(&i.Id, &i.Name, &i.Description, &i.Logo, &i.Visible, &i.Slug, &i.TenantId, &i.CreatedAt, &i.UpdatedAt, &i.Verified); err != nil {
 			return ans, 0, err
 		}
 		ans = append(ans, i)

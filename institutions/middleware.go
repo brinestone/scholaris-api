@@ -60,23 +60,21 @@ func AllowedToEnroll(request middleware.Request, next middleware.Next) (ans midd
 		return
 	}
 
-	deadline := time.Now().Add(time.Hour * 24)
-	// now := time.Now()
+	var deadline *time.Time
 	if formInfo.Deadline.Valid {
-		deadline = formInfo.Deadline.Time
+		deadline = &formInfo.Deadline.Time
 	}
 
 	req := dto.RelationCheckRequest{
 		Actor:    dto.IdentifierString(dto.PTUser, uid),
-		Relation: "can_create_enrollment_forms",
+		Relation: "can_enroll",
 		Target:   dto.IdentifierString(dto.PTInstitution, ownerInfo.GetOwner()),
 		Condition: &dto.RelationCondition{
 			Name: "enrollment_available",
 			Context: []dto.ContextEntry{
-				dto.HavingEntry("institutionVerified", "bool", lookup.Verified),
-				dto.HavingEntry("current_time", "timestamp", time.Now().String()),
-				dto.HavingEntry("deadline", "timestamp", deadline),
-				dto.HavingEntry("deadline", "timestamp", deadline),
+				dto.HavingEntry("institution_verified", dto.CETBool, lookup.Verified),
+				dto.HavingEntry("current_time", dto.CETTimestamp, time.Now().String()),
+				dto.HavingEntry("deadline", dto.CETTimestamp, deadline),
 			},
 		},
 	}

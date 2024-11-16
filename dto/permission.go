@@ -80,7 +80,7 @@ type RelationCheckRequest struct {
 
 type ContextEntry struct {
 	Name  string
-	Type  string
+	Type  ContextEntryType
 	Value string
 }
 
@@ -89,7 +89,16 @@ type RelationCondition struct {
 	Context []ContextEntry
 }
 
-func HavingEntry(name, _type string, value any) ContextEntry {
+type ContextEntryType string
+
+const (
+	CETTimestamp ContextEntryType = "timestamp"
+	CETBool      ContextEntryType = "bool"
+	CETString    ContextEntryType = "string"
+	CETDuration  ContextEntryType = "duration"
+)
+
+func HavingEntry(name string, _type ContextEntryType, value any) ContextEntry {
 	return ContextEntry{
 		Name:  name,
 		Type:  _type,

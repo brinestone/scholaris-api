@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"encore.dev/beta/auth"
 	"encore.dev/rlog"
 	"encore.dev/storage/sqldb"
 	"github.com/brinestone/scholaris/dto"
@@ -19,13 +20,37 @@ import (
 //
 //encore:api auth method=POST path=/institutions/enroll tag:can_enroll
 func NewEnrollment(ctx context.Context, req dto.NewEnrollmentRequest) (err error) {
+	userId, _ := auth.UserID()
+	uid, _ := strconv.ParseUint(string(userId), 10, 64)
+
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		rlog.Debug(util.MsgDbAccessError, "msg", err.Error())
+		err = &util.ErrUnknown
+		return
+	}
+
+	formInfo, _ := findLevelEnrollmentForm(ctx, req.GetLevelRef(), req.GetOwner())
+
+	res, err := forms.CreateFormResponseInternal(ctx, formInfo.Id)
+	if err != nil {
+		return
+	}
+
+	if err = createEnrollment(ctx, tx, res.Id, formInfo.Id, uid, req.GetOwner()); err != nil {
+		tx.Rollback()
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		err = &util.ErrUnknown
+		return
+	}
+	tx.Commit()
 
 	return
 }
 
 // Creates an enrollment form
 //
-//encore:api auth method=POST path=/institutions/enrollment-forms tag:can_create_enrollment_form
+//encore:api auth method=POST path=/institutions/enrollment-forms tag:can_create_enrollment_form tag:needs_captcha_ver
 func NewEnrollmentForm(ctx context.Context, req dto.NewEnrollmentFormRequest) (err error) {
 	settings, err := settings.FindSettings(ctx, dto.GetSettingsRequest{
 		Owner:     req.GetOwner(),
@@ -112,5 +137,17 @@ func findLevelEnrollmentForm(ctx context.Context, level, institution uint64) (an
 	}
 
 	ans, err = forms.GetFormInfoInternal(ctx, formId)
+	return
+}
+
+func createEnrollment(ctx context.Context, tx *sqldb.Tx, response, form, user, institution uint64) (err error) {
+	query := `
+		INSERT INTO
+			enrollments(id,form,institution,responder)
+		VALUES
+			($1,$2,$3);
+	`
+
+	_, err = tx.Exec(ctx, query, response, form, institution, user)
 	return
 }
