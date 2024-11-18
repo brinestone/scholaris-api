@@ -9,6 +9,7 @@ const (
 	MsgCacheAccessError = "cache access error"
 	MsgForbidden        = "forbidden action"
 	MsgCallError        = "error while calling API"
+	MsgUploadError      = "error while uploading file"
 )
 
 var ErrConflict = errs.Error{
