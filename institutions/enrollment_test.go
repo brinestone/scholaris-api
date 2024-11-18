@@ -26,14 +26,14 @@ func TestNewEnrollmentForm(t *testing.T) {
 
 	defaultSettings := map[string][]dto.SetValue{}
 
-	et.MockEndpoint(settings.UpdateSettingsInternal, func(ctx context.Context, req dto.UpdateSettingsRequest) error {
+	et.MockEndpoint(settings.UpdateSettingsInternal, func(ctx context.Context, req dto.UpdateSettingsInternalRequest) error {
 		for _, v := range req.Updates {
 			defaultSettings[v.Key] = nil
 		}
 		return nil
 	})
 
-	et.MockEndpoint(settings.SetSettingValues, func(ctx context.Context, req dto.SetSettingValueRequest) error {
+	et.MockEndpoint(settings.SetSettingValuesInternal, func(ctx context.Context, req dto.SetSettingValueRequest) error {
 		for _, v := range req.Updates {
 			defaultSettings[v.Key] = v.Value
 		}

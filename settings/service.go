@@ -44,34 +44,27 @@ func FindSettingsInternal(ctx context.Context, req dto.GetSettingsInternalReques
 
 // Sets the value(s) of a setting.  Intended for internal APIs
 //
+//encore:api private method=PUT path=/settings/set/internal
+func SetSettingValuesInternal(ctx context.Context, req dto.SetSettingValueRequest) error {
+	var uid uint64 = 0
+	return doSettingValuesUpdate(ctx, uid, req.GetOwner(), req.GetOwnerType(), req.Updates)
+}
+
+// Public API for updating setting values.
+//
 //encore:api auth method=PUT path=/settings/set tag:can_set_setting
-func SetSettingValues(ctx context.Context, req dto.SetSettingValueRequest) error {
+func SetSettingValues(ctx context.Context, req dto.SetSettingValueRequest) (err error) {
 	userId, _ := auth.UserID()
 	uid, _ := strconv.ParseUint(string(userId), 10, 64)
-	tx, err := db.Begin(ctx)
-	if err != nil {
-		rlog.Error(util.MsgDbAccessError, "err", err)
-		return &util.ErrUnknown
-	}
+	err = doSettingValuesUpdate(ctx, uid, req.GetOwner(), req.GetOwnerType(), req.Updates)
 
-	if err := updateSettingValues(ctx, tx, req.Owner, uid, req.OwnerType, req.Updates...); err != nil {
-		tx.Rollback()
-		if errs.Convert(err) == nil {
-			return err
-		} else {
-			rlog.Error(util.MsgDbAccessError, "err", err)
-		}
-		return &util.ErrUnknown
-	}
-
-	defer tx.Commit()
-	return nil
+	return
 }
 
 // Updates settings. Intended for internal APIs
 //
 //encore:api private method=POST path=/settings/internal
-func UpdateSettingsInternal(ctx context.Context, req dto.UpdateSettingsRequest) error {
+func UpdateSettingsInternal(ctx context.Context, req dto.UpdateSettingsInternalRequest) error {
 	var uid uint64 = 0
 	tx, err := db.Begin(ctx)
 	if err != nil {
@@ -389,5 +382,26 @@ func updateSettingValues(ctx context.Context, tx *sqldb.Tx, owner, user uint64, 
 			}
 		}
 	}
+	return nil
+}
+
+func doSettingValuesUpdate(ctx context.Context, uid, owner uint64, ownerType string, updates []dto.SettingValueUpdate) (err error) {
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		rlog.Error(util.MsgDbAccessError, "err", err)
+		return &util.ErrUnknown
+	}
+
+	if err := updateSettingValues(ctx, tx, owner, uid, ownerType, updates...); err != nil {
+		tx.Rollback()
+		if errs.Convert(err) == nil {
+			return err
+		} else {
+			rlog.Error(util.MsgDbAccessError, "err", err)
+		}
+		return &util.ErrUnknown
+	}
+
+	defer tx.Commit()
 	return nil
 }

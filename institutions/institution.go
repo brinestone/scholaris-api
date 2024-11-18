@@ -70,6 +70,19 @@ func NewInstitution(ctx context.Context, req dto.NewInstitutionRequest) (*dto.In
 		return nil, &util.ErrUnknown
 	}
 
+	exists, err := institutionExists(ctx, req.Slug, req.TenantId)
+	if err != nil {
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		return nil, &util.ErrUnknown
+	}
+
+	if exists {
+		return nil, &errs.Error{
+			Code:    errs.AlreadyExists,
+			Message: "An institution already exists with this name",
+		}
+	}
+
 	trx, err := db.Begin(ctx)
 	if err != nil {
 		rlog.Error(err.Error())
@@ -144,9 +157,7 @@ func NewInstitution(ctx context.Context, req dto.NewInstitutionRequest) (*dto.In
 
 const institutionFields = "id,name,description,logo,visible,slug,tenant,created_at,updated_at,verified"
 
-// const enrollmentFields = "id,owner,approved_by,approved_at,payment_transaction,service_transaction,created_at,updated_at,status,destination"
-
-func createInstitution(ctx context.Context, tx *sqldb.Tx, req dto.NewInstitutionRequest) (uint64, error) {
+func institutionExists(ctx context.Context, slug string, tenant uint64) (ans bool, err error) {
 	// Check whether the institution already exists under the same tenant.
 	existsQuery := `
 		SELECT 
@@ -154,21 +165,20 @@ func createInstitution(ctx context.Context, tx *sqldb.Tx, req dto.NewInstitution
 		FROM 
 			institutions 
 		WHERE 
-			slug=$1 AND tenant=$2;
+			slug=$1 AND tenant=$2
+		;
 	`
 
 	var cnt uint
-	if err := tx.QueryRow(ctx, existsQuery, req.Slug, req.TenantId).Scan(&cnt); err != nil {
-		return 0, err
+	if err = db.QueryRow(ctx, existsQuery, slug, tenant).Scan(&cnt); err != nil {
+		return
 	}
 
-	if cnt > 0 {
-		return 0, &errs.Error{
-			Code:    errs.AlreadyExists,
-			Message: "An institution already exists with the same identifier",
-		}
-	}
+	ans = cnt > 0
+	return
+}
 
+func createInstitution(ctx context.Context, tx *sqldb.Tx, req dto.NewInstitutionRequest) (uint64, error) {
 	insertQuery := `
 		INSERT INTO 
 			institutions(name,description,logo,slug,tenant) 
@@ -401,12 +411,15 @@ type DefaultSettings struct {
 }
 
 func defineInstitutionDefaultSettings(ctx context.Context, id uint64) error {
-	var sMap DefaultSettings
+	var sMap = DefaultSettings{
+		Settings: make(map[string]DefaultSetting),
+	}
+
 	if err := yaml.Unmarshal(defSettings, sMap); err != nil {
 		return err
 	}
 
-	req := dto.UpdateSettingsRequest{
+	req := dto.UpdateSettingsInternalRequest{
 		OwnerType: string(dto.PTInstitution),
 		Owner:     id,
 	}
@@ -440,7 +453,7 @@ func defineInstitutionDefaultSettings(ctx context.Context, id uint64) error {
 		req2.Updates = append(req2.Updates, s)
 	}
 
-	return settings.SetSettingValues(ctx, req2)
+	return settings.SetSettingValuesInternal(ctx, req2)
 }
 
 func getInstitutionStats(ctx context.Context) (*models.InstitutionStatistics, error) {

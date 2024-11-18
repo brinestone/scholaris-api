@@ -164,6 +164,21 @@ func (s SettingUpdate) Validate() error {
 	return nil
 }
 
+type UpdateSettingsInternalRequest struct {
+	OwnerType string          `header:"x-owner-type"`
+	Owner     uint64          `header:"x-owner"`
+	Updates   []SettingUpdate `json:"updates"`
+	Deletes   []string        `json:"deletes,omitempty" encore:"optional"`
+}
+
+func (u UpdateSettingsInternalRequest) GetOwnerType() string {
+	return u.OwnerType
+}
+
+func (u UpdateSettingsInternalRequest) GetOwner() uint64 {
+	return u.Owner
+}
+
 type UpdateSettingsRequest struct {
 	OwnerType    string          `header:"x-owner-type"`
 	CaptchaToken string          `header:"x-ver-token"`

@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "deploy-fga:local": "fga model write --store-id=$FGA_STORE_ID --file fga.mod"
   },
   "keywords": [],
   "author": "",
