@@ -14,20 +14,20 @@ type Tenant struct {
 }
 
 type SubscriptionPlanBenefit struct {
-	Name     string        `json:"name"`
-	Details  string        `json:"details"`
-	MinCount sql.NullInt32 `json:"minCount"`
-	MaxCount sql.NullInt32 `json:"maxCount"`
+	Name     string
+	Details  *string
+	MinCount *int32
+	MaxCount *int32
 }
 
 type SubscriptionPlan struct {
-	Id           uint64                     `json:"id,omitempty" encore:"optional"`
-	Name         string                     `json:"name"`
-	CreatedAt    time.Time                  `json:"createdAt"`
-	UpdatedAt    time.Time                  `json:"updatedAt"`
-	Price        float64                    `json:"price"`
-	Currency     string                     `json:"currency"`
-	Enabled      bool                       `json:"enabled"`
-	BillingCycle uint                       `json:"billingCycle"`
-	Benefits     *[]SubscriptionPlanBenefit `json:"benefits"`
+	Id           uint64
+	Name         string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+	Price        sql.NullFloat64
+	Currency     sql.NullString
+	Enabled      bool
+	BillingCycle uint
+	Benefits     []SubscriptionPlanBenefit
 }

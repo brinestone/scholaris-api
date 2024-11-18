@@ -7,6 +7,29 @@ import (
 	"encore.dev/beta/errs"
 )
 
+type SubscriptionPlanBenefit struct {
+	Name     string  `json:"name"`
+	Details  *string `json:"details,omitempty" encore:"optional"`
+	MinCount *int32  `json:"minCount,omitempty" encore:"optional"`
+	MaxCount *int32  `json:"maxCount,omitempty" encore:"optional"`
+}
+
+type SubscriptionPlan struct {
+	Id           uint64                    `json:"id"`
+	Name         string                    `json:"name"`
+	CreatedAt    time.Time                 `json:"createdAt"`
+	UpdatedAt    time.Time                 `json:"updatedAt"`
+	Price        *float64                  `json:"price,omitempty" encore:"optional"`
+	Currency     *string                   `json:"currency,omitempty" encore:"optional"`
+	Enabled      bool                      `json:"enabled"`
+	BillingCycle uint                      `json:"billingCycle"`
+	Benefits     []SubscriptionPlanBenefit `json:"benefits"`
+}
+
+type FindSubscriptionPlansResponse struct {
+	Plans []SubscriptionPlan `json:"plans"`
+}
+
 type FindTenantsRequest struct {
 	After uint64 `query:"after"`
 	Size  uint   `query:"size"`

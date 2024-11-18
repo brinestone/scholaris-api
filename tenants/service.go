@@ -21,22 +21,18 @@ import (
 	"github.com/brinestone/scholaris/util"
 )
 
-type FindSubscriptionPlansResponse struct {
-	SubscriptionPlans []*models.SubscriptionPlan `json:"plans"`
-}
-
 // Finds Subscription plans
 //
 //encore:api public method=GET path=/subscription-plans
-func FindSubscriptionPlans(ctx context.Context, params dto.CursorBasedPaginationParams) (*FindSubscriptionPlansResponse, error) {
-	plans, err := findSubscriptionPlans(ctx, params)
+func FindSubscriptionPlans(ctx context.Context) (*dto.FindSubscriptionPlansResponse, error) {
+	plans, err := findSubscriptionPlans(ctx, 0, 1000000, 0)
 	if err != nil {
 		rlog.Error(err.Error())
 		return nil, &util.ErrUnknown
 	}
 
-	return &FindSubscriptionPlansResponse{
-		SubscriptionPlans: plans,
+	return &dto.FindSubscriptionPlansResponse{
+		Plans: subscriptionPlansToDto(plans...),
 	}, nil
 }
 
@@ -431,44 +427,20 @@ func findTenantByIdFromCache(ctx context.Context, id uint64) (*models.Tenant, er
 	return &t, nil
 }
 
-func findSubscriptionPlans(ctx context.Context, params dto.CursorBasedPaginationParams) ([]*models.SubscriptionPlan, error) {
-	ans := make([]*models.SubscriptionPlan, 0)
+func findSubscriptionPlans(ctx context.Context, page, size uint, cursor uint64) (ans []*models.SubscriptionPlan, err error) {
 	query := `
-	SELECT
-    	sp.id,
-    	sp.name,
-    	sp.created_at AS "createdAt",
-    	sp.updated_at AS "updatedAt",
-    	sp.price,
-    	sp.currency,
-    	sp.enabled,
-    	sp.billing_cycle AS "billingCycle",
-    	COALESCE(json_agg(json_build_object(
-        	'name', spd.name,
-        	'details', spd.details,
-			'maxCount', spd.max_count,
-			'minCount', spd.min_count,
-			'maxCount', spd.max_count
-    	)) FILTER (WHERE spd.id IS NOT NULL), '[]') AS "descriptions"
-	FROM
-    	subscription_plans sp
-	LEFT JOIN
-    	plan_benefits spd
-		ON
-			sp.id = spd.subscription_plan
-	WHERE
-		sp.id > $1 AND sp.enabled = true
-	GROUP BY
-    	sp.id
-	ORDER BY
-		sp.price ASC
-	OFFSET 0
-	LIMIT $2;
+		SELECT 
+			* 
+		FROM
+			vw_AllSubscriptionPlans
+		WHERE
+			enabled=true AND id > $1 OFFSET $2 LIMIT $3
+		;
 	`
 
-	rows, err := tenantDb.Query(ctx, query, params.After, params.Size)
+	rows, err := tenantDb.Query(ctx, query, cursor, page*size, size)
 	if err != nil {
-		return ans, err
+		return
 	}
 	defer rows.Close()
 
@@ -487,9 +459,44 @@ func findSubscriptionPlans(ctx context.Context, params dto.CursorBasedPagination
 		if err := json.Unmarshal([]byte(benefitsJson), &benefits); err != nil {
 			return ans, err
 		}
-		plan.Benefits = &benefits
+
+		plan.Benefits = benefits
 		ans = append(ans, plan)
 	}
 
 	return ans, nil
+}
+
+func subscriptionPlansToDto(plans ...*models.SubscriptionPlan) (ans []dto.SubscriptionPlan) {
+	for _, plan := range plans {
+		var t = dto.SubscriptionPlan{
+			Id:           plan.Id,
+			Name:         plan.Name,
+			CreatedAt:    plan.CreatedAt,
+			UpdatedAt:    plan.UpdatedAt,
+			Enabled:      plan.Enabled,
+			Benefits:     make([]dto.SubscriptionPlanBenefit, len(plan.Benefits)),
+			BillingCycle: plan.BillingCycle,
+		}
+
+		if plan.Currency.Valid {
+			t.Currency = &plan.Currency.String
+		}
+
+		if plan.Price.Valid {
+			t.Price = &plan.Price.Float64
+		}
+
+		for i, v := range plan.Benefits {
+			t.Benefits[i] = dto.SubscriptionPlanBenefit{
+				Name:     v.Name,
+				Details:  v.Details,
+				MinCount: v.MinCount,
+				MaxCount: v.MaxCount,
+			}
+		}
+
+		ans = append(ans, t)
+	}
+	return
 }
