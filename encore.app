@@ -4,7 +4,7 @@
     "allow_headers": ["*"],
     "global_cors": {
         "allow_origins_without_credentials": [
-            "http://localhost4200"
+            "http://localhost:4200"
         ]
     }
 }
