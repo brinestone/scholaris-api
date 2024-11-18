@@ -4,8 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
+	"encore.dev/beta/auth"
 	"encore.dev/beta/errs"
 	"encore.dev/rlog"
 	"encore.dev/storage/cache"
@@ -18,6 +23,31 @@ import (
 
 type FetchUsersResponse struct {
 	Users []*models.User `json:"users"`
+}
+
+// Uploads a user's profile photo
+//
+//encore:api raw auth path=/avatars/:id
+func UploadProfilePhoto(w http.ResponseWriter, req *http.Request) {
+	userId, _ := auth.UserID()
+	key := util.HashThese(string(userId), time.Now().String())
+
+	upload := profilePhotoUploads.Upload(req.Context(), key)
+	_, err := io.Copy(upload, req.Body)
+	if err != nil {
+		upload.Abort(err)
+		rlog.Error(util.MsgUploadError, "msg", err.Error())
+		errs.HTTPError(w, &util.ErrUnknown)
+		return
+	}
+
+	if err := upload.Close(); err != nil {
+		rlog.Error(util.MsgUploadError, "msg", err.Error())
+		errs.HTTPError(w, &util.ErrUnknown)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }
 
 // Fetches a paginated set of Users
@@ -218,17 +248,18 @@ func createUser(ctx context.Context, req dto.NewUserRequest, tx *sqldb.Tx) (ans 
 
 	dob, _ := time.Parse("2006/2/1", req.Dob)
 	ph, _ := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	avatar := fmt.Sprintf("https://api.dicebear.com/9.x/adventurer/svg?seed?=%s&scale=80", url.QueryEscape(strings.Trim(fmt.Sprintf("%s %s", req.FirstName, req.LastName), " \n\t")))
 
 	query := `
 		INSERT INTO 
-			users (first_name, last_name, email, dob, password_hash, phone, gender) 
+			users (first_name, last_name, email, dob, password_hash, phone, gender, avatar) 
 		VALUES 
-			($1,$2,$3,$4,$5,$6,$7) 
+			($1,$2,$3,$4,$5,$6,$7,$8) 
 		RETURNING
 			id;
 	`
 
-	if err = tx.QueryRow(ctx, query, req.FirstName, req.LastName, req.Email, dob, string(ph), req.Phone, req.Gender).Scan(&ans); err != nil {
+	if err = tx.QueryRow(ctx, query, req.FirstName, req.LastName, req.Email, dob, string(ph), req.Phone, req.Gender, avatar).Scan(&ans); err != nil {
 		rlog.Error(err.Error())
 		err = &util.ErrUnknown
 	}
