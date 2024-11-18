@@ -38,7 +38,7 @@ func updateEnrollmentFormsOnFormDeleted(ctx context.Context, msg forms.FormDelet
 }
 
 func assertAutoAcademicYearCreationCronJobs(ctx context.Context, msg settings.SettingUpdatedEvent) error {
-	res, err := settings.GetSettingsInternal(ctx, dto.GetSettingsInternalRequest{
+	res, err := settings.FindSettingsInternal(ctx, dto.GetSettingsInternalRequest{
 		Owner:     msg.Owner,
 		OwnerType: msg.OwnerType,
 		Ids:       msg.Ids,

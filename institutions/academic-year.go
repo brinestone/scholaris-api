@@ -167,7 +167,7 @@ func doAutocreateAcademicYears(ctx context.Context, wg *sync.WaitGroup, page, si
 // Creates an institution's academic year.
 func autoCreateAcademicYear(ctx context.Context, tx *sqldb.Tx, institution uint64) (map[uint64][]uint64, error) {
 	var ans = make(map[uint64][]uint64)
-	res, err := settings.GetSettingsInternal(ctx, dto.GetSettingsInternalRequest{
+	res, err := settings.FindSettingsInternal(ctx, dto.GetSettingsInternalRequest{
 		Owner: institution,
 	})
 	if err != nil {

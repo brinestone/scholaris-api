@@ -24,7 +24,7 @@ import (
 // Internally fetches settings
 //
 //encore:api private method=GET path=/settings/internal
-func GetSettingsInternal(ctx context.Context, req dto.GetSettingsInternalRequest) (res *dto.GetSettingsResponse, err error) {
+func FindSettingsInternal(ctx context.Context, req dto.GetSettingsInternalRequest) (res *dto.GetSettingsResponse, err error) {
 	mods, err := findSettingsFromDb(ctx, req.Owner, req.OwnerType, true, req.Ids...)
 	if err != nil {
 		return
