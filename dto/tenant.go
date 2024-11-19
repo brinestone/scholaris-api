@@ -33,15 +33,17 @@ type FindSubscriptionPlansResponse struct {
 type FindTenantsRequest struct {
 	After uint64 `query:"after"`
 	Size  uint   `query:"size"`
-	// Retrieve only the tenants whereby the user is a member.
-	SubscribedOnly bool `json:"subscribedOnly"`
 }
+
+type FindTenantResponse struct {
+	Tenants []TenantLookup `json:"tenants"`
+}
+
 type TenantLookup struct {
-	Name         string    `json:"name"`
-	Id           uint64    `json:"id,omitempty" encore:"optional"`
-	CreatedAt    time.Time `json:"createdAt"`
-	UpdatedAt    time.Time `json:"updatedAt"`
-	Subscription uint64    `json:"-"`
+	Name      string    `json:"name"`
+	Id        uint64    `json:"id"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 type NewSubscriptionPlan struct {

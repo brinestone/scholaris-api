@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"encore.dev/beta/auth"
@@ -19,6 +18,7 @@ import (
 	"github.com/brinestone/scholaris/dto"
 	"github.com/brinestone/scholaris/models"
 	"github.com/brinestone/scholaris/util"
+	"github.com/lib/pq"
 )
 
 // Finds Subscription plans
@@ -127,106 +127,71 @@ func NewTenant(ctx context.Context, req dto.NewTenantRequest) (*models.Tenant, e
 
 // Find all Tenants
 //
-//encore:api public method=GET path=/tenants
-func FindTenants(ctx context.Context, req dto.FindTenantsRequest) (*dto.PaginatedResponse[models.Tenant], error) {
-	var ans = make([]*models.Tenant, 0)
-	var count uint
-	var err error
+//encore:api auth method=GET path=/tenants tag:can_view_tenant
+func FindTenants(ctx context.Context, req dto.PageBasedPaginationParams) (ans *dto.FindTenantResponse, err error) {
+	uid, _ := auth.UserID()
 
-	if !req.SubscribedOnly {
-		ans, count, err = getTenants(ctx, req.After, req.Size)
-	} else {
-		uid, ok := auth.UserID()
-		if !ok {
-			return nil, &util.ErrUnauthorized
-		}
-		ans, count, err = getSubscribedTenants(ctx, uid, req.After, req.Size)
-	}
+	viewable, err := lookupViewableTenantIds(ctx, uid)
 	if err != nil {
-		rlog.Error(err.Error())
-		return nil, &util.ErrUnknown
+		rlog.Error(util.MsgCallError, "msg", err.Error())
+		err = &util.ErrUnknown
+		return
 	}
 
-	return &dto.PaginatedResponse[models.Tenant]{
-		Data: ans,
-		Meta: dto.PaginatedResponseMeta{
-			Total: count,
-		},
-	}, nil
+	if len(viewable) == 0 {
+		err = &util.ErrNotFound
+		return
+	}
+
+	found, err := findViewableTenants(ctx, req.Page, req.Size, viewable)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = &util.ErrNotFound
+		return
+	} else if err != nil {
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		err = &util.ErrUnknown
+		return
+	}
+
+	ans = &dto.FindTenantResponse{
+		Tenants: tenantsToDto(found...),
+	}
+
+	return
 }
 
-func getSubscribedTenants(ctx context.Context, uid auth.UID, after uint64, size uint) ([]*models.Tenant, uint, error) {
-	ans := make([]*models.Tenant, 0)
+func lookupViewableTenantIds(ctx context.Context, uid auth.UID) (ans []uint64, err error) {
 	response, err := permissions.ListRelations(ctx, dto.ListRelationsRequest{
-		Actor:    fmt.Sprintf("%s:%s", dto.PTUser, uid),
+		Actor:    dto.IdentifierString(dto.PTUser, uid),
 		Relation: models.PermCanView,
 		Type:     string(dto.PTTenant),
 	})
 	if err != nil {
-		return ans, 0, err
+		return
 	}
 
-	if len(response.Relations) == 0 {
-		return nil, 0, nil
-	}
+	ans = response.Relations[dto.PTTenant]
+	return
+}
 
-	var args = make([]any, len(response.Relations[dto.PTTenant])+2)
-	var placeholders = make([]string, len(response.Relations[dto.PTTenant]))
-	args[0], args[1] = after, size
+func findViewableTenants(ctx context.Context, page, size uint, ids []uint64) (ans []*models.Tenant, err error) {
+	query := "SELECT id,name,created_at,updated_at FROM vw_AllTenants WHERE id=ANY($1) OFFSET=$2 LIMIT $3;"
 
-	for i, v := range response.Relations[dto.PTTenant] {
-		args[i+2] = v
-		placeholders[i] = fmt.Sprintf("$%d", i+3)
-	}
-
-	query := fmt.Sprintf(`
-		SELECT
-			%s
-		FROM
-			tenants
-		WHERE
-			id IN (%s) AND id > $1
-		OFFSET 0
-		LIMIT $2;
-	`, tenantFields, strings.Join(placeholders, ","))
-
-	rows, err := tenantDb.Query(ctx, query, args...)
+	rows, err := tenantDb.Query(ctx, query, pq.Array(ids), page*size, size)
 	if err != nil {
-		return nil, 0, err
+		return
 	}
 	defer rows.Close()
 
 	for rows.Next() {
-		var tenant = new(models.Tenant)
-		if err := rows.Scan(&tenant.Id, &tenant.Name, &tenant.CreatedAt, &tenant.UpdatedAt, &tenant.Subscription); err != nil {
-			return nil, 0, err
+		var mod = new(models.Tenant)
+		if err = rows.Scan(&mod.Id, &mod.Name, &mod.CreatedAt, &mod.UpdatedAt); err != nil {
+			return
 		}
-
-		if err := tenantCache.Set(ctx, tenant.Id, *tenant); err != nil {
-			return nil, 0, err
-		}
-
-		ans = append(ans, tenant)
+		ans = append(ans, mod)
 	}
 
-	placeholders = make([]string, len(response.Relations[dto.PTTenant]))
-	args = make([]any, len(placeholders))
-
-	for i, v := range response.Relations[dto.PTTenant] {
-		args[i] = v
-		placeholders[i] = fmt.Sprintf("$%d", i+1)
-	}
-
-	q2 := fmt.Sprintf(`
-		SELECT COUNT(id) FROM tenants WHERE id IN (%s);
-	`, strings.Join(placeholders, ","))
-
-	var cnt uint = 0
-	if err := tenantDb.QueryRow(ctx, q2, args...).Scan(&cnt); err != nil {
-		return nil, 0, err
-	}
-
-	return ans, cnt, nil
+	return
 }
 
 func getTenants(ctx context.Context, after uint64, size uint) ([]*models.Tenant, uint, error) {
@@ -498,5 +463,21 @@ func subscriptionPlansToDto(plans ...*models.SubscriptionPlan) (ans []dto.Subscr
 
 		ans = append(ans, t)
 	}
+	return
+}
+
+func tenantsToDto(t ...*models.Tenant) (ans []dto.TenantLookup) {
+	ans = make([]dto.TenantLookup, len(t))
+
+	for i, v := range t {
+		vv := dto.TenantLookup{
+			Name:      v.Name,
+			Id:        v.Id,
+			CreatedAt: v.CreatedAt,
+			UpdatedAt: v.UpdatedAt,
+		}
+		ans[i] = vv
+	}
+
 	return
 }
