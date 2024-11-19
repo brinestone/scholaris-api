@@ -38,7 +38,7 @@ func FindSubscriptionPlans(ctx context.Context) (*dto.FindSubscriptionPlansRespo
 
 // Finds a tenant using its ID
 //
-//encore:api auth method=GET path=/tenants/:id
+//encore:api auth method=GET path=/tenants/:id tag:can_view_tenant
 func FindTenant(ctx context.Context, id uint64) (*models.Tenant, error) {
 	var t *models.Tenant
 	var err error
@@ -127,7 +127,7 @@ func NewTenant(ctx context.Context, req dto.NewTenantRequest) (*models.Tenant, e
 
 // Find all Tenants
 //
-//encore:api auth method=GET path=/tenants tag:can_view_tenant
+//encore:api auth method=GET path=/tenants
 func FindTenants(ctx context.Context, req dto.PageBasedPaginationParams) (ans *dto.FindTenantResponse, err error) {
 	uid, _ := auth.UserID()
 
@@ -179,6 +179,7 @@ func findViewableTenants(ctx context.Context, page, size uint, ids []uint64) (an
 
 	rows, err := tenantDb.Query(ctx, query, pq.Array(ids), page*size, size)
 	if err != nil {
+		rlog.Debug("here")
 		return
 	}
 	defer rows.Close()
@@ -194,51 +195,7 @@ func findViewableTenants(ctx context.Context, page, size uint, ids []uint64) (an
 	return
 }
 
-func getTenants(ctx context.Context, after uint64, size uint) ([]*models.Tenant, uint, error) {
-	ans := make([]*models.Tenant, 0)
-	rows, err := tenantDb.Query(ctx, fmt.Sprintf(`
-		SELECT 
-			%s 
-		FROM 
-			tenants 
-		WHERE 
-			id > $1 
-		ORDER BY 
-			updated_at DESC 
-		OFFSET 0 
-		LIMIT $2;
-	`, tenantFields), after, size)
-
-	if err != nil {
-		return nil, 0, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var tenant = new(models.Tenant)
-		if err := rows.Scan(&tenant.Id, &tenant.Name, &tenant.CreatedAt, &tenant.UpdatedAt, &tenant.Subscription); err != nil {
-			return nil, 0, err
-		}
-		tenantCache.Set(ctx, tenant.Id, *tenant)
-		ans = append(ans, tenant)
-	}
-
-	var count uint
-	if err := tenantDb.QueryRow(ctx, `
-		SELECT
-			COUNT(*)
-		FROM
-			tenants;
-	`).Scan(&count); err != nil {
-		return ans, 0, err
-	}
-
-	return ans, count, nil
-}
-
 const tenantFields = "id,name,created_at,updated_at,subscription"
-
-// const subscriptionPlanFields = "id,name,created_at,updated_at,price,currency,enabled,billing_cycle"
 
 func createTenant(ctx context.Context, tx *sqldb.Tx, req dto.NewTenantRequest, owner *auth.UID) (*models.Tenant, error) {
 	// Check whether a tenant with the same name already exists.
