@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strconv"
 	"time"
 
@@ -337,52 +336,15 @@ func updateSettings(ctx context.Context, tx *sqldb.Tx, owner, user uint64, owner
 	return ids, nil
 }
 
-func updateSettingValues(ctx context.Context, tx *sqldb.Tx, owner, user uint64, ownerType string, req ...dto.SettingValueUpdate) error {
-	for _, v := range req {
-		q1 := `
-			SELECT
-				id
-			FROM
-				settings
-			WHERE
-				key=$1 AND owner=$2 AND owner_type=$3 AND system_generated=false;
-		`
-		var settingId uint64
-		if err := db.QueryRow(ctx, q1, v.Key, owner, ownerType).Scan(&settingId); err != nil {
-			if errors.Is(err, sqldb.ErrNoRows) {
-				return &errs.Error{
-					Code:    errs.FailedPrecondition,
-					Message: fmt.Sprintf("unknown setting %s", v.Key),
-				}
-			}
-		}
+func updateSettingValues(ctx context.Context, tx *sqldb.Tx, owner, user uint64, ownerType string, req ...dto.SettingValueUpdate) (err error) {
+	updatesJson, err := json.Marshal(req)
 
-		query := `
-			INSERT INTO
-				setting_values(
-					set_by,
-					value,
-					set_at,
-					setting
-					value_index
-				)
-			VALUES
-				($1,$2,DEFAULT,$3,$4)
-			ON CONFLICT 
-				(setting,value_index)
-			DO
-				UPDATE SET
-					value=$2,
-					set_by=$1,
-					set_at=DEFAULT;
-		`
-		for _, value := range v.Value {
-			if _, err := tx.Exec(ctx, query, user, value, settingId, value.Index); err != nil {
-				return err
-			}
-		}
+	if err != nil {
+		return
 	}
-	return nil
+
+	_, err = tx.Exec(ctx, "CALL proc_upsert_setting_value($1,$2,$3,$4)", owner, ownerType, user, string(updatesJson))
+	return
 }
 
 func doSettingValuesUpdate(ctx context.Context, uid, owner uint64, ownerType string, updates []dto.SettingValueUpdate) (err error) {
