@@ -17,7 +17,6 @@ import (
 	"github.com/brinestone/scholaris/core/permissions"
 	"github.com/brinestone/scholaris/dto"
 	"github.com/brinestone/scholaris/institutions"
-	"github.com/brinestone/scholaris/models"
 	"github.com/brinestone/scholaris/tenants"
 	"github.com/stretchr/testify/assert"
 )
@@ -47,14 +46,13 @@ func mockEndpoints() {
 			},
 		}, nil
 	})
-	et.MockEndpoint(tenants.FindTenant, func(ctx context.Context, id uint64) (*models.Tenant, error) {
+	et.MockEndpoint(tenants.FindTenant, func(ctx context.Context, id uint64) (*dto.TenantLookup, error) {
 		date := gofakeit.PastDate()
-		return &models.Tenant{
-			Name:         gofakeit.LoremIpsumSentence(gofakeit.IntRange(1, 5)),
-			Id:           id,
-			CreatedAt:    date,
-			UpdatedAt:    date,
-			Subscription: gofakeit.Uint64(),
+		return &dto.TenantLookup{
+			Name:      gofakeit.LoremIpsumSentence(gofakeit.IntRange(1, 5)),
+			Id:        id,
+			CreatedAt: date,
+			UpdatedAt: date,
 		}, nil
 	})
 }
