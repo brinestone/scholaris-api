@@ -39,7 +39,7 @@ func FindSubscriptionPlans(ctx context.Context) (*dto.FindSubscriptionPlansRespo
 // Finds a tenant using its ID
 //
 //encore:api auth method=GET path=/tenants/:id tag:can_view_tenant
-func FindTenant(ctx context.Context, id uint64) (*models.Tenant, error) {
+func FindTenant(ctx context.Context, id uint64) (*dto.TenantLookup, error) {
 	var t *models.Tenant
 	var err error
 
@@ -52,7 +52,7 @@ func FindTenant(ctx context.Context, id uint64) (*models.Tenant, error) {
 		return nil, &util.ErrUnknown
 	}
 
-	return t, err
+	return &tenantsToDto(t)[0], err
 }
 
 // Deletes a Tenant
