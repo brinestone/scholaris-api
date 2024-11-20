@@ -6,11 +6,11 @@ import (
 )
 
 type Tenant struct {
-	Name         string    `json:"name"`
-	Id           uint64    `json:"id,omitempty" encore:"optional"`
-	CreatedAt    time.Time `json:"createdAt"`
-	UpdatedAt    time.Time `json:"updatedAt"`
-	Subscription uint64    `json:"subscription"`
+	Name         string
+	Id           uint64
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+	Subscription uint64
 }
 
 type SubscriptionPlanBenefit struct {

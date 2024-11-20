@@ -14,11 +14,13 @@ import (
 	"time"
 
 	"encore.dev/beta/auth"
+	"encore.dev/beta/errs"
 	"encore.dev/rlog"
 	"github.com/brinestone/scholaris/core/users"
 	"github.com/brinestone/scholaris/dto"
 	"github.com/brinestone/scholaris/util"
 	"github.com/golang-jwt/jwt/v4"
+	"golang.org/x/crypto/bcrypt"
 )
 
 var jwtSigningMethod = jwt.SigningMethodHS256
@@ -34,6 +36,19 @@ type VerifyCaptchaRequest struct {
 func DeleteAccount(ctx context.Context, req dto.DeleteAccountRequest) (err error) {
 	uid, _ := auth.UserID()
 	userId, _ := strconv.ParseUint(string(uid), 10, 64)
+
+	user, err := users.FindUserById(ctx, userId)
+	if err != nil {
+		return
+	}
+
+	if err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
+		err = &errs.Error{
+			Code:    errs.FailedPrecondition,
+			Message: "Invalid password",
+		}
+		return
+	}
 
 	if err = deleteUserAccount(ctx, userId); err != nil {
 		rlog.Error("user account deletion error", "msg", err.Error())

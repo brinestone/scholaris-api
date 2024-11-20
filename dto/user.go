@@ -9,6 +9,10 @@ import (
 	"encore.dev/beta/errs"
 )
 
+type FetchUsersResponse struct {
+	Users []User `json:"users"`
+}
+
 type User struct {
 	Id        uint64    `json:"id"`
 	FirstName string    `json:"firstName"`
