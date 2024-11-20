@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "deploy-fga:local": "fga model write --store-id=$FGA_STORE_ID --file fga.mod"
+    "deploy-fga:local": "fga model write --store-id=$FGA_STORE_ID --file fga.mod",
+    "release": "standard-version"
   },
   "keywords": [],
   "author": "",
