@@ -101,14 +101,14 @@ func doAutocreateAcademicYears(ctx context.Context, wg *sync.WaitGroup, page, si
 		SELECT
 			id
 		FROM
-			vw_InstitutionStatistics
+			institutions
 		WHERE
 			verified=true
 		OFFSET $1
 		LIMIT $2
 		;
 	`
-	rows, err := db.Query(ctx, query, page, size)
+	rows, err := db.Query(ctx, query, page*size, size)
 	if err != nil {
 		return
 	}
@@ -128,14 +128,18 @@ func doAutocreateAcademicYears(ctx context.Context, wg *sync.WaitGroup, page, si
 			return
 		}
 
-		idMap, err := autoCreateAcademicYear(ctx, tx, institution)
+		yearAndTermsMap, err := autoCreateAcademicYear(ctx, tx, institution)
 		if err != nil {
 			tx.Rollback()
 			rlog.Debug("error while auto-creating academic year", "institution", institution, "err", err)
 			return
 		}
 
-		for yearId, termIds := range idMap {
+		if len(yearAndTermsMap) == 0 {
+			rlog.Warn("skipped academic year auto-creation", "institution", institution)
+		}
+
+		for yearId, termIds := range yearAndTermsMap {
 			req := dto.UpdatePermissionsRequest{
 				Updates: []dto.PermissionUpdate{
 					{
@@ -165,13 +169,13 @@ func doAutocreateAcademicYears(ctx context.Context, wg *sync.WaitGroup, page, si
 }
 
 // Creates an institution's academic year.
-func autoCreateAcademicYear(ctx context.Context, tx *sqldb.Tx, institution uint64) (map[uint64][]uint64, error) {
-	var ans = make(map[uint64][]uint64)
+func autoCreateAcademicYear(ctx context.Context, tx *sqldb.Tx, institution uint64) (ans map[uint64][]uint64, err error) {
+	ans = make(map[uint64][]uint64)
 	res, err := settings.FindSettingsInternal(ctx, dto.GetSettingsInternalRequest{
 		Owner: institution,
 	})
 	if err != nil {
-		return nil, err
+		return
 	}
 
 	for _, s := range res.Settings {
@@ -179,7 +183,7 @@ func autoCreateAcademicYear(ctx context.Context, tx *sqldb.Tx, institution uint6
 		case dto.SKAcademicYearAutoCreation:
 			valPtr := s.Values[0].Value
 			if valPtr == nil {
-				continue
+				break
 			}
 			autoAcademicYearCreationEnabled, err := strconv.ParseBool(*valPtr)
 			if err != nil {
@@ -187,7 +191,7 @@ func autoCreateAcademicYear(ctx context.Context, tx *sqldb.Tx, institution uint6
 			}
 
 			if err != nil || !autoAcademicYearCreationEnabled {
-				continue
+				break
 			}
 
 			var creationOffset, startOffset string
