@@ -128,7 +128,7 @@ func NewTenant(ctx context.Context, req dto.NewTenantRequest) (*models.Tenant, e
 // Find all Tenants
 //
 //encore:api auth method=GET path=/tenants
-func FindTenants(ctx context.Context, req dto.PageBasedPaginationParams) (ans *dto.FindTenantResponse, err error) {
+func Lookup(ctx context.Context, req dto.PageBasedPaginationParams) (ans *dto.FindTenantResponse, err error) {
 	uid, _ := auth.UserID()
 
 	viewable, err := lookupViewableTenantIds(ctx, uid)

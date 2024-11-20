@@ -25,6 +25,25 @@ type FetchUsersResponse struct {
 	Users []*models.User `json:"users"`
 }
 
+// Deletes a user's account (internal API)
+//
+//encore:api private method=DELETE path=/users/:id
+func DeleteInternal(ctx context.Context, id uint64) (err error) {
+	tx, err := userDb.Begin(ctx)
+	if err != nil {
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		err = &util.ErrUnknown
+		return
+	}
+	tx.Commit()
+
+	DeletedUsers.Publish(ctx, UserDeleted{
+		UserId:    id,
+		Timestamp: time.Now(),
+	})
+	return
+}
+
 // Uploads a user's profile photo
 //
 //encore:api raw auth path=/avatars/:id
@@ -264,5 +283,12 @@ func createUser(ctx context.Context, req dto.NewUserRequest, tx *sqldb.Tx) (ans 
 		err = &util.ErrUnknown
 	}
 
+	return
+}
+
+func deleteUserAccount(ctx context.Context, tx *sqldb.Tx, user uint64) (err error) {
+	if _, err = tx.Exec(ctx, "CALL proc_delete_user($1);", user); err != nil {
+		return
+	}
 	return
 }
