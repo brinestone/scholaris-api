@@ -21,10 +21,6 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-type FetchUsersResponse struct {
-	Users []*models.User `json:"users"`
-}
-
 // Deletes a user's account (internal API)
 //
 //encore:api private method=DELETE path=/users/:id
@@ -36,6 +32,10 @@ func DeleteInternal(ctx context.Context, id uint64) (err error) {
 		return
 	}
 	tx.Commit()
+
+	if err = deleteUserAccount(ctx, tx, id); err != nil {
+		return
+	}
 
 	DeletedUsers.Publish(ctx, UserDeleted{
 		UserId:    id,
@@ -72,14 +72,14 @@ func UploadProfilePhoto(w http.ResponseWriter, req *http.Request) {
 // Fetches a paginated set of Users
 //
 //encore:api auth method=GET path=/users
-func FetchUsers(ctx context.Context, req dto.CursorBasedPaginationParams) (*FetchUsersResponse, error) {
+func FetchUsers(ctx context.Context, req dto.CursorBasedPaginationParams) (*dto.FetchUsersResponse, error) {
 	ans, err := findAllUsers(ctx, req.After, req.Size)
 	if err != nil {
 		return nil, err
 	}
 
-	return &FetchUsersResponse{
-		Users: ans,
+	return &dto.FetchUsersResponse{
+		Users: usersToDto(ans...),
 	}, nil
 }
 
@@ -289,6 +289,34 @@ func createUser(ctx context.Context, req dto.NewUserRequest, tx *sqldb.Tx) (ans 
 func deleteUserAccount(ctx context.Context, tx *sqldb.Tx, user uint64) (err error) {
 	if _, err = tx.Exec(ctx, "CALL proc_delete_user($1);", user); err != nil {
 		return
+	}
+	return
+}
+
+func usersToDto(u ...*models.User) (ans []dto.User) {
+	ans = make([]dto.User, len(u))
+
+	for i, v := range u {
+		var u = dto.User{
+			Id:        v.Id,
+			FirstName: v.FirstName,
+			Email:     v.Email,
+			Dob:       v.Dob,
+			Phone:     v.Phone,
+			Gender:    dto.Gender(v.Gender),
+			CreatedAt: v.CreatedAt,
+			UpdatedAt: v.UpdatedAt,
+		}
+
+		if v.LastName.Valid {
+			u.LastName = &v.LastName.String
+		}
+
+		if v.Avatar.Valid {
+			u.Avatar = &v.Avatar.String
+		}
+
+		ans[i] = u
 	}
 	return
 }
