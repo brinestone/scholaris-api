@@ -2,68 +2,77 @@ package dto
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 )
 
-// Form Answer types
-const (
-	FAText           = "text"
-	FASingleChoice   = "single-choice"
-	FAMultipleChoice = "multiple-choice"
-	FAFile           = "file"
-)
-
-// Question types
-const (
-	// Open ended question, meaning the user can provide any text as answer
-	QTOpenEnded = "open-ended"
-	// The user can provide multiple texts as answer
-	QTMultipleChoice = "multiple-choice"
-	// The user can only provide a set of URLs as answer
-	QTUpload = "upload"
-)
-
-// Enrollment statuses
-const (
-	// The enrollment is in draft mode.
-	ESDraft = "draft"
-	// The enrollment has pending.
-	ESPending = "pending"
-	// The enrollment has been rejected.
-	ESRejected = "rejected"
-	// The enrollment has been approved.
-	ESApproved = "approved"
-)
-
-type EnrollmentQuestionOption struct {
-	Label     string `json:"label"`
-	Value     string `json:"value"`
-	IsDefault bool   `json:"isDefault"`
+type NewEnrollmentFormRequest struct {
+	Institution  uint64 `header:"x-owner"`
+	CaptchaToken string `json:"captcha"`
 }
 
-type EnrollmentQuestion struct {
-	Id              uint64                      `json:"id"`
-	Prompt          string                      `json:"prompt"`
-	QuestionType    string                      `json:"questionType"`
-	AnswerType      string                      `json:"answerType"`
-	IsRequired      bool                        `json:"isRequired"`
-	ChoiceDelimiter string                      `json:"choiceDelimiter"`
-	Options         []*EnrollmentQuestionOption `json:"options,omitempty"`
+func (n NewEnrollmentFormRequest) GetCaptchaToken() string {
+	return n.CaptchaToken
 }
 
-type EnrollmentQuestions struct {
-	Questions []*EnrollmentQuestion `json:"questions"`
+func (n NewEnrollmentFormRequest) GetOwner() uint64 {
+	return n.Institution
 }
 
-type NewEnrollment struct {
-	Destination             string `json:"institution"`
-	ServiceTransactionToken string `json:"serviceTransactionToken"`
+func (n NewEnrollmentFormRequest) GetOwnerType() string {
+	return string(PTInstitution)
 }
 
-func (ne NewEnrollment) Validate() error {
+func (n NewEnrollmentFormRequest) Validate() (err error) {
+	msgs := make([]string, 0)
+	if n.Institution == 0 {
+		msgs = append(msgs, "The x-owner header is required")
+	}
+
+	if len(n.CaptchaToken) == 0 {
+		msgs = append(msgs, "Invalid captcha token")
+	}
+
+	if len(msgs) > 0 {
+		err = errors.New(strings.Join(msgs, "\n"))
+	}
+	return
+}
+
+type NewEnrollmentRequest struct {
+	Destination             uint64 `header:"x-owner"`
+	ServiceTransactionToken string `header:"x-service-transaction"`
+	Level                   uint64 `json:"level"`
+	CaptchaToken            string `json:"captcha"`
+}
+
+func (n NewEnrollmentRequest) GetLevelRef() uint64 {
+	return n.Level
+}
+
+func (n NewEnrollmentRequest) GetCaptchaToken() string {
+	return n.CaptchaToken
+}
+
+func (n NewEnrollmentRequest) GetOwner() uint64 {
+	return n.Destination
+}
+
+func (n NewEnrollmentRequest) GetOwnerType() string {
+	return string(PTInstitution)
+}
+
+func (ne NewEnrollmentRequest) Validate() error {
 	var msgs = make([]string, 0)
-	if len(ne.Destination) == 0 {
+
+	if ne.Level == 0 {
+		msgs = append(msgs, "Invalid level value")
+	}
+
+	if len(ne.CaptchaToken) == 0 {
+		msgs = append(msgs, "Invalid captcha token")
+	}
+
+	if ne.Destination == 0 {
 		msgs = append(msgs, "Invalid institution ID")
 	}
 
@@ -75,45 +84,4 @@ func (ne NewEnrollment) Validate() error {
 		return errors.New(strings.Join(msgs, "\n"))
 	}
 	return nil
-}
-
-type UpdateEnrollment struct {
-	Destination uint64 `json:"institution"`
-	Answers     []struct {
-		Value    string `json:"value,omitempty"`
-		Question uint64 `json:"question"`
-	} `json:"answers,omitempty"`
-	RemovedAnswers   []int
-	AddedDocuments   []string `json:"addedDocuments,omitempty"`
-	RemovedDocuments []string `json:"removedDocuments,omitempty"`
-}
-
-func (ue UpdateEnrollment) Validate() error {
-	var msgs = make([]string, 0)
-	if ue.Destination == 0 {
-		msgs = append(msgs, "invalid institution ID")
-	}
-
-	if len(ue.Answers) > 0 {
-		for i, a := range ue.Answers {
-			if a.Question == 0 {
-				msgs = append(msgs, fmt.Sprintf("Invalid Question at %d", i))
-			}
-		}
-	}
-
-	if len(msgs) > 0 {
-		return errors.New(strings.Join(msgs, "\n"))
-	}
-	return nil
-}
-
-type EnrollmentState struct {
-	Id          uint64 `json:"id"`
-	Destination uint64 `json:"institution"`
-	Answers     []struct {
-		Value    []*string `json:"value,omitempty"`
-		Question uint64    `json:"question"`
-	} `json:"answers,omitempty"`
-	Documents []string `json:"documents,omitempty"`
 }

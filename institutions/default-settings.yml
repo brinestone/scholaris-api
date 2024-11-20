@@ -1,0 +1,45 @@
+settings:
+  academicYearDuration:
+    label: Academic year duration
+    description: 'The duration of an academic year'
+    value:
+      - 9 months
+  academicTermsCount:
+    label: '# of Academic terms'
+    description: The number of terms in an academic year
+    value:
+      - '3'
+  academicYearStartDateOffset:
+    label: 'Academic year start date offset'
+    description: 'The number of hours between the creation and launching of an academic year'
+    value:
+      - '0'
+  academicTermDurations:
+    label: Academic term durations
+    multiValues: true
+    value:
+      - 3 months
+      - 3 months
+      - 3 months
+    description: The durations of the academic terms in an academic year
+  academicYearAutoCreation:
+    label: Automatic academic year creation
+    description: Whether academic years should be created automatically or not
+    value:
+      - 'false'
+  academicYearAutoCreationOffset:
+    label: Automatic academic year creation offset
+    description: The number of months between the end and beginning of academic years
+    value:
+      - 3 months
+  vacationDurations:
+    label: Vacations
+    description: Durations of vacation breaks
+    value:
+      - 2 weeks
+      - 2 weeks
+  defaultEnrollmentResponseWindow:
+    label: Default enrollment window
+    description: The default time window for accepting enrollments.
+    value:
+      - 3 months

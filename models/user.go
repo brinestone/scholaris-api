@@ -1,23 +1,24 @@
 package models
 
 import (
+	"database/sql"
 	"fmt"
 	"strings"
 	"time"
 )
 
 type User struct {
-	Id           uint64     `json:"id,omitempty"`
-	FirstName    string     `json:"firstName"`
-	LastName     NullString `json:"lastName,omitempty"`
-	Email        string     `json:"email"`
-	Dob          time.Time  `json:"dob"`
-	PasswordHash string     `json:"-" encore:"sensitive"`
-	Phone        string     `json:"phone"`
-	CreatedAt    time.Time  `json:"created_at,omitempty"`
-	UpdatedAt    time.Time  `json:"updated_at,omitempty"`
-	Gender       string     `json:"gender"`
-	Avatar       NullString `json:"avatar,omitempty"`
+	Id           uint64
+	FirstName    string
+	LastName     sql.NullString
+	Email        string
+	Dob          time.Time
+	PasswordHash string `encore:"sensitive"`
+	Phone        string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+	Gender       string
+	Avatar       sql.NullString
 }
 
 func (u User) FullName() string {

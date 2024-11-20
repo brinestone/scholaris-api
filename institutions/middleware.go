@@ -1,17 +1,183 @@
 package institutions
 
 import (
+	"errors"
 	"fmt"
+	"time"
 
 	"encore.dev/beta/auth"
+	"encore.dev/beta/errs"
 	"encore.dev/middleware"
 	"encore.dev/rlog"
+	"encore.dev/storage/sqldb"
 	appAuth "github.com/brinestone/scholaris/core/auth"
 	"github.com/brinestone/scholaris/core/permissions"
 	"github.com/brinestone/scholaris/dto"
 	"github.com/brinestone/scholaris/models"
 	"github.com/brinestone/scholaris/util"
 )
+
+// Validates a user's permission to create an enrollment
+//
+//encore:middleware target=tag:can_enroll
+func AllowedToEnroll(request middleware.Request, next middleware.Next) (ans middleware.Response) {
+	ans = next(request)
+
+	uid, _ := auth.UserID()
+	ownerInfo, ok := request.Data().Payload.(models.OwnerInfo)
+	if !ok {
+		ans = middleware.Response{
+			Err: &util.ErrForbidden,
+		}
+		return
+	}
+
+	lookup, err := findInstitutionByGenericIdentifier(request.Context(), fmt.Sprintf("%d", ownerInfo.GetOwner()))
+	if err != nil {
+		rlog.Error(util.MsgCallError, "msg", err.Error())
+		ans = middleware.Response{
+			Err: err,
+		}
+		return
+	}
+
+	levelInfo, ok := request.Data().Payload.(models.HasLevelIdentifier)
+	if !ok {
+		ans = middleware.Response{
+			Err: &util.ErrForbidden,
+		}
+		return
+	}
+
+	formInfo, err := findLevelEnrollmentForm(request.Context(), levelInfo.GetLevelRef(), ownerInfo.GetOwner())
+	if err != nil {
+		if errors.Is(err, sqldb.ErrNoRows) {
+			rlog.Warn("enrollment attempted", "reason", "no form configured", "level", levelInfo.GetLevelRef())
+		}
+		ans = middleware.Response{
+			Err: &util.ErrForbidden,
+		}
+		return
+	}
+
+	var deadline *time.Time
+	if formInfo.Deadline.Valid {
+		deadline = &formInfo.Deadline.Time
+	}
+
+	req := dto.RelationCheckRequest{
+		Actor:    dto.IdentifierString(dto.PTUser, uid),
+		Relation: "can_enroll",
+		Target:   dto.IdentifierString(dto.PTInstitution, ownerInfo.GetOwner()),
+		Condition: &dto.RelationCondition{
+			Name: "enrollment_available",
+			Context: []dto.ContextEntry{
+				dto.HavingEntry("institution_verified", dto.CETBool, lookup.Verified),
+				dto.HavingEntry("current_time", dto.CETTimestamp, time.Now().String()),
+				dto.HavingEntry("deadline", dto.CETTimestamp, deadline),
+			},
+		},
+	}
+	res, err := permissions.CheckPermission(request.Context(), req)
+	if err != nil {
+		rlog.Error(util.MsgCallError, "err", err)
+		return middleware.Response{
+			Err: &util.ErrUnknown,
+		}
+	}
+	if !res.Allowed {
+		return middleware.Response{
+			Err: &util.ErrForbidden,
+		}
+	}
+
+	return
+}
+
+// Validates a user's permission to create an enrollment form
+//
+//encore:middleware target=tag:can_create_enrollment_form
+func AllowedToCreateEnrollmentForm(request middleware.Request, next middleware.Next) (ans middleware.Response) {
+	ans = next(request)
+
+	uid, _ := auth.UserID()
+	ownerInfo, ok := request.Data().Payload.(models.OwnerInfo)
+	if !ok {
+		rlog.Debug("here")
+		return middleware.Response{
+			Err: &util.ErrForbidden,
+		}
+	}
+
+	req := dto.RelationCheckRequest{
+		Actor:    dto.IdentifierString(dto.PTUser, uid),
+		Relation: "can_create_enrollment_forms",
+		Target:   dto.IdentifierString(dto.PTInstitution, ownerInfo.GetOwner()),
+	}
+	res, err := permissions.CheckPermission(request.Context(), req)
+	if err != nil {
+		rlog.Error(util.MsgCallError, "err", err)
+		return middleware.Response{
+			Err: &util.ErrUnknown,
+		}
+	}
+	if !res.Allowed {
+		return middleware.Response{
+			Err: &util.ErrForbidden,
+		}
+	}
+
+	return
+}
+
+// Validates a user's permission to create an academic year
+//
+//encore:middleware target=tag:can_create_academic_year
+func AllowedToCreateAcademicYear(request middleware.Request, next middleware.Next) middleware.Response {
+	uid, _ := auth.UserID()
+	ownerInfo, ok := request.Data().Payload.(models.OwnerInfo)
+	if !ok {
+		rlog.Debug("here")
+		return middleware.Response{
+			Err: &util.ErrForbidden,
+		}
+	}
+
+	req := dto.RelationCheckRequest{
+		Actor:    dto.IdentifierString(dto.PTUser, uid),
+		Relation: "can_create_academic_year",
+		Target:   dto.IdentifierString(dto.PTInstitution, ownerInfo.GetOwner()),
+	}
+	res, err := permissions.CheckPermission(request.Context(), req)
+	if err != nil {
+		rlog.Error(util.MsgCallError, "err", err)
+		return middleware.Response{
+			Err: &util.ErrUnknown,
+		}
+	}
+	if !res.Allowed {
+		return middleware.Response{
+			Err: &util.ErrForbidden,
+		}
+	}
+
+	var existingCount uint
+	if err := db.QueryRow(request.Context(), "SELECT COUNT(institution_id) FROM func_get_last_academic_year($1) a WHERE NOW()::DATE BETWEEN a.start_date AND a.end_date;", ownerInfo.GetOwner()).Scan(&existingCount); err != nil {
+		rlog.Error(util.MsgDbAccessError, "err", err)
+		return middleware.Response{
+			Err: &util.ErrUnknown,
+		}
+	}
+	if existingCount > 0 {
+		return middleware.Response{
+			Err: &errs.Error{
+				Code:    errs.FailedPrecondition,
+				Message: "There is already an existing academic year",
+			},
+		}
+	}
+	return next(request)
+}
 
 // Verifies the captcha token in a request
 //
@@ -54,9 +220,9 @@ func AllowedToCreateInstitutionMiddleware(req middleware.Request, next middlewar
 	}
 
 	ans, err := permissions.CheckPermission(req.Context(), dto.RelationCheckRequest{
-		Subject:  fmt.Sprintf("user:%v", userId),
+		Actor:    dto.IdentifierString(dto.PTUser, userId),
 		Relation: "can_create_institution",
-		Target:   fmt.Sprintf("tenant:%d", data.TenantId),
+		Target:   dto.IdentifierString(dto.PTTenant, data.TenantId),
 	})
 
 	if err != nil {

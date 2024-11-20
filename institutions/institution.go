@@ -4,6 +4,7 @@ package institutions
 import (
 	"context"
 	"crypto/md5"
+	_ "embed"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -19,8 +20,10 @@ import (
 	"github.com/brinestone/scholaris/core/permissions"
 	"github.com/brinestone/scholaris/dto"
 	"github.com/brinestone/scholaris/models"
+	"github.com/brinestone/scholaris/settings"
 	"github.com/brinestone/scholaris/tenants"
 	"github.com/brinestone/scholaris/util"
+	"gopkg.in/yaml.v3"
 )
 
 // API Functions
@@ -28,7 +31,7 @@ import (
 // Gets more information for an institution
 //
 //encore:api public method=GET path=/institutions/:identifier
-func GetInstitution(ctx context.Context, identifier string) (*dto.InstitutionDto, error) {
+func GetInstitution(ctx context.Context, identifier string) (*dto.Institution, error) {
 	return findInstitutionByGenericIdentifier(ctx, identifier)
 }
 
@@ -67,6 +70,19 @@ func NewInstitution(ctx context.Context, req dto.NewInstitutionRequest) (*dto.In
 		return nil, &util.ErrUnknown
 	}
 
+	exists, err := institutionExists(ctx, req.Slug, req.TenantId)
+	if err != nil {
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		return nil, &util.ErrUnknown
+	}
+
+	if exists {
+		return nil, &errs.Error{
+			Code:    errs.AlreadyExists,
+			Message: "An institution already exists with this name",
+		}
+	}
+
 	trx, err := db.Begin(ctx)
 	if err != nil {
 		rlog.Error(err.Error())
@@ -90,9 +106,9 @@ func NewInstitution(ctx context.Context, req dto.NewInstitutionRequest) (*dto.In
 	if err := permissions.SetPermissions(ctx, dto.UpdatePermissionsRequest{
 		Updates: []dto.PermissionUpdate{
 			{
-				Subject:  fmt.Sprintf("%s:%d", dto.PTTenant, req.TenantId),
+				Actor:    dto.IdentifierString(dto.PTTenant, req.TenantId),
 				Relation: models.PermParent,
-				Target:   fmt.Sprintf("%s:%d", dto.PTInstitution, i.Id),
+				Target:   dto.IdentifierString(dto.PTInstitution, i.Id),
 			},
 		},
 	}); err != nil {
@@ -139,11 +155,9 @@ func NewInstitution(ctx context.Context, req dto.NewInstitutionRequest) (*dto.In
 
 // Private section
 
-const institutionFields = "id,name,description,logo,visible,slug,tenant,created_at,updated_at"
+const institutionFields = "id,name,description,logo,visible,slug,tenant,created_at,updated_at,verified"
 
-// const enrollmentFields = "id,owner,approved_by,approved_at,payment_transaction,service_transaction,created_at,updated_at,status,destination"
-
-func createInstitution(ctx context.Context, tx *sqldb.Tx, req dto.NewInstitutionRequest) (uint64, error) {
+func institutionExists(ctx context.Context, slug string, tenant uint64) (ans bool, err error) {
 	// Check whether the institution already exists under the same tenant.
 	existsQuery := `
 		SELECT 
@@ -151,21 +165,20 @@ func createInstitution(ctx context.Context, tx *sqldb.Tx, req dto.NewInstitution
 		FROM 
 			institutions 
 		WHERE 
-			slug=$1 AND tenant=$2;
+			slug=$1 AND tenant=$2
+		;
 	`
 
 	var cnt uint
-	if err := tx.QueryRow(ctx, existsQuery, req.Slug, req.TenantId).Scan(&cnt); err != nil {
-		return 0, err
+	if err = db.QueryRow(ctx, existsQuery, slug, tenant).Scan(&cnt); err != nil {
+		return
 	}
 
-	if cnt > 0 {
-		return 0, &errs.Error{
-			Code:    errs.AlreadyExists,
-			Message: "An institution already exists with the same identifier",
-		}
-	}
+	ans = cnt > 0
+	return
+}
 
+func createInstitution(ctx context.Context, tx *sqldb.Tx, req dto.NewInstitutionRequest) (uint64, error) {
 	insertQuery := `
 		INSERT INTO 
 			institutions(name,description,logo,slug,tenant) 
@@ -190,15 +203,15 @@ func createInstitution(ctx context.Context, tx *sqldb.Tx, req dto.NewInstitution
 	return newId, nil
 }
 
-func findInstitutionBySlugFromCache(ctx context.Context, slug string) (*dto.InstitutionDto, error) {
+func findInstitutionBySlugFromCache(ctx context.Context, slug string) (*dto.Institution, error) {
 	return findInstitutionByKeyFromCache(ctx, "slug", slug)
 }
 
-func findInstitutionByIdFromCache(ctx context.Context, id uint64) (*dto.InstitutionDto, error) {
+func findInstitutionByIdFromCache(ctx context.Context, id uint64) (*dto.Institution, error) {
 	return findInstitutionByKeyFromCache(ctx, "id", id)
 }
 
-func findInstitutionByKeyFromCache(ctx context.Context, key string, value any) (*dto.InstitutionDto, error) {
+func findInstitutionByKeyFromCache(ctx context.Context, key string, value any) (*dto.Institution, error) {
 	sum := md5.Sum([]byte(fmt.Sprintf("%s=%v", key, value)))
 	ans, err := institutionCache.Get(ctx, hex.EncodeToString(sum[:]))
 	if err != nil {
@@ -217,7 +230,7 @@ func findInstitutionByKeyFromDbTrx(ctx context.Context, trx *sqldb.Tx, key strin
 		WHERE
 			%s = $1;
 	`, institutionFields, key)
-	if err := trx.QueryRow(ctx, query, value).Scan(&i.Id, &i.Name, &i.Description, &i.Logo, &i.Visible, &i.Slug, &i.TenantId, &i.CreatedAt, &i.UpdatedAt); err != nil {
+	if err := trx.QueryRow(ctx, query, value).Scan(&i.Id, &i.Name, &i.Description, &i.Logo, &i.Visible, &i.Slug, &i.TenantId, &i.CreatedAt, &i.UpdatedAt, &i.Verified); err != nil {
 		return nil, err
 	}
 
@@ -247,7 +260,7 @@ func findInstitutionByKeyFromDb(ctx context.Context, key string, value any) (*mo
 	query := fmt.Sprintf("SELECT %s FROM institutions WHERE %s = $1;", institutionFields, key)
 	row := db.QueryRow(ctx, query, value)
 
-	if err := row.Scan(&i.Id, &i.Name, &i.Description, &i.Logo, &i.Visible, &i.Slug, &i.TenantId, &i.CreatedAt, &i.UpdatedAt); err != nil {
+	if err := row.Scan(&i.Id, &i.Name, &i.Description, &i.Logo, &i.Visible, &i.Slug, &i.TenantId, &i.CreatedAt, &i.UpdatedAt, &i.Verified); err != nil {
 		return nil, err
 	}
 
@@ -256,12 +269,12 @@ func findInstitutionByKeyFromDb(ctx context.Context, key string, value any) (*mo
 	return i, nil
 }
 
-func toInstitutionDto(in *models.Institution) *dto.InstitutionDto {
+func toInstitutionDto(in *models.Institution) *dto.Institution {
 	if in == nil {
 		return nil
 	}
 
-	ans := &dto.InstitutionDto{
+	ans := &dto.Institution{
 		Name:      in.Name,
 		Visible:   in.Visible,
 		Slug:      in.Slug,
@@ -269,6 +282,7 @@ func toInstitutionDto(in *models.Institution) *dto.InstitutionDto {
 		TenantId:  in.TenantId,
 		CreatedAt: in.CreatedAt,
 		UpdatedAt: in.UpdatedAt,
+		Verified:  in.Verified,
 		IsMember:  false,
 	}
 
@@ -302,8 +316,6 @@ func lookupInstitutions(ctx context.Context, page uint, size uint, uid *auth.UID
 			%s
 		FROM
 			institutions
-		ORDER BY
-			id ASC
 		OFFSET $1
 		LIMIT $2;
 	`, institutionFields)
@@ -318,7 +330,7 @@ func lookupInstitutions(ctx context.Context, page uint, size uint, uid *auth.UID
 
 	for rows.Next() {
 		var i = new(dto.InstitutionLookup)
-		if err := rows.Scan(&i.Id, &i.Name, &i.Description, &i.Logo, &i.Visible, &i.Slug, &i.TenantId, &i.CreatedAt, &i.UpdatedAt); err != nil {
+		if err := rows.Scan(&i.Id, &i.Name, &i.Description, &i.Logo, &i.Visible, &i.Slug, &i.TenantId, &i.CreatedAt, &i.UpdatedAt, &i.Verified); err != nil {
 			return ans, 0, err
 		}
 		ans = append(ans, i)
@@ -326,7 +338,7 @@ func lookupInstitutions(ctx context.Context, page uint, size uint, uid *auth.UID
 
 	if uid != nil {
 		memberedInstitutions, err := permissions.ListRelations(ctx, dto.ListRelationsRequest{
-			Subject:  fmt.Sprintf("%s:%v", dto.PTUser, *uid),
+			Actor:    fmt.Sprintf("%s:%v", dto.PTUser, *uid),
 			Relation: models.PermMember,
 			Type:     string(dto.PTInstitution),
 		})
@@ -336,7 +348,7 @@ func lookupInstitutions(ctx context.Context, page uint, size uint, uid *auth.UID
 
 		for _, i := range ans {
 			for _, j := range memberedInstitutions.Relations[dto.PTInstitution] {
-				i.IsMember = fmt.Sprintf("%d", i.Id) == j
+				i.IsMember = i.Id == j
 			}
 		}
 	}
@@ -344,7 +356,7 @@ func lookupInstitutions(ctx context.Context, page uint, size uint, uid *auth.UID
 	return ans, cnt, nil
 }
 
-func findInstitutionByGenericIdentifier(ctx context.Context, identifier string) (*dto.InstitutionDto, error) {
+func findInstitutionByGenericIdentifier(ctx context.Context, identifier string) (*dto.Institution, error) {
 	if match, _ := regexp.MatchString(`^\d+$`, identifier); match {
 		id, _ := strconv.ParseUint(identifier, 10, 64)
 		ans, err := findInstitutionByIdFromCache(ctx, id)
@@ -381,4 +393,80 @@ func findInstitutionByGenericIdentifier(ctx context.Context, identifier string) 
 		}
 		return ans, nil
 	}
+}
+
+//go:embed default-settings.yml
+var defSettings []byte
+
+type DefaultSetting struct {
+	Label       string   `yaml:"label"`
+	Value       []string `yaml:"value"`
+	Description string   `yaml:"description"`
+	MultiValues bool     `yaml:"multiValues"`
+	Parent      string   `yaml:"parent"`
+}
+
+type DefaultSettings struct {
+	Settings map[string]DefaultSetting `yaml:"settings"`
+}
+
+func defineInstitutionDefaultSettings(ctx context.Context, id uint64) error {
+	var sMap = DefaultSettings{
+		Settings: make(map[string]DefaultSetting),
+	}
+
+	if err := yaml.Unmarshal(defSettings, sMap); err != nil {
+		return err
+	}
+
+	req := dto.UpdateSettingsInternalRequest{
+		OwnerType: string(dto.PTInstitution),
+		Owner:     id,
+	}
+
+	for k, v := range sMap.Settings {
+		req.Updates = append(req.Updates, dto.SettingUpdate{
+			Key:         k,
+			Label:       v.Label,
+			Description: &v.Description,
+			MultiValues: v.MultiValues,
+		})
+	}
+	if err := settings.UpdateSettingsInternal(ctx, req); err != nil {
+		return err
+	}
+
+	req2 := dto.SetSettingValueRequest{
+		Owner:     id,
+		OwnerType: string(dto.PTInstitution),
+	}
+
+	for k, v := range sMap.Settings {
+		s := dto.SettingValueUpdate{
+			Key: k,
+		}
+		for _, v := range v.Value {
+			s.Value = append(s.Value, dto.SetValue{
+				Value: &v,
+			})
+		}
+		req2.Updates = append(req2.Updates, s)
+	}
+
+	return settings.SetSettingValuesInternal(ctx, req2)
+}
+
+func getInstitutionStats(ctx context.Context) (*models.InstitutionStatistics, error) {
+	var ans models.InstitutionStatistics
+	query := `
+		SELECT
+			total,verified,unverified
+		FROM
+			vw_InstitutionStatistics
+		;
+	`
+	if err := db.QueryRow(ctx, query).Scan(&ans.TotalInstitutions, &ans.TotalVerified, &ans.TotalUnverified); err != nil {
+		return nil, err
+	}
+	return &ans, nil
 }

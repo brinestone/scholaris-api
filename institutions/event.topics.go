@@ -19,10 +19,10 @@ type EnrollmentPublished struct {
 	Owner       auth.UID
 }
 
-var NewInstitutions = pubsub.NewTopic[*InstitutionCreated]("new-institution", pubsub.TopicConfig{
+var NewInstitutions = pubsub.NewTopic[*InstitutionCreated]("institution-created", pubsub.TopicConfig{
 	DeliveryGuarantee: pubsub.AtLeastOnce,
 })
 
-var PublishedEnrollments = pubsub.NewTopic[*EnrollmentPublished]("published-enrollments", pubsub.TopicConfig{
+var PublishedEnrollments = pubsub.NewTopic[*EnrollmentPublished]("enrollment-published", pubsub.TopicConfig{
 	DeliveryGuarantee: pubsub.AtLeastOnce,
 })

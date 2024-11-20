@@ -9,6 +9,19 @@ import (
 	"encore.dev/beta/errs"
 )
 
+type User struct {
+	Id        uint64    `json:"id"`
+	FirstName string    `json:"firstName"`
+	LastName  *string   `json:"lastName,omitempty" encore:"optional"`
+	Email     string    `json:"email"`
+	Dob       time.Time `json:"dob"`
+	Phone     string    `json:"phone"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+	Gender    Gender    `json:"gender"`
+	Avatar    *string   `json:"avatar,omitempty" encore:"optional"`
+}
+
 type LoginRequest struct {
 	// The user's email address
 	Email string `json:"email"`
@@ -59,23 +72,27 @@ const (
 	Female Gender = "female"
 )
 
+type NewUserResponse struct {
+	UserId uint64 `json:"userId"`
+}
+
 type NewUserRequest struct {
 	// The user's first name
 	FirstName string `json:"firstName"`
 	// The user's last name (optional)
-	LastName string `json:"lastName,omitempty"`
+	LastName string `json:"lastName,omitempty" encore:"optional"`
 	// The user's email address
 	Email string `json:"email"`
 	// The user's date of birth (YYYY/MM/DD)
 	Dob string `json:"dob"`
 	// The user's plaintext password
-	Password string `json:"password"`
+	Password string `json:"password" encore:"sensitive"`
 	// Password verification
-	ConfirmPassword string `json:"confirmPassword"`
+	ConfirmPassword string `json:"confirmPassword" encore:"sensitive"`
 	// The user's phone number in IE64 format
-	Phone string `json:"phone,omitempty"`
+	Phone string `json:"phone,omitempty" encore:"optional"`
 	// The user's gender
-	Gender Gender `json:"gender,omitempty"`
+	Gender Gender `json:"gender,omitempty" encore:"optional"`
 	// The captcha token for the request
 	CaptchaToken string `json:"captchaToken"`
 }

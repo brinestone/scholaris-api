@@ -1,0 +1,16 @@
+{
+  "name": "scholaris",
+  "version": "2.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "deploy-fga:local": "fga model write --store-id=$FGA_STORE_ID --file fga.mod",
+    "release": "standard-version"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "standard-version": "^9.5.0"
+  }
+}

@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,6 +26,21 @@ var jwtSigningMethod = jwt.SigningMethodHS256
 type VerifyCaptchaRequest struct {
 	// The request's reCaptcha token from the client.
 	Token string `json:"token"`
+}
+
+// Deletes a user's account.
+//
+//encore:api auth method=POST path=/auth/delete tag:needs_captcha_ver
+func DeleteAccount(ctx context.Context, req dto.DeleteAccountRequest) (err error) {
+	uid, _ := auth.UserID()
+	userId, _ := strconv.ParseUint(string(uid), 10, 64)
+
+	if err = deleteUserAccount(ctx, userId); err != nil {
+		rlog.Error("user account deletion error", "msg", err.Error())
+		err = &util.ErrUnknown
+	}
+
+	return
 }
 
 // Verifies reCaptcha tokens
@@ -71,6 +87,12 @@ func SignIn(ctx context.Context, req dto.LoginRequest) (*LoginResponse, error) {
 
 	ans.AccessToken = serializedToken
 
+	SignIns.Publish(ctx, UserSignedIn{
+		Email:     req.Email,
+		UserId:    user.Id,
+		Timestamp: time.Now(),
+	})
+
 	return ans, nil
 }
 
@@ -78,7 +100,7 @@ type CaptchaCheckResponse struct {
 	Success            bool      `json:"success"`
 	ChallengeTimestamp time.Time `json:"challenge_ts"`
 	HostName           string    `json:"hostname"`
-	ErrorCodes         []string  `json:"error-codes,omitempty"`
+	ErrorCodes         []string  `json:"error-codes,omitempty" encore:"optional"`
 }
 
 func verifyCaptcha(token string) error {
@@ -120,14 +142,14 @@ func SignUp(ctx context.Context, req dto.NewUserRequest) error {
 		return &util.ErrCaptchaError
 	}
 
-	_, err := users.NewUser(ctx, req)
+	user, err := users.NewUser(ctx, req)
 	if err != nil {
 		return err
 	}
 
-	SignUps.Publish(ctx, &UserSignedUp{
+	SignUps.Publish(ctx, UserSignedUp{
 		Email:  req.Email,
-		UserId: 0,
+		UserId: user.UserId,
 	})
 	return nil
 }
@@ -136,7 +158,7 @@ func SignUp(ctx context.Context, req dto.NewUserRequest) error {
 
 type AuthClaims struct {
 	Email    string `json:"email"`
-	Avatar   string `json:"avatar,omitempty"`
+	Avatar   string `json:"avatar,omitempty" encore:"optional"`
 	FullName string `json:"displayName"`
 	Sub      uint64 `json:"sub"`
 }
@@ -191,4 +213,9 @@ func JwtAuthHandler(ctx context.Context, token string) (auth.UID, *AuthClaims, e
 
 func findJwtToken(t *jwt.Token) (any, error) {
 	return []byte(secrets.JwtKey), nil
+}
+
+func deleteUserAccount(ctx context.Context, user uint64) (err error) {
+	err = users.DeleteInternal(ctx, user)
+	return
 }

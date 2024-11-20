@@ -2,12 +2,16 @@ package permissions
 
 import (
 	"context"
+	"strconv"
 	"strings"
+	"time"
 
+	"encore.dev"
 	"encore.dev/rlog"
 	"github.com/brinestone/scholaris/dto"
 	openfga "github.com/openfga/go-sdk"
 	"github.com/openfga/go-sdk/client"
+	"github.com/openfga/go-sdk/credentials"
 )
 
 //encore:service
@@ -16,18 +20,34 @@ type Service struct {
 }
 
 var secrets struct {
-	FgaUrl     string `encore:"sensitive"`
-	FgaStoreId string `encore:"sensitive"`
-	FgaModelId string `encore:"sensitive"`
+	FgaUrl          string `encore:"sensitive"`
+	FgaStoreId      string `encore:"sensitive"`
+	FgaClientSecret string `encore:"sensitive"`
+	FgaClientId     string `encore:"sensitive"`
+	FgaAudience     string `encore:"sensitive"`
+	FgaIssuer       string `encore:"sensitive"`
 }
 
 func initService() (*Service, error) {
 	var err error
-	fgaClient, err := client.NewSdkClient(&client.ClientConfiguration{
+	config := &client.ClientConfiguration{
 		ApiUrl:  secrets.FgaUrl,
 		StoreId: secrets.FgaStoreId,
-		// AuthorizationModelId: secrets.FgaModelId,
-	})
+	}
+
+	switch encore.Meta().Environment.Cloud {
+	case encore.CloudAWS, encore.EncoreCloud, encore.CloudAzure, encore.CloudGCP:
+		config.Credentials = &credentials.Credentials{
+			Method: credentials.CredentialsMethodClientCredentials,
+			Config: &credentials.Config{
+				ClientCredentialsClientId:       secrets.FgaClientId,
+				ClientCredentialsClientSecret:   secrets.FgaClientSecret,
+				ClientCredentialsApiAudience:    secrets.FgaAudience,
+				ClientCredentialsApiTokenIssuer: secrets.FgaIssuer,
+			},
+		}
+	}
+	fgaClient, err := client.NewSdkClient(config)
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +62,7 @@ func initService() (*Service, error) {
 //encore:api private method=POST path=/permissions/related
 func (s *Service) ListRelations(ctx context.Context, req dto.ListRelationsRequest) (*dto.ListRelationsResponse, error) {
 	reqBody := client.ClientListObjectsRequest{
-		User:     req.Subject,
+		User:     req.Actor,
 		Relation: req.Relation,
 		Type:     string(req.Type),
 	}
@@ -54,12 +74,13 @@ func (s *Service) ListRelations(ctx context.Context, req dto.ListRelationsReques
 		return nil, err
 	}
 
-	resultMap := make(map[dto.PermissionType][]string)
+	resultMap := make(map[dto.PermissionType][]uint64)
 
 	for _, rel := range data.GetObjects() {
 		arr := strings.Split(rel, ":")
 		p, _ := dto.PermissionTypeFromString(arr[0])
-		resultMap[p] = append(resultMap[p], arr[1])
+		id, _ := strconv.ParseUint(arr[1], 10, 64)
+		resultMap[p] = append(resultMap[p], id)
 	}
 
 	return &dto.ListRelationsResponse{
@@ -69,13 +90,40 @@ func (s *Service) ListRelations(ctx context.Context, req dto.ListRelationsReques
 
 // Checks whether a permission is valid or not.
 //
-//encore:api private method=GET path=/permissions/check
+//encore:api private method=POST path=/permissions/check
 func (s *Service) CheckPermission(ctx context.Context, req dto.RelationCheckRequest) (*dto.RelationCheckResponse, error) {
-	res, err := s.fgaClient.Check(ctx).Body(client.ClientCheckRequest{
-		User:     req.Subject,
+	request := client.ClientCheckRequest{
+		User:     req.Actor,
 		Relation: req.Relation,
 		Object:   req.Target,
-	}).Execute()
+	}
+
+	if req.Condition != nil {
+		c := make(map[string]interface{})
+		request.Context = &c
+
+		for _, v := range req.Condition.Context {
+			switch v.Type {
+			case dto.CETBool:
+				c[v.Name], _ = strconv.ParseBool(v.Value)
+			case dto.CETTimestamp:
+				c[v.Name], _ = time.Parse(time.RFC3339, v.Value)
+			case dto.CETDuration:
+				t, err := time.ParseDuration(v.Value)
+				if err != nil {
+					continue
+				}
+				c[v.Name] = t.String()
+			default:
+				c[v.Name] = v.Value
+			}
+		}
+	}
+
+	res, err := s.fgaClient.
+		Check(ctx).
+		Body(request).
+		Execute()
 
 	if err != nil {
 		rlog.Error(err.Error())
@@ -113,7 +161,7 @@ func toOpenFgaDeletes(updates []dto.PermissionUpdate) []openfga.TupleKeyWithoutC
 
 	for _, u := range updates {
 		ans = append(ans, client.ClientTupleKeyWithoutCondition{
-			User:     u.Subject,
+			User:     u.Actor,
 			Relation: u.Relation,
 			Object:   u.Target,
 		})
@@ -140,7 +188,7 @@ func toOpenFgaWrites(updates []dto.PermissionUpdate) []openfga.TupleKey {
 		}
 
 		ans = append(ans, client.ClientTupleKey{
-			User:      u.Subject,
+			User:      u.Actor,
 			Relation:  u.Relation,
 			Object:    u.Target,
 			Condition: condition,

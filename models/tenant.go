@@ -1,30 +1,33 @@
 package models
 
-import "time"
+import (
+	"database/sql"
+	"time"
+)
 
 type Tenant struct {
 	Name         string    `json:"name"`
-	Id           uint64    `json:"id,omitempty"`
+	Id           uint64    `json:"id,omitempty" encore:"optional"`
 	CreatedAt    time.Time `json:"createdAt"`
 	UpdatedAt    time.Time `json:"updatedAt"`
 	Subscription uint64    `json:"subscription"`
 }
 
 type SubscriptionPlanBenefit struct {
-	Name     string     `json:"name"`
-	Details  string     `json:"details"`
-	MinCount *NullInt32 `json:"minCount"`
-	MaxCount *NullInt32 `json:"maxCount"`
+	Name     string
+	Details  *string
+	MinCount *int32
+	MaxCount *int32
 }
 
 type SubscriptionPlan struct {
-	Id           uint64                     `json:"id,omitempty"`
-	Name         string                     `json:"name"`
-	CreatedAt    time.Time                  `json:"createdAt"`
-	UpdatedAt    time.Time                  `json:"updatedAt"`
-	Price        float64                    `json:"price"`
-	Currency     string                     `json:"currency"`
-	Enabled      bool                       `json:"enabled"`
-	BillingCycle uint                       `json:"billingCycle"`
-	Benefits     *[]SubscriptionPlanBenefit `json:"benefits"`
+	Id           uint64
+	Name         string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+	Price        sql.NullFloat64
+	Currency     sql.NullString
+	Enabled      bool
+	BillingCycle uint
+	Benefits     []SubscriptionPlanBenefit
 }

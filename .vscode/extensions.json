@@ -1,0 +1,8 @@
+{
+    "recommendations": [
+        "golang.go",
+        "openfga.openfga-vscode",
+        "uniquevision.vscode-plpgsql-lsp",
+        "inferrinizzard.prettier-sql-vscode"
+    ]
+}

@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"encore.dev/beta/auth"
@@ -19,30 +18,27 @@ import (
 	"github.com/brinestone/scholaris/dto"
 	"github.com/brinestone/scholaris/models"
 	"github.com/brinestone/scholaris/util"
+	"github.com/lib/pq"
 )
-
-type FindSubscriptionPlansResponse struct {
-	SubscriptionPlans []*models.SubscriptionPlan `json:"plans"`
-}
 
 // Finds Subscription plans
 //
 //encore:api public method=GET path=/subscription-plans
-func FindSubscriptionPlans(ctx context.Context, params dto.CursorBasedPaginationParams) (*FindSubscriptionPlansResponse, error) {
-	plans, err := findSubscriptionPlans(ctx, params)
+func FindSubscriptionPlans(ctx context.Context) (*dto.FindSubscriptionPlansResponse, error) {
+	plans, err := findSubscriptionPlans(ctx, 0, 1000000, 0)
 	if err != nil {
 		rlog.Error(err.Error())
 		return nil, &util.ErrUnknown
 	}
 
-	return &FindSubscriptionPlansResponse{
-		SubscriptionPlans: plans,
+	return &dto.FindSubscriptionPlansResponse{
+		Plans: subscriptionPlansToDto(plans...),
 	}, nil
 }
 
 // Finds a tenant using its ID
 //
-//encore:api auth method=GET path=/tenants/:id
+//encore:api auth method=GET path=/tenants/:id tag:can_view_tenant
 func FindTenant(ctx context.Context, id uint64) (*models.Tenant, error) {
 	var t *models.Tenant
 	var err error
@@ -83,7 +79,7 @@ func DeleteTenant(ctx context.Context, id uint64) error {
 	if err = permissions.DeletePermissions(timeout, dto.UpdatePermissionsRequest{
 		Updates: []dto.PermissionUpdate{
 			{
-				Subject:  fmt.Sprintf("user:%s", userId),
+				Actor:    fmt.Sprintf("user:%s", userId),
 				Relation: "owner",
 				Target:   fmt.Sprintf("tenant:%d", id),
 			},
@@ -131,136 +127,75 @@ func NewTenant(ctx context.Context, req dto.NewTenantRequest) (*models.Tenant, e
 
 // Find all Tenants
 //
-//encore:api public method=GET path=/tenants
-func FindTenants(ctx context.Context, req dto.FindTenantsRequest) (*dto.PaginatedResponse[models.Tenant], error) {
-	var ans = make([]*models.Tenant, 0)
-	var count uint
-	var err error
+//encore:api auth method=GET path=/tenants
+func Lookup(ctx context.Context, req dto.PageBasedPaginationParams) (ans *dto.FindTenantResponse, err error) {
+	uid, _ := auth.UserID()
 
-	if !req.SubscribedOnly {
-		ans, count, err = getTenants(ctx, req.After, req.Size)
-	} else {
-		uid, ok := auth.UserID()
-		if !ok {
-			return nil, &util.ErrUnauthorized
-		}
-		ans, count, err = getSubscribedTenants(ctx, uid, req.After, req.Size)
-	}
+	viewable, err := lookupViewableTenantIds(ctx, uid)
 	if err != nil {
-		rlog.Error(err.Error())
-		return nil, &util.ErrUnknown
+		rlog.Error(util.MsgCallError, "msg", err.Error())
+		err = &util.ErrUnknown
+		return
 	}
 
-	return &dto.PaginatedResponse[models.Tenant]{
-		Data: ans,
-		Meta: dto.PaginatedResponseMeta{
-			Total: count,
-		},
-	}, nil
+	if len(viewable) == 0 {
+		err = &util.ErrNotFound
+		return
+	}
+
+	found, err := findViewableTenants(ctx, req.Page, req.Size, viewable)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = &util.ErrNotFound
+		return
+	} else if err != nil {
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		err = &util.ErrUnknown
+		return
+	}
+
+	ans = &dto.FindTenantResponse{
+		Tenants: tenantsToDto(found...),
+	}
+
+	return
 }
 
-func getSubscribedTenants(ctx context.Context, uid auth.UID, after uint64, size uint) ([]*models.Tenant, uint, error) {
-	ans := make([]*models.Tenant, 0)
+func lookupViewableTenantIds(ctx context.Context, uid auth.UID) (ans []uint64, err error) {
 	response, err := permissions.ListRelations(ctx, dto.ListRelationsRequest{
-		Subject:  fmt.Sprintf("%s:%s", dto.PTUser, uid),
-		Relation: "can_view",
+		Actor:    dto.IdentifierString(dto.PTUser, uid),
+		Relation: models.PermCanView,
 		Type:     string(dto.PTTenant),
 	})
 	if err != nil {
-		return ans, 0, err
+		return
 	}
 
-	if len(response.Relations) == 0 {
-		return nil, 0, nil
-	}
-
-	query := fmt.Sprintf(`
-		SELECT
-			%s
-		FROM
-			tenants
-		WHERE
-			id IN (%s) AND id > $1
-		OFFSET 0
-		LIMIT $2;
-	`, tenantFields, strings.Join(response.Relations[dto.PTTenant], ","))
-
-	rows, err := tenantDb.Query(ctx, query, after, size)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var tenant = new(models.Tenant)
-		if err := rows.Scan(&tenant.Id, &tenant.Name, &tenant.CreatedAt, &tenant.UpdatedAt, &tenant.Subscription); err != nil {
-			return nil, 0, err
-		}
-
-		if err := tenantCache.Set(ctx, tenant.Id, *tenant); err != nil {
-			return nil, 0, err
-		}
-
-		ans = append(ans, tenant)
-	}
-
-	q2 := fmt.Sprintf(`
-		SELECT COUNT(id) FROM tenants WHERE id IN (%s);
-	`, strings.Join(response.Relations[dto.PTTenant], ","))
-
-	var cnt uint = 0
-	if err := tenantDb.QueryRow(ctx, q2).Scan(&cnt); err != nil {
-		return nil, 0, err
-	}
-
-	return ans, cnt, nil
+	ans = response.Relations[dto.PTTenant]
+	return
 }
 
-func getTenants(ctx context.Context, after uint64, size uint) ([]*models.Tenant, uint, error) {
-	ans := make([]*models.Tenant, 0)
-	rows, err := tenantDb.Query(ctx, fmt.Sprintf(`
-		SELECT 
-			%s 
-		FROM 
-			tenants 
-		WHERE 
-			id > $1 
-		ORDER BY 
-			updated_at DESC 
-		OFFSET 0 
-		LIMIT $2;
-	`, tenantFields), after, size)
+func findViewableTenants(ctx context.Context, page, size uint, ids []uint64) (ans []*models.Tenant, err error) {
+	query := "SELECT id,name,created_at,updated_at FROM vw_AllTenants WHERE id=ANY($1) OFFSET=$2 LIMIT $3;"
 
+	rows, err := tenantDb.Query(ctx, query, pq.Array(ids), page*size, size)
 	if err != nil {
-		return nil, 0, err
+		rlog.Debug("here")
+		return
 	}
 	defer rows.Close()
 
 	for rows.Next() {
-		var tenant = new(models.Tenant)
-		if err := rows.Scan(&tenant.Id, &tenant.Name, &tenant.CreatedAt, &tenant.UpdatedAt, &tenant.Subscription); err != nil {
-			return nil, 0, err
+		var mod = new(models.Tenant)
+		if err = rows.Scan(&mod.Id, &mod.Name, &mod.CreatedAt, &mod.UpdatedAt); err != nil {
+			return
 		}
-		tenantCache.Set(ctx, tenant.Id, *tenant)
-		ans = append(ans, tenant)
+		ans = append(ans, mod)
 	}
 
-	var count uint
-	if err := tenantDb.QueryRow(ctx, `
-		SELECT
-			COUNT(*)
-		FROM
-			tenants;
-	`).Scan(&count); err != nil {
-		return ans, 0, err
-	}
-
-	return ans, count, nil
+	return
 }
 
 const tenantFields = "id,name,created_at,updated_at,subscription"
-
-// const subscriptionPlanFields = "id,name,created_at,updated_at,price,currency,enabled,billing_cycle"
 
 func createTenant(ctx context.Context, tx *sqldb.Tx, req dto.NewTenantRequest, owner *auth.UID) (*models.Tenant, error) {
 	// Check whether a tenant with the same name already exists.
@@ -303,12 +238,12 @@ func createTenant(ctx context.Context, tx *sqldb.Tx, req dto.NewTenantRequest, o
 	if err = permissions.SetPermissions(ctx, dto.UpdatePermissionsRequest{
 		Updates: []dto.PermissionUpdate{
 			{
-				Subject:  fmt.Sprintf("%s:%s", dto.PTUser, string(*owner)),
+				Actor:    fmt.Sprintf("%s:%s", dto.PTUser, string(*owner)),
 				Relation: models.PermOwner,
 				Target:   fmt.Sprintf("%s:%d", dto.PTTenant, tenant.Id),
 			},
 			{
-				Subject:  fmt.Sprintf("%s:%d", dto.PTTenant, tenant.Id),
+				Actor:    fmt.Sprintf("%s:%d", dto.PTTenant, tenant.Id),
 				Relation: models.PermOwner,
 				Target:   fmt.Sprintf("%s:%d", dto.PTSubscription, *subId),
 			},
@@ -414,44 +349,20 @@ func findTenantByIdFromCache(ctx context.Context, id uint64) (*models.Tenant, er
 	return &t, nil
 }
 
-func findSubscriptionPlans(ctx context.Context, params dto.CursorBasedPaginationParams) ([]*models.SubscriptionPlan, error) {
-	ans := make([]*models.SubscriptionPlan, 0)
+func findSubscriptionPlans(ctx context.Context, page, size uint, cursor uint64) (ans []*models.SubscriptionPlan, err error) {
 	query := `
-	SELECT
-    	sp.id,
-    	sp.name,
-    	sp.created_at AS "createdAt",
-    	sp.updated_at AS "updatedAt",
-    	sp.price,
-    	sp.currency,
-    	sp.enabled,
-    	sp.billing_cycle AS "billingCycle",
-    	COALESCE(json_agg(json_build_object(
-        	'name', spd.name,
-        	'details', spd.details,
-			'maxCount', spd.max_count,
-			'minCount', spd.min_count,
-			'maxCount', spd.max_count
-    	)) FILTER (WHERE spd.id IS NOT NULL), '[]') AS "descriptions"
-	FROM
-    	subscription_plans sp
-	LEFT JOIN
-    	plan_benefits spd
-		ON
-			sp.id = spd.subscription_plan
-	WHERE
-		sp.id > $1 AND sp.enabled = true
-	GROUP BY
-    	sp.id
-	ORDER BY
-		sp.price ASC
-	OFFSET 0
-	LIMIT $2;
+		SELECT 
+			* 
+		FROM
+			vw_AllSubscriptionPlans
+		WHERE
+			enabled=true AND id > $1 OFFSET $2 LIMIT $3
+		;
 	`
 
-	rows, err := tenantDb.Query(ctx, query, params.After, params.Size)
+	rows, err := tenantDb.Query(ctx, query, cursor, page*size, size)
 	if err != nil {
-		return ans, err
+		return
 	}
 	defer rows.Close()
 
@@ -470,9 +381,60 @@ func findSubscriptionPlans(ctx context.Context, params dto.CursorBasedPagination
 		if err := json.Unmarshal([]byte(benefitsJson), &benefits); err != nil {
 			return ans, err
 		}
-		plan.Benefits = &benefits
+
+		plan.Benefits = benefits
 		ans = append(ans, plan)
 	}
 
 	return ans, nil
+}
+
+func subscriptionPlansToDto(plans ...*models.SubscriptionPlan) (ans []dto.SubscriptionPlan) {
+	for _, plan := range plans {
+		var t = dto.SubscriptionPlan{
+			Id:           plan.Id,
+			Name:         plan.Name,
+			CreatedAt:    plan.CreatedAt,
+			UpdatedAt:    plan.UpdatedAt,
+			Enabled:      plan.Enabled,
+			Benefits:     make([]dto.SubscriptionPlanBenefit, len(plan.Benefits)),
+			BillingCycle: plan.BillingCycle,
+		}
+
+		if plan.Currency.Valid {
+			t.Currency = &plan.Currency.String
+		}
+
+		if plan.Price.Valid {
+			t.Price = &plan.Price.Float64
+		}
+
+		for i, v := range plan.Benefits {
+			t.Benefits[i] = dto.SubscriptionPlanBenefit{
+				Name:     v.Name,
+				Details:  v.Details,
+				MinCount: v.MinCount,
+				MaxCount: v.MaxCount,
+			}
+		}
+
+		ans = append(ans, t)
+	}
+	return
+}
+
+func tenantsToDto(t ...*models.Tenant) (ans []dto.TenantLookup) {
+	ans = make([]dto.TenantLookup, len(t))
+
+	for i, v := range t {
+		vv := dto.TenantLookup{
+			Name:      v.Name,
+			Id:        v.Id,
+			CreatedAt: v.CreatedAt,
+			UpdatedAt: v.UpdatedAt,
+		}
+		ans[i] = vv
+	}
+
+	return
 }
