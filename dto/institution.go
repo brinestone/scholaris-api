@@ -107,12 +107,15 @@ type Institution struct {
 	Visible     bool      `json:"visible"`
 	Slug        string    `json:"slug"`
 	Id          uint64    `json:"id,omitempty" encore:"optional"`
-	TenantId    uint64    `json:"-"`
 	CreatedAt   time.Time `json:"createdAt"`
 	UpdatedAt   time.Time `json:"updatedAt"`
 	IsMember    bool      `json:"isMember"`
 	Verified    bool      `json:"verified"`
 	Members     int       `json:"members"`
+}
+
+type LookupInstitutionsResponse struct {
+	Institutions []InstitutionLookup `json:"institutions"`
 }
 
 type InstitutionLookup struct {

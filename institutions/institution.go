@@ -23,6 +23,7 @@ import (
 	"github.com/brinestone/scholaris/settings"
 	"github.com/brinestone/scholaris/tenants"
 	"github.com/brinestone/scholaris/util"
+	"github.com/lib/pq"
 	"gopkg.in/yaml.v3"
 )
 
@@ -38,23 +39,30 @@ func GetInstitution(ctx context.Context, identifier string) (*dto.Institution, e
 // Looks up institutions
 //
 //encore:api public method=GET path=/institutions
-func Lookup(ctx context.Context, req *dto.PageBasedPaginationParams) (*dto.PaginatedResponse[dto.InstitutionLookup], error) {
-	var uid *auth.UID
-	if temp, ok := auth.UserID(); ok {
-		uid = &temp
+func Lookup(ctx context.Context, req *dto.PageBasedPaginationParams) (*dto.LookupInstitutionsResponse, error) {
+	uid, authed := auth.UserID()
+	var accessibleInstitutions []uint64
+
+	if authed {
+		memberedInstitutions, err := permissions.ListRelations(ctx, dto.ListRelationsRequest{
+			Actor:    dto.IdentifierString(dto.PTUser, uid),
+			Relation: models.PermMember,
+			Type:     string(dto.PTInstitution),
+		})
+		if err != nil {
+			return nil, err
+		}
+		accessibleInstitutions = memberedInstitutions.Relations[dto.PTInstitution]
 	}
 
-	ans, cnt, err := lookupInstitutions(ctx, req.Page, req.Size, uid)
+	ans, err := lookupInstitutions(ctx, req.Page, req.Size, accessibleInstitutions)
 	if err != nil {
 		rlog.Error(err.Error())
 		return nil, &util.ErrUnknown
 	}
 
-	return &dto.PaginatedResponse[dto.InstitutionLookup]{
-			Data: ans,
-			Meta: dto.PaginatedResponseMeta{
-				Total: cnt,
-			},
+	return &dto.LookupInstitutionsResponse{
+			Institutions: toInstitutionLookup(ans...),
 		},
 		nil
 }
@@ -265,50 +273,67 @@ func findInstitutionByKeyFromDb(ctx context.Context, key string, value any) (*mo
 	}
 
 	sum := md5.Sum([]byte(fmt.Sprintf("%s=%v", key, value)))
-	_ = institutionCache.Set(ctx, hex.EncodeToString(sum[:]), *toInstitutionDto(i))
+	_ = institutionCache.Set(ctx, hex.EncodeToString(sum[:]), toInstitutionDto(i)[0])
 	return i, nil
 }
 
-func toInstitutionDto(in *models.Institution) *dto.Institution {
-	if in == nil {
-		return nil
-	}
+func toInstitutionLookup(in ...*models.Institution) (res []dto.InstitutionLookup) {
+	res = make([]dto.InstitutionLookup, len(in))
+	for i, v := range in {
+		u := dto.InstitutionLookup{
+			Name:      v.Name,
+			Visible:   v.Visible,
+			Slug:      v.Slug,
+			Id:        v.Id,
+			CreatedAt: v.CreatedAt,
+			UpdatedAt: v.UpdatedAt,
+			Verified:  v.Verified,
+			IsMember:  false,
+		}
 
-	ans := &dto.Institution{
-		Name:      in.Name,
-		Visible:   in.Visible,
-		Slug:      in.Slug,
-		Id:        in.Id,
-		TenantId:  in.TenantId,
-		CreatedAt: in.CreatedAt,
-		UpdatedAt: in.UpdatedAt,
-		Verified:  in.Verified,
-		IsMember:  false,
-	}
+		if v.Logo.Valid {
+			u.Logo = &v.Logo.String
+		}
 
-	if in.Logo.Valid {
-		ans.Logo = &in.Logo.String
-	}
+		if v.Description.Valid {
+			u.Description = &v.Description.String
+		}
 
-	if in.Description.Valid {
-		ans.Description = &in.Description.String
+		res[i] = u
 	}
-
-	return ans
+	return
 }
 
-func lookupInstitutions(ctx context.Context, page uint, size uint, uid *auth.UID) ([]*dto.InstitutionLookup, uint, error) {
-	var cnt uint
-	ans := make([]*dto.InstitutionLookup, 0)
+func toInstitutionDto(in ...*models.Institution) (res []dto.Institution) {
+	res = make([]dto.Institution, len(in))
+	for i, v := range in {
+		u := dto.Institution{
+			Name:      v.Name,
+			Visible:   v.Visible,
+			Slug:      v.Slug,
+			Id:        v.Id,
+			CreatedAt: v.CreatedAt,
+			UpdatedAt: v.UpdatedAt,
+			Verified:  v.Verified,
+			IsMember:  false,
+		}
 
-	if err := db.QueryRow(ctx, `
-		SELECT
-			COUNT(id)
-		FROM
-			institutions;
-	`).Scan(&cnt); err != nil {
-		return ans, 0, err
+		if v.Logo.Valid {
+			u.Logo = &v.Logo.String
+		}
+
+		if v.Description.Valid {
+			u.Description = &v.Description.String
+		}
+
+		res[i] = u
 	}
+
+	return
+}
+
+func lookupInstitutions(ctx context.Context, page, size uint, ids []uint64) ([]*models.Institution, error) {
+	ans := make([]*models.Institution, 0)
 
 	var query = fmt.Sprintf(
 		`
@@ -316,44 +341,29 @@ func lookupInstitutions(ctx context.Context, page uint, size uint, uid *auth.UID
 			%s
 		FROM
 			institutions
+		WHERE
+			id=ANY($3) OR verified=true
 		OFFSET $1
 		LIMIT $2;
 	`, institutionFields)
 
-	rows, err := db.Query(ctx, query, page*size, size)
+	rows, err := db.Query(ctx, query, page*size, size, pq.Array(ids))
 	if err != nil {
 		if !errors.Is(err, sqldb.ErrNoRows) {
-			return ans, 0, err
+			return ans, err
 		}
 	}
 	defer rows.Close()
 
 	for rows.Next() {
-		var i = new(dto.InstitutionLookup)
+		var i = new(models.Institution)
 		if err := rows.Scan(&i.Id, &i.Name, &i.Description, &i.Logo, &i.Visible, &i.Slug, &i.TenantId, &i.CreatedAt, &i.UpdatedAt, &i.Verified); err != nil {
-			return ans, 0, err
+			return ans, err
 		}
 		ans = append(ans, i)
 	}
 
-	if uid != nil {
-		memberedInstitutions, err := permissions.ListRelations(ctx, dto.ListRelationsRequest{
-			Actor:    fmt.Sprintf("%s:%v", dto.PTUser, *uid),
-			Relation: models.PermMember,
-			Type:     string(dto.PTInstitution),
-		})
-		if err != nil {
-			return ans, cnt, err
-		}
-
-		for _, i := range ans {
-			for _, j := range memberedInstitutions.Relations[dto.PTInstitution] {
-				i.IsMember = i.Id == j
-			}
-		}
-	}
-
-	return ans, cnt, nil
+	return ans, nil
 }
 
 func findInstitutionByGenericIdentifier(ctx context.Context, identifier string) (*dto.Institution, error) {
@@ -369,7 +379,7 @@ func findInstitutionByGenericIdentifier(ctx context.Context, identifier string) 
 				return nil, &util.ErrUnknown
 			}
 
-			return toInstitutionDto(institution), nil
+			return &toInstitutionDto(institution)[0], nil
 		} else if err != nil {
 			rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
 			return nil, &util.ErrUnknown
@@ -386,7 +396,7 @@ func findInstitutionByGenericIdentifier(ctx context.Context, identifier string) 
 				return nil, &util.ErrUnknown
 			}
 
-			return toInstitutionDto(institution), nil
+			return &toInstitutionDto(institution)[0], nil
 		} else if err != nil {
 			rlog.Error(util.MsgCacheAccessError, "msg", err.Error())
 			return nil, &util.ErrUnknown
