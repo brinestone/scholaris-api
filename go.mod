@@ -21,6 +21,7 @@ require (
 	go.opentelemetry.io/otel v1.32.0 // indirect
 	go.opentelemetry.io/otel/metric v1.32.0 // indirect
 	go.opentelemetry.io/otel/trace v1.32.0 // indirect
+	gopkg.in/validator.v2 v2.0.1 // indirect
 )
 
 require (
@@ -29,6 +30,7 @@ require (
 	github.com/jackc/pgx/v5 v5.7.1 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/lib/pq v1.10.9
+	github.com/svix/svix-webhooks v1.41.0
 	golang.org/x/crypto v0.29.0
 	golang.org/x/sync v0.9.0 // indirect
 	golang.org/x/text v0.20.0 // indirect

@@ -8,12 +8,18 @@ import (
 	"encore.dev/rlog"
 	"github.com/brinestone/scholaris/dto"
 	"github.com/brinestone/scholaris/util"
+	svix "github.com/svix/svix-webhooks/go"
 )
+
+var secrets struct {
+	SvixSecret string
+}
 
 // Clerk Webhook
 //
 //encore:api public raw path=/auth/clerk/webhook
 func ClerkWebhook(w http.ResponseWriter, req *http.Request) {
+	defer req.Body.Close()
 	requestBody, err := io.ReadAll(req.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -37,5 +43,26 @@ func ClerkWebhook(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 	}
+
+	if err = verifySvixWebhookRequest(req, requestBody); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		rlog.Warn(util.MsgWebhookError, "webhook", "ClerkWebhook", "msg", "invalid attempt", "data", event)
+		return
+	}
 	rlog.Debug("clerk event received", "event", event)
+}
+
+func verifySvixWebhookRequest(r *http.Request, dataJson []byte) (err error) {
+	headers := http.Header{}
+	headers.Set("svix-id", r.Header.Get("svix-id"))
+	headers.Set("svix-timestamp", r.Header.Get("svix-timestamp"))
+	headers.Set("svix-signature", r.Header.Get("svix-signature"))
+
+	wh, err := svix.NewWebhook(secrets.SvixSecret)
+	if err != nil {
+		return
+	}
+
+	err = wh.Verify(dataJson, headers)
+	return
 }
