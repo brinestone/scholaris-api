@@ -37,7 +37,7 @@ func DeleteAccount(ctx context.Context, req dto.DeleteAccountRequest) (err error
 	uid, _ := auth.UserID()
 	userId, _ := strconv.ParseUint(string(uid), 10, 64)
 
-	user, err := users.FindUserById(ctx, userId)
+	user, err := users.FindUserByIdInternal(ctx, userId)
 	if err != nil {
 		return
 	}
@@ -218,7 +218,7 @@ func JwtAuthHandler(ctx context.Context, token string) (auth.UID, *AuthClaims, e
 		authClaims.Sub = id
 	}
 
-	user, err := users.FindUserById(ctx, id)
+	user, err := users.FindUserByIdInternal(ctx, id)
 	if err != nil || user == nil || user.Id != id {
 		return "", nil, &util.ErrUnauthorized
 	}

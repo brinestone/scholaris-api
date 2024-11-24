@@ -160,8 +160,31 @@ func NewUser(ctx context.Context, req dto.NewUserRequest) (ans *dto.NewUserRespo
 
 // Find a user by their ID
 //
-//encore:api private method=GET path=/users/:id
-func FindUserById(ctx context.Context, id uint64) (*models.User, error) {
+//encore:api public method=GET path=/users/:id
+func FindUserByIdPublic(ctx context.Context, id uint64) (ans *dto.User, err error) {
+	user, err := FindUserByIdInternal(ctx, id)
+	if err != nil {
+		if errs.Convert(err) == nil {
+			return
+		}
+
+		rlog.Error(util.MsgCallError, "msg", err.Error())
+		err = &util.ErrUnknown
+		return
+	} else if user == nil {
+		err = &util.ErrNotFound
+		return
+	}
+
+	ans = &usersToDto(user)[0]
+
+	return
+}
+
+// Find a user by their ID
+//
+//encore:api private method=GET path=/users/:id/internal
+func FindUserByIdInternal(ctx context.Context, id uint64) (*models.User, error) {
 	var user *models.User
 	var err error
 
