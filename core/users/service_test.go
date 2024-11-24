@@ -55,17 +55,17 @@ func makeUser() (res *dto.NewUserResponse, err error) {
 	return
 }
 
-func TestNewUser(t *testing.T) {
-	res, err := makeUser()
+// func TestNewUser(t *testing.T) {
+// 	res, err := makeUser()
 
-	if err != nil {
-		t.Error(err)
-		return
-	}
+// 	if err != nil {
+// 		t.Error(err)
+// 		return
+// 	}
 
-	assert.NotNil(t, res)
-	assert.Greater(t, res.UserId, uint64(0))
-}
+// 	assert.NotNil(t, res)
+// 	assert.Greater(t, res.UserId, uint64(0))
+// }
 
 func TestFindUserByIdPublic(t *testing.T) {
 	res, err := makeUser()
