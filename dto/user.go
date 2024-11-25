@@ -13,17 +13,48 @@ type FetchUsersResponse struct {
 	Users []User `json:"users"`
 }
 
+type UserEmailAddress struct {
+	Id         uint64 `json:"id"`
+	Email      string `json:"email"`
+	Account    uint64 `json:"account"`
+	ExternalId string `json:"externalId"`
+	IsPrimary  bool   `json:"isPrimary"`
+	Verified   bool   `json:"verified"`
+}
+
+type UserPhoneNumber struct {
+	Id         uint64 `json:"id"`
+	Phone      string `json:"phone"`
+	Account    uint64 `json:"account"`
+	ExternalId string `json:"externalId"`
+	IsPrimary  bool   `json:"isPrimary"`
+	Verified   bool   `json:"verified"`
+}
+
+type UserAccount struct {
+	Id                  uint64     `json:"id"`
+	ExternalId          string     `json:"externalId"`
+	ImageUrl            *string    `json:"imageUrl,omitempty" encore:"optional"`
+	User                uint64     `json:"user"`
+	FirstName           *string    `json:"firstName,omitempty" encore:"optional"`
+	LastName            *string    `json:"lastName,omitempty" encore:"optional"`
+	Provider            string     `json:"provider"`
+	ProviderProfileData *string    `json:"providerProfileData,omitempty" encore:"optional"`
+	Gender              *string    `json:"gender,omitempty" encore:"optional"`
+	Dob                 *time.Time `json:"dob,omitempty" encore:"optional"`
+}
+
 type User struct {
-	Id        uint64    `json:"id"`
-	FirstName string    `json:"firstName"`
-	LastName  *string   `json:"lastName,omitempty" encore:"optional"`
-	Email     string    `json:"email"`
-	Dob       time.Time `json:"dob"`
-	Phone     string    `json:"phone"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
-	Gender    Gender    `json:"gender"`
-	Avatar    *string   `json:"avatar,omitempty" encore:"optional"`
+	Id               uint64             `json:"id"`
+	Banned           bool               `json:"banned"`
+	CreatedAt        time.Time          `json:"createdAt"`
+	UpdatedAt        time.Time          `json:"updatedAt"`
+	Locked           bool               `json:"locked"`
+	PrimaryEmail     *uint64            `json:"primaryEmail,omitempty" encore:"optional"`
+	PrimaryPhone     *uint64            `json:"primaryPhone,omitempty" encore:"optional"`
+	EmailsAddresses  []UserEmailAddress `json:"emailsAddresses"`
+	PhoneNumbers     []UserPhoneNumber  `json:"phoneNumbers"`
+	ProvidedAccounts []UserAccount      `json:"providedAccounts"`
 }
 
 type LoginRequest struct {

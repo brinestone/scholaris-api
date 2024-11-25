@@ -17,7 +17,7 @@ var secrets struct {
 
 // Clerk Webhook
 //
-//encore:api public raw path=/auth/clerk/webhook
+//encore:api public raw path=/webhooks/clerk
 func ClerkWebhook(w http.ResponseWriter, req *http.Request) {
 	defer req.Body.Close()
 	requestBody, err := io.ReadAll(req.Body)
@@ -49,7 +49,16 @@ func ClerkWebhook(w http.ResponseWriter, req *http.Request) {
 		rlog.Warn(util.MsgWebhookError, "webhook", "ClerkWebhook", "msg", "invalid attempt", "data", event)
 		return
 	}
-	rlog.Debug("clerk event received", "event", event)
+
+	if _, err = ClerkEvents.Publish(req.Context(), *event); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		rlog.Error(util.MsgWebhookError, "webhook", "ClerkWebhook", "msg", err.Error())
+		json, _ := json.Marshal(&util.ErrUnknown)
+		if _, err = w.Write(json); err != nil {
+			rlog.Error(util.MsgWebhookError, "webhook", "ClerkWebhook", "msg", err.Error())
+			return
+		}
+	}
 }
 
 func verifySvixWebhookRequest(r *http.Request, dataJson []byte) (err error) {

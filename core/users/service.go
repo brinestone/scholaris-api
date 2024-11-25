@@ -2,6 +2,8 @@ package users
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -16,6 +18,7 @@ import (
 	"encore.dev/storage/cache"
 	"encore.dev/storage/sqldb"
 	"github.com/brinestone/scholaris/dto"
+	"github.com/brinestone/scholaris/helpers"
 	"github.com/brinestone/scholaris/models"
 	"github.com/brinestone/scholaris/util"
 	"golang.org/x/crypto/bcrypt"
@@ -111,7 +114,18 @@ func VerifyCredentials(ctx context.Context, req dto.LoginRequest) (*models.User,
 		}
 	}
 
-	if err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
+	hash, err := findUserPasswordHashById(ctx, user.Id)
+	if errors.Is(err, sqldb.ErrNoRows) || hash == nil {
+		return nil, &errs.Error{
+			Code:    errs.FailedPrecondition,
+			Message: "You have not configured a password using your provider",
+		}
+	} else if err != nil {
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
+		return nil, &util.ErrUnknown
+	}
+
+	if err = bcrypt.CompareHashAndPassword([]byte(*hash), []byte(req.Password)); err != nil {
 		return nil, &errs.Error{
 			Code:    errs.Unauthenticated,
 			Message: "Invalid email or password",
@@ -181,9 +195,9 @@ func FindUserByIdPublic(ctx context.Context, id uint64) (ans *dto.User, err erro
 	return
 }
 
-// Find a user by their ID
+// Find a user by their internal account's ID
 //
-//encore:api private method=GET path=/users/:id/internal
+//encore:api private method=GET path=/users/:id/internal-by-internal-id
 func FindUserByIdInternal(ctx context.Context, id uint64) (*models.User, error) {
 	var user *models.User
 	var err error
@@ -198,6 +212,32 @@ func FindUserByIdInternal(ctx context.Context, id uint64) (*models.User, error) 
 	return user, err
 }
 
+type FindUserByExternalIdResponse struct {
+	AccountIndex int
+	User         models.User
+}
+
+// Find a user by their external account's ID
+//
+//encore:api private method=GET path=/users/:id/internal-by-external-id
+func FindUserByExternalId(ctx context.Context, id string) (ans *FindUserByExternalIdResponse, err error) {
+
+	user, err := findUserByExternalIdFromdb(ctx, id)
+	if err != nil {
+		return
+	}
+
+	accountIndex, _ := helpers.Find(user.ProvidedAccounts, func(a models.UserAccount) bool {
+		return a.ExternalId == id
+	})
+
+	ans = &FindUserByExternalIdResponse{
+		AccountIndex: accountIndex,
+		User:         *user,
+	}
+	return
+}
+
 func findUserByIdFromCache(ctx context.Context, id uint64) (*models.User, error) {
 	u, err := idCache.Get(ctx, id)
 	if err != nil {
@@ -206,32 +246,55 @@ func findUserByIdFromCache(ctx context.Context, id uint64) (*models.User, error)
 	return &u, err
 }
 
-func findUserByIdFromDb(ctx context.Context, id uint64) (*models.User, error) {
-	query := fmt.Sprintf("SELECT %s FROM users where id = $1;", allUserFields)
-	var ans = new(models.User)
+func findUserByExternalIdFromdb(ctx context.Context, id string) (ans *models.User, err error) {
+	query := `SELECT * FROM vw_AllUsers WHERE id=(SELECT "user" FROM provider_accounts WHERE external_id=$1);`
+	ans, err = parseUserRow(userDb.QueryRow(ctx, query, id))
+	if ans != nil {
+		idCache.Set(ctx, ans.Id, *ans)
+	}
+	return
+}
 
-	row := userDb.QueryRow(ctx, query, id)
-	if err := row.Scan(&ans.Id, &ans.FirstName, &ans.LastName, &ans.Email, &ans.Dob, &ans.PasswordHash, &ans.Phone, &ans.CreatedAt, &ans.UpdatedAt, &ans.Gender, &ans.Avatar); err != nil {
-		if errors.Is(err, sqldb.ErrNoRows) {
-			return nil, nil
-		}
-		return nil, err
+func findUserByIdFromDb(ctx context.Context, id uint64) (ans *models.User, err error) {
+	query := "SELECT * FROM vw_AllUsers WHERE id=$1"
+	ans, err = parseUserRow(userDb.QueryRow(ctx, query, id))
+	if ans != nil {
+		idCache.Set(ctx, id, *ans)
+	}
+	return
+}
+
+type rowScanner interface {
+	Scan(dest ...any) error
+}
+
+func parseUserRow(scanner rowScanner) (ans *models.User, err error) {
+	ans = new(models.User)
+	var accountsJson, emailsJson, phonesJson string
+	if err = scanner.Scan(&ans.Id, &ans.Banned, &ans.CreatedAt, &ans.UpdatedAt, &ans.Locked, &accountsJson, &ans.PrimaryEmail, &ans.PrimaryPhone, &emailsJson, &phonesJson); err != nil {
+		ans = nil
+		return
 	}
 
-	idCache.Set(ctx, id, *ans)
-	return ans, nil
+	if err = json.Unmarshal([]byte(accountsJson), &ans.ProvidedAccounts); err != nil {
+		ans = nil
+		return
+	}
+
+	if err = json.Unmarshal([]byte(emailsJson), &ans.Emails); err != nil {
+		ans = nil
+		return
+	}
+
+	if err = json.Unmarshal([]byte(phonesJson), &ans.PhoneNumbers); err != nil {
+		ans = nil
+		return
+	}
+	return
 }
 
 func userEmailExists(ctx context.Context, email string) (ans bool, err error) {
-	query := `
-		SELECT 
-			COUNT(id) 
-		FROM 
-			users
-		WHERE 
-			email = $1
-		;
-	`
+	query := "SELECT COUNT(id) FROM account_emails WHERE email=$1;"
 
 	var cnt = 0
 	if err = userDb.QueryRow(ctx, query, email).Scan(&cnt); err != nil {
@@ -242,21 +305,36 @@ func userEmailExists(ctx context.Context, email string) (ans bool, err error) {
 	return
 }
 
-func findUserByEmailFromDb(ctx context.Context, email string) (*models.User, error) {
-	query := fmt.Sprintf("SELECT %s FROM users WHERE email = $1;", allUserFields)
-	var ans *models.User = new(models.User)
-
-	row := userDb.QueryRow(ctx, query, email)
-
-	if err := row.Scan(&ans.Id, &ans.FirstName, &ans.LastName, &ans.Email, &ans.Dob, &ans.PasswordHash, &ans.Phone, &ans.CreatedAt, &ans.UpdatedAt, &ans.Gender, &ans.Avatar); err != nil {
-		if errors.Is(err, sqldb.ErrNoRows) {
-			return nil, nil
-		}
-		return nil, err
+func findUserByEmailFromDb(ctx context.Context, email string) (ans *models.User, err error) {
+	query := `
+		SELECT 
+			* 
+		FROM 
+			vw_AllUsers 
+		WHERE 
+			pa.id=(
+				SELECT 
+					"user" 
+				FROM 
+					provider_accounts pa 
+				WHERE id=(
+					SELECT
+						ae.account
+					FROM
+						account_emails ae
+					WHERE
+						ae.email=$1
+				)
+			)
+		;
+	`
+	ans, err = parseUserRow(userDb.QueryRow(ctx, query, email))
+	if err != nil {
+		return
 	}
 
 	emailCache.Set(ctx, email, *ans)
-	return ans, nil
+	return
 }
 
 const allUserFields = "id,first_name,last_name,email,dob,password_hash,phone,created_at,updated_at,gender,avatar"
@@ -272,12 +350,9 @@ func findAllUsers(ctx context.Context, offset uint64, size uint) ([]*models.User
 	defer rows.Close()
 
 	for rows.Next() {
-		user := new(models.User)
-		if err := rows.Scan(&user.Id, &user.FirstName, &user.LastName, &user.Email, &user.Dob, &user.PasswordHash, &user.Phone, &user.CreatedAt, &user.UpdatedAt, &user.Gender, &user.Avatar); err != nil {
-			if errors.Is(err, sqldb.ErrNoRows) {
-				break
-			}
-			return ans, err
+		user, err := parseUserRow(rows)
+		if err != nil {
+			return nil, err
 		}
 		ans = append(ans, user)
 		idCache.Set(ctx, user.Id, *user)
@@ -292,16 +367,9 @@ func createUser(ctx context.Context, req dto.NewUserRequest, tx *sqldb.Tx) (ans 
 	ph, _ := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	avatar := fmt.Sprintf("https://api.dicebear.com/9.x/adventurer/svg?seed?=%s&scale=80", url.QueryEscape(strings.Trim(fmt.Sprintf("%s %s", req.FirstName, req.LastName), " \n\t")))
 
-	query := `
-		INSERT INTO 
-			users (first_name, last_name, email, dob, password_hash, phone, gender, avatar) 
-		VALUES 
-			($1,$2,$3,$4,$5,$6,$7,$8) 
-		RETURNING
-			id;
-	`
+	query := `SELECT func_create_internal_user($1,$2,$3,$4,$5,$6,$7,$8,$9,$10);`
 
-	if err = tx.QueryRow(ctx, query, req.FirstName, req.LastName, req.Email, dob, string(ph), req.Phone, req.Gender, avatar).Scan(&ans); err != nil {
+	if err = tx.QueryRow(ctx, query, req.Email, string(ph), avatar, req.FirstName, req.LastName, req.Gender, dob, req.Phone, true, true).Scan(&ans); err != nil {
 		rlog.Error(err.Error())
 		err = &util.ErrUnknown
 	}
@@ -321,25 +389,76 @@ func usersToDto(u ...*models.User) (ans []dto.User) {
 
 	for i, v := range u {
 		var u = dto.User{
-			Id:        v.Id,
-			FirstName: v.FirstName,
-			Email:     v.Email,
-			Dob:       v.Dob,
-			Phone:     v.Phone,
-			Gender:    dto.Gender(v.Gender),
-			CreatedAt: v.CreatedAt,
-			UpdatedAt: v.UpdatedAt,
+			Id:               v.Id,
+			Banned:           v.Banned,
+			Locked:           v.Locked,
+			CreatedAt:        v.CreatedAt,
+			UpdatedAt:        v.UpdatedAt,
+			ProvidedAccounts: make([]dto.UserAccount, len(v.ProvidedAccounts)),
+			EmailsAddresses:  make([]dto.UserEmailAddress, len(v.Emails)),
+			PhoneNumbers:     make([]dto.UserPhoneNumber, len(v.PhoneNumbers)),
 		}
 
-		if v.LastName.Valid {
-			u.LastName = &v.LastName.String
+		if v.PrimaryPhone.Valid {
+			tmp := uint64(v.PrimaryPhone.Int64)
+			u.PrimaryPhone = &tmp
 		}
 
-		if v.Avatar.Valid {
-			u.Avatar = &v.Avatar.String
+		if v.PrimaryEmail.Valid {
+			tmp := uint64(v.PrimaryEmail.Int64)
+			u.PrimaryEmail = &tmp
+		}
+
+		for j, vv := range v.ProvidedAccounts {
+			u.ProvidedAccounts[j] = dto.UserAccount{
+				Id:                  vv.Id,
+				ExternalId:          vv.ExternalId,
+				ImageUrl:            vv.ImageUrl,
+				User:                vv.User,
+				FirstName:           vv.FirstName,
+				LastName:            vv.LastName,
+				Provider:            vv.Provider,
+				ProviderProfileData: vv.ProviderProfileData,
+				Gender:              vv.Gender,
+			}
+			if vv.Dob.Valid {
+				u.ProvidedAccounts[j].Dob = &vv.Dob.Time
+			}
+		}
+
+		for j, vv := range v.Emails {
+			u.EmailsAddresses[j] = dto.UserEmailAddress{
+				Id:         vv.Id,
+				Email:      vv.Email,
+				Account:    vv.Account,
+				ExternalId: vv.ExternalId,
+				IsPrimary:  vv.IsPrimary,
+				Verified:   vv.Verified,
+			}
+		}
+
+		for j, vv := range v.PhoneNumbers {
+			u.PhoneNumbers[j] = dto.UserPhoneNumber{
+				Id:         vv.Id,
+				Phone:      vv.Phone,
+				Account:    vv.Account,
+				ExternalId: vv.ExternalId,
+				IsPrimary:  vv.IsPrimary,
+				Verified:   vv.Verified,
+			}
 		}
 
 		ans[i] = u
 	}
+	return
+}
+
+func findUserPasswordHashById(ctx context.Context, id uint64) (ans *string, err error) {
+	query := `SELECT password_hash FROM provider_accounts WHERE "user" = $1 AND provider='internal';`
+	var passwordHash sql.NullString
+	if err = userDb.QueryRow(ctx, query, id).Scan(&passwordHash); err != nil {
+		return
+	}
+	ans = &passwordHash.String
 	return
 }
