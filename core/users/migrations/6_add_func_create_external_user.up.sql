@@ -37,7 +37,7 @@ BEGIN
             arg_avatar,
             arg_first_name,
             arg_last_name,
-            arg_provider,
+            arg_provider::provider_type,
             arg_gender,
             arg_dob::DATE
         ) RETURNING id INTO account_id;

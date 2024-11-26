@@ -20,7 +20,7 @@ CREATE TABLE
         image_url TEXT,
         first_name TEXT,
         last_name TEXT,
-        provider provider_type NOT NULL DEFAULT 'internal',
+        provider TEXT NOT NULL DEFAULT 'internal',
         password_hash TEXT,
         provider_profile_data JSONB,
         gender TEXT,
