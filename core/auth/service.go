@@ -153,14 +153,14 @@ func verifyCaptcha(token string) error {
 
 // Creates a new user account
 //
-//encore:api public method=POST path=/auth/sign-up tag:new
-func (s *Service) SignUp(ctx context.Context, req dto.NewUserRequest) error {
+//encore:api public method=POST path=/auth/sign-up
+func (s *Service) SignUp(ctx context.Context, req dto.NewInternalUserRequest) error {
 	if err := verifyCaptcha(req.CaptchaToken); err != nil {
 		rlog.Error(err.Error())
 		return &util.ErrCaptchaError
 	}
 
-	user, err := users.NewUser(ctx, req)
+	user, err := users.NewInternalUser(ctx, req)
 	if err != nil {
 		return err
 	}
@@ -180,8 +180,8 @@ type AuthClaims struct {
 	Provider   string `json:"provider"`
 	ExternalId string `json:"externalId"`
 	FullName   string `json:"displayName"`
-	Sub        uint64 `json:"sub"`
 	Mode       string `json:"mode"`
+	Sub        uint64
 }
 
 var secrets struct {
@@ -201,89 +201,25 @@ func initService() (ans *Service, err error) {
 
 //encore:authhandler
 func (s *Service) AuthHandler(ctx context.Context, token string) (ans auth.UID, claims *AuthClaims, err error) {
-	sessionClaims, err := s.client.VerifyToken(token, clerk.WithCustomClaims(AuthClaims{}))
+	claims = &AuthClaims{}
+	sessionClaims, err := s.client.VerifyToken(token, clerk.WithCustomClaims(claims))
 	if err != nil {
+		rlog.Error("clerk error", "msg", err)
 		err = &util.ErrUnauthorized
 		return
 	}
 
-	user, err := s.client.Users().Read(sessionClaims.Subject)
+	res, err := users.FindUserByExternalId(ctx, sessionClaims.Subject)
 	if err != nil {
-		rlog.Error("clerk error", "msg", err.Error())
+		rlog.Error(util.MsgCallError, "msg", err)
 		err = &util.ErrUnknown
 		return
 	}
 
-	var email string
-	for _, e := range user.EmailAddresses {
-		if e.ID != *user.PrimaryEmailAddressID {
-			continue
-		}
-		email = e.EmailAddress
-		break
-	}
+	claims.Sub = res.User.Id
 
-	// TODO: rethink this.
-	_, err = users.FindUserByExternalId(ctx, sessionClaims.Subject)
-	if err != nil {
-		rlog.Error(util.MsgCallError, "msg", err.Error())
-		err = &util.ErrUnknown
-		return
-	}
-
-	// TODO: find user from db
-	claims = &AuthClaims{
-		Email:  email,
-		Avatar: user.ProfileImageURL,
-	}
 	return
 }
-
-//// func (s *Service) JwtAuthHandler(ctx context.Context, token string) (auth.UID, *AuthClaims, error) {
-//// 	var claims jwt.MapClaims = make(jwt.MapClaims)
-//
-//// 	t, err := jwt.ParseWithClaims(token, claims, findJwtToken, jwt.WithValidMethods([]string{jwt.SigningMethodES256.Alg()}))
-//// 	if err != nil {
-//// 		if errors.Is(err, jwt.ErrTokenExpired) {
-//// 			return "", nil, &util.ErrUnauthorized
-//// 		}
-//// 		return "", nil, err
-//// 	}
-//
-//// 	if !t.Valid {
-//// 		return "", nil, &util.ErrUnauthorized
-//// 	}
-//
-//// 	var id uint64
-//
-//// 	authClaims := new(AuthClaims)
-//// 	if temp, ok := claims["avatar"].(string); ok {
-//// 		authClaims.Avatar = temp
-//// 	}
-//// 	if temp, ok := claims["fullName"].(string); ok {
-//// 		authClaims.FullName = temp
-//// 	}
-//
-//// 	if temp, ok := claims["email"].(string); ok {
-//// 		authClaims.Email = temp
-//// 	}
-//
-//// 	if temp, ok := claims["sub"].(float64); ok {
-//// 		id = uint64(temp)
-//// 		authClaims.Sub = id
-//// 	}
-//
-//// 	user, err := users.FindUserByIdInternal(ctx, id)
-//// 	if err != nil || user == nil || user.Id != id {
-//// 		return "", nil, &util.ErrUnauthorized
-//// 	}
-//
-//// 	return auth.UID(fmt.Sprint(id)), authClaims, nil
-//// }
-
-// func findJwtToken(t *jwt.Token) (any, error) {
-// 	return []byte(secrets.JwtKey), nil
-// }
 
 func deleteUserAccount(ctx context.Context, user uint64) (err error) {
 	err = users.DeleteInternal(ctx, user)

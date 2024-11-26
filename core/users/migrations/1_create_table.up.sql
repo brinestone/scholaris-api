@@ -20,7 +20,7 @@ CREATE TABLE
         image_url TEXT,
         first_name TEXT,
         last_name TEXT,
-        provider provider_type NOT NULL DEFAULT 'internal',
+        provider TEXT NOT NULL DEFAULT 'internal',
         password_hash TEXT,
         provider_profile_data JSONB,
         gender TEXT,
@@ -28,7 +28,7 @@ CREATE TABLE
         PRIMARY KEY (id),
         UNIQUE (external_id),
         UNIQUE ("user", external_id, provider),
-        FOREIGN KEY ("user") REFERENCES users (id)
+        FOREIGN KEY ("user") REFERENCES users (id) ON DELETE CASCADE
     );
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";

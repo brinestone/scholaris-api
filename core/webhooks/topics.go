@@ -5,6 +5,6 @@ import (
 	"github.com/brinestone/scholaris/dto"
 )
 
-var ClerkEvents = pubsub.NewTopic[dto.ClerkEvent]("clerk-user-event", pubsub.TopicConfig{
+var NewClerkUsers = pubsub.NewTopic[dto.ClerkNewUserEventData]("new-clerk-user", pubsub.TopicConfig{
 	DeliveryGuarantee: pubsub.AtLeastOnce,
 })
