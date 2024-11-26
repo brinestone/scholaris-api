@@ -225,8 +225,3 @@ func deleteUserAccount(ctx context.Context, user uint64) (err error) {
 	err = users.DeleteInternal(ctx, user)
 	return
 }
-
-func createExternalUser(ctx context.Context, req dto.NewInternalUserRequest) (err error) {
-
-	return
-}

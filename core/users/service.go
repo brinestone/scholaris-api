@@ -44,6 +44,16 @@ func NewExternalUser(ctx context.Context, req dto.NewExternalUserRequest) (ans *
 	ans = &dto.NewUserResponse{
 		UserId: uid,
 	}
+
+	user, _ := findUserByIdFromDb(ctx, uid)
+
+	NewUsers.Publish(ctx, UserAccountCreated{
+		UserId:    uid,
+		AccountId: user.ProvidedAccounts[0].Id,
+		Timestamp: time.Now(),
+		NewUser:   true,
+	})
+
 	return
 }
 
@@ -191,6 +201,15 @@ func NewInternalUser(ctx context.Context, req dto.NewInternalUserRequest) (ans *
 	ans = &dto.NewUserResponse{
 		UserId: uid,
 	}
+
+	user, _ := findUserByIdFromDb(ctx, uid)
+
+	NewUsers.Publish(ctx, UserAccountCreated{
+		UserId:    uid,
+		AccountId: user.ProvidedAccounts[0].Id,
+		Timestamp: time.Now(),
+		NewUser:   true,
+	})
 	return
 }
 
