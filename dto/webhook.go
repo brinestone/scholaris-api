@@ -8,7 +8,7 @@ const (
 	CESessionCreated = "session.created"
 )
 
-type ClerkEvent[T any | ClerkNewUserEventData | ClerkDeletedUserEventData | ClerkNewSessionEventData] struct {
+type ClerkEvent[T ClerkNewUserEventData | ClerkDeletedUserEventData | ClerkNewSessionEventData | any] struct {
 	Data            T                    `json:"data"`
 	EventAttributes ClerkEventAttributes `json:"event_attributes"`
 	Object          string               `json:"object"`
