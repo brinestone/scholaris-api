@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	"encore.dev/pubsub"
+	"encore.dev/rlog"
 	"github.com/brinestone/scholaris/core/users"
 	"github.com/brinestone/scholaris/core/webhooks"
 	"github.com/brinestone/scholaris/dto"
@@ -52,6 +53,7 @@ func onNewClerkUserCreated(ctx context.Context, data dto.ClerkNewUserEventData) 
 	var res *dto.NewUserResponse
 	res, err = users.NewExternalUser(ctx, req)
 	if err != nil {
+		rlog.Error("error while creating clerk user", "err", err)
 		return
 	}
 

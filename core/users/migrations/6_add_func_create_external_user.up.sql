@@ -22,6 +22,7 @@ DECLARE
 BEGIN
     INSERT INTO users DEFAULT VALUES RETURNING id INTO user_id;
 
+    RAISE NOTICE 'Inserting into provider_accounts with external_id=%', arg_external_id;
     INSERT INTO provider_accounts(
             "user", 
             external_id,

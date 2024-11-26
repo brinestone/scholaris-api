@@ -28,7 +28,7 @@ CREATE TABLE
         PRIMARY KEY (id),
         UNIQUE (external_id),
         UNIQUE ("user", external_id, provider),
-        FOREIGN KEY ("user") REFERENCES users (id)
+        FOREIGN KEY ("user") REFERENCES users (id) ON DELETE CASCADE
     );
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";

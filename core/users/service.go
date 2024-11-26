@@ -36,6 +36,7 @@ func NewExternalUser(ctx context.Context, req dto.NewExternalUserRequest) (ans *
 
 	uid, err := createExternalUser(ctx, tx, req)
 	if err != nil {
+		rlog.Debug("here1")
 		tx.Rollback()
 		return
 	}
@@ -45,7 +46,11 @@ func NewExternalUser(ctx context.Context, req dto.NewExternalUserRequest) (ans *
 		UserId: uid,
 	}
 
-	user, _ := findUserByIdFromDb(ctx, uid)
+	user, err := findUserByIdFromDb(ctx, uid)
+	if err != nil {
+		rlog.Error(util.MsgDbAccessError, "err", err)
+		return
+	}
 
 	NewUsers.Publish(ctx, UserAccountCreated{
 		UserId:    uid,
@@ -512,7 +517,7 @@ func createExternalUser(ctx context.Context, tx *sqldb.Tx, req dto.NewExternalUs
 		return string(j)
 	})
 
-	phonesJson := helpers.Map[dto.ExternalUserPhoneData, string](req.Phones, func(a dto.ExternalUserPhoneData) string {
+	phonesJson := helpers.Map(req.Phones, func(a dto.ExternalUserPhoneData) string {
 		j, _ := json.Marshal(a)
 		return string(j)
 	})
