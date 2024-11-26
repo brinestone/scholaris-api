@@ -25,7 +25,7 @@ BEGIN
     INSERT INTO provider_accounts(
             "user", 
             external_id,
-            image,
+            image_url,
             first_name,
             last_name,
             provider,
