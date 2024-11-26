@@ -8,15 +8,26 @@ const (
 	CESessionCreated = "session.created"
 )
 
-type ClerkEvent struct {
-	Data            ClerkEventData       `json:"data"`
+type ClerkEvent[T ClerkNewUserEventData | ClerkDeletedUserEventData | ClerkNewSessionEventData | any] struct {
+	Data            T                    `json:"data"`
 	EventAttributes ClerkEventAttributes `json:"event_attributes"`
 	Object          string               `json:"object"`
 	Timestamp       int64                `json:"timestamp"`
 	Type            string               `json:"type"`
 }
 
-type ClerkEventData struct {
+type ClerkNewSessionEventData struct {
+	AbandonAt      int64  `json:"abandon_at"`
+	ExternalUserId string `json:"user_id"`
+}
+
+type ClerkDeletedUserEventData struct {
+	Deleted bool   `json:"deleted"`
+	UserId  string `json:"id"`
+	Object  string `json:"object"`
+}
+
+type ClerkNewUserEventData struct {
 	Birthday              string                 `json:"birthday"`
 	CreatedAt             int64                  `json:"created_at"`
 	EmailAddresses        []ClerkEmailAddress    `json:"email_addresses"`
@@ -69,12 +80,18 @@ type ClerkWeb3Wallet struct {
 	Web3Wallet   string            `json:"web3_wallet,omitempty"`
 }
 
+type ClerkEmailAddressLinkage struct {
+	Id   string `json:"id"`
+	Type string `json:"type"`
+}
+
 type ClerkEmailAddress struct {
-	EmailAddress string            `json:"email_address"`
-	ID           string            `json:"id"`
-	LinkedTo     []string          `json:"linked_to,omitempty"`
-	Object       string            `json:"object"`
-	Verification ClerkVerification `json:"verification"`
+	EmailAddress string                     `json:"email_address"`
+	ID           string                     `json:"id"`
+	LinkedTo     []ClerkEmailAddressLinkage `json:"linked_to,omitempty"`
+	Object       string                     `json:"object"`
+	Verification ClerkVerification          `json:"verification"`
+	Reserved     bool                       `json:"reserved"`
 }
 
 type ClerkVerification struct {

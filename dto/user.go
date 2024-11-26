@@ -111,7 +111,34 @@ type NewUserResponse struct {
 	UserId uint64 `json:"userId"`
 }
 
-type NewUserRequest struct {
+type ExternalUserEmailAddressData struct {
+	Email      string  `json:"emailAddress"`
+	Verified   bool    `json:"verified"`
+	ExternalId *string `json:"externalId,omitempty" encore:"optional"`
+	Primary    bool    `json:"isPrimary"`
+}
+
+type ExternalUserPhoneData struct {
+	Phone      string  `json:"phoneNumber"`
+	Verified   bool    `json:"verified"`
+	ExternalId *string `json:"externalId,omitempty" encore:"optional"`
+	Primary    bool    `json:"isPrimary"`
+}
+
+type NewExternalUserRequest struct {
+	FirstName    string                         `json:"firstName"`
+	LastName     string                         `json:"lastName"`
+	ExternalId   string                         `json:"externalId"`
+	Provider     string                         `json:"provider"`
+	Emails       []ExternalUserEmailAddressData `json:"emailAddresses"`
+	Phones       []ExternalUserPhoneData        `json:"phoneNumbers"`
+	Gender       *string                        `json:"gender,omitempty" encore:"optional"`
+	Dob          *string                        `json:"dob,omitempty" encore:"optional"`
+	Avatar       *string                        `json:"avatar,omitempty" encore:"optional"`
+	ProviderData *string                        `json:"providerData,omitempty" encore:"optional"`
+}
+
+type NewInternalUserRequest struct {
 	// The user's first name
 	FirstName string `json:"firstName"`
 	// The user's last name (optional)
@@ -139,7 +166,7 @@ func (g Gender) Validate() error {
 	return nil
 }
 
-func (n NewUserRequest) Validate() error {
+func (n NewInternalUserRequest) Validate() error {
 	var ans error
 	msgs := make([]string, 0)
 

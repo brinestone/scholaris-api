@@ -24,7 +24,6 @@ BEGIN
 
     FOREACH current_setting_update IN ARRAY arg_updates LOOP
         FOR current_update_key, current_update_key_value_updates IN SELECT key,value FROM JSONB_EACH_TEXT(sent_update) LOOP
-            
             SELECT id INTO current_setting_id FROM settings WHERE key=current_update_key AND owner=arg_owner AND owner_type=arg_owner_type AND system_generated=false;
 
             IF current_setting_id IS NULL THEN

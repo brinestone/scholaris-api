@@ -41,7 +41,7 @@ func TestMain(t *testing.M) {
 func makeUser() (res *dto.NewUserResponse, err error) {
 	pass := gofakeit.Password(true, true, true, true, true, 20)
 	person := gofakeit.Person()
-	res, err = users.NewUser(context.TODO(), dto.NewUserRequest{
+	res, err = users.NewInternalUser(context.TODO(), dto.NewInternalUserRequest{
 		FirstName:       person.FirstName,
 		LastName:        person.LastName,
 		Email:           person.Contact.Email,

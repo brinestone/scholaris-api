@@ -31,7 +31,7 @@ type DateOnly struct {
 }
 
 func (d *DateOnly) UnmarshalJSON(b []byte) (err error) {
-	if len(b) <= 2 {
+	if len(b) <= 2 || string(b) == "null" {
 		d.Valid = false
 		return
 	}
@@ -61,7 +61,7 @@ type UserAccount struct {
 	Provider            string
 	ProviderProfileData *string
 	Gender              *string
-	Dob                 DateOnly
+	Dob                 *DateOnly
 }
 type User struct {
 	Id               uint64

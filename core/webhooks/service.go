@@ -32,7 +32,7 @@ func ClerkWebhook(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	var event = new(dto.ClerkEvent)
+	var event = new(dto.ClerkEvent[any])
 	if err := json.Unmarshal(requestBody, event); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		rlog.Error(util.MsgWebhookError, "webhook", "ClerkWebhook", "msg", err.Error())
@@ -50,7 +50,15 @@ func ClerkWebhook(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if _, err = ClerkEvents.Publish(req.Context(), *event); err != nil {
+	dataAsJson, _ := json.Marshal(event.Data)
+	switch event.Type {
+	case dto.CEUserCreated:
+		var eventData dto.ClerkNewUserEventData
+		json.Unmarshal(dataAsJson, &eventData)
+		_, err = NewClerkUsers.Publish(req.Context(), eventData)
+	}
+
+	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		rlog.Error(util.MsgWebhookError, "webhook", "ClerkWebhook", "msg", err.Error())
 		json, _ := json.Marshal(&util.ErrUnknown)
