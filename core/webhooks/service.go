@@ -50,7 +50,7 @@ func ClerkWebhook(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if _, err = ClerkEvents.Publish(req.Context(), *event); err != nil {
+	if _, err = NewClerkUsers.Publish(req.Context(), *event); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		rlog.Error(util.MsgWebhookError, "webhook", "ClerkWebhook", "msg", err.Error())
 		json, _ := json.Marshal(&util.ErrUnknown)

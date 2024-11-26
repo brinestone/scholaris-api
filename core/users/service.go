@@ -21,8 +21,31 @@ import (
 	"github.com/brinestone/scholaris/helpers"
 	"github.com/brinestone/scholaris/models"
 	"github.com/brinestone/scholaris/util"
+	"github.com/lib/pq"
 	"golang.org/x/crypto/bcrypt"
 )
+
+// Creates a new user with an externally provided account
+//
+//encore:api private method=POST path=/users/external
+func NewExternalUser(ctx context.Context, req dto.NewExternalUserRequest) (ans *dto.NewUserResponse, err error) {
+	tx, err := userDb.Begin(ctx)
+	if err != nil {
+		return
+	}
+
+	uid, err := createExternalUser(ctx, tx, req)
+	if err != nil {
+		tx.Rollback()
+		return
+	}
+	tx.Commit()
+
+	ans = &dto.NewUserResponse{
+		UserId: uid,
+	}
+	return
+}
 
 // Deletes a user's account (internal API)
 //
@@ -137,8 +160,8 @@ func VerifyCredentials(ctx context.Context, req dto.LoginRequest) (*models.User,
 
 // Create a new user account
 //
-//encore:api private method=POST path=/users
-func NewUser(ctx context.Context, req dto.NewUserRequest) (ans *dto.NewUserResponse, err error) {
+//encore:api private method=POST path=/users/internal
+func NewInternalUser(ctx context.Context, req dto.NewInternalUserRequest) (ans *dto.NewUserResponse, err error) {
 	emailExists, err := userEmailExists(ctx, req.Email)
 	if err != nil {
 		return
@@ -153,15 +176,14 @@ func NewUser(ctx context.Context, req dto.NewUserRequest) (ans *dto.NewUserRespo
 
 	tx, err := userDb.Begin(ctx)
 	if err != nil {
-		rlog.Error(err.Error())
-		err = &util.ErrUnknown
+		return
 	}
 
-	uid, err := createUser(ctx, req, tx)
+	uid, err := createInternalUser(ctx, req, tx)
 	if err != nil {
 		_ = tx.Rollback()
 		rlog.Error(err.Error())
-		err = &util.ErrUnknown
+		return
 	}
 
 	tx.Commit()
@@ -361,7 +383,7 @@ func findAllUsers(ctx context.Context, offset uint64, size uint) ([]*models.User
 	return ans, nil
 }
 
-func createUser(ctx context.Context, req dto.NewUserRequest, tx *sqldb.Tx) (ans uint64, err error) {
+func createInternalUser(ctx context.Context, req dto.NewInternalUserRequest, tx *sqldb.Tx) (ans uint64, err error) {
 
 	dob, _ := time.Parse("2006/2/1", req.Dob)
 	ph, _ := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
@@ -460,5 +482,23 @@ func findUserPasswordHashById(ctx context.Context, id uint64) (ans *string, err 
 		return
 	}
 	ans = &passwordHash.String
+	return
+}
+
+func createExternalUser(ctx context.Context, tx *sqldb.Tx, req dto.NewExternalUserRequest) (ans uint64, err error) {
+	query := "SELECT func_create_external_user($1,$2,$3,$4,$5,$6,$7,$8,$9,$10);"
+
+	emailsJson := helpers.Map(req.Emails, func(e dto.ExternalUserEmailAddressData) string {
+		j, _ := json.Marshal(e)
+		return string(j)
+	})
+
+	phonesJson := helpers.Map[dto.ExternalUserPhoneData, string](req.Phones, func(a dto.ExternalUserPhoneData) string {
+		j, _ := json.Marshal(a)
+		return string(j)
+	})
+
+	err = tx.QueryRow(ctx, query, req.FirstName, req.LastName, req.ExternalId, req.ProviderData, pq.Array(emailsJson), pq.Array(phonesJson), req.Provider, req.Gender, req.Dob, req.Avatar).Scan(&ans)
+
 	return
 }

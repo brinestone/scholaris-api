@@ -15,7 +15,7 @@ DECLARE
     external_id TEXT;
     account_id BIGINT;
 BEGIN
-    INSERT INTO users(banned,locked) VALUES (DEFAULT, DEFAULT) RETURNING id INTO user_id;
+    INSERT INTO users DEFAULT VALUES RETURNING id INTO user_id;
     external_id := GEN_RANDOM_UUID()::TEXT;
     
     INSERT INTO provider_accounts("user", external_id,image_url,first_name,last_name,provider,password_hash,gender,dob) VALUES (
