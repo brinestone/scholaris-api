@@ -50,9 +50,12 @@ func ClerkWebhook(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	dataAsJson, _ := json.Marshal(event.Data)
 	switch event.Type {
 	case dto.CEUserCreated:
-		_, err = NewClerkUsers.Publish(req.Context(), event.Data.(dto.ClerkNewUserEventData))
+		var eventData dto.ClerkNewUserEventData
+		json.Unmarshal(dataAsJson, &eventData)
+		_, err = NewClerkUsers.Publish(req.Context(), eventData)
 	}
 
 	if err != nil {
