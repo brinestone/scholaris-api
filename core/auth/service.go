@@ -80,8 +80,8 @@ func (s *Service) SignIn(ctx context.Context, req dto.LoginRequest) (*LoginRespo
 		return nil, err
 	}
 
-	var accountIndex, _ = helpers.Find(user.ProvidedAccounts, func(a models.UserAccount) bool {
-		emailIndex, ok := helpers.Find(user.Emails, func(e models.UserEmailAddress) bool {
+	var accountIndex, _ = helpers.FindIndex(user.ProvidedAccounts, func(a models.UserAccount) bool {
+		emailIndex, ok := helpers.FindIndex(user.Emails, func(e models.UserEmailAddress) bool {
 			return e.Email == req.Email
 		})
 		return ok && a.Id == user.Emails[emailIndex].Id
@@ -175,12 +175,12 @@ func (s *Service) SignUp(ctx context.Context, req dto.NewInternalUserRequest) er
 // ----
 
 type AuthClaims struct {
-	Email      string `json:"email"`
-	Avatar     string `json:"avatar"`
-	Provider   string `json:"provider"`
-	ExternalId string `json:"externalId"`
-	FullName   string `json:"displayName"`
-	Mode       string `json:"mode"`
+	Email      string  `json:"email"`
+	Avatar     *string `json:"avatar"`
+	Provider   string  `json:"provider"`
+	ExternalId string  `json:"externalId"`
+	FullName   string  `json:"displayName"`
+	Mode       string  `json:"mode"`
 	Sub        uint64
 }
 
@@ -202,7 +202,7 @@ func initService() (ans *Service, err error) {
 //encore:authhandler
 func (s *Service) AuthHandler(ctx context.Context, token string) (ans auth.UID, claims *AuthClaims, err error) {
 	claims = &AuthClaims{}
-	sessionClaims, err := s.client.VerifyToken(token, clerk.WithCustomClaims(claims))
+	sessionClaims, err := s.client.VerifyToken(token)
 	if err != nil {
 		rlog.Error("clerk error", "msg", err)
 		err = &util.ErrUnauthorized
@@ -216,7 +216,17 @@ func (s *Service) AuthHandler(ctx context.Context, token string) (ans auth.UID, 
 		return
 	}
 
+	email, _ := helpers.Find(res.User.Emails, func(a models.UserEmailAddress) bool {
+		return a.IsPrimary
+	})
+	acc := res.User.ProvidedAccounts[res.AccountIndex]
 	claims.Sub = res.User.Id
+	claims.Avatar = acc.ImageUrl
+	claims.Email = email.Email
+	claims.ExternalId = sessionClaims.Subject
+	claims.Provider = "clerk"
+	claims.FullName = acc.FullName()
+
 	rlog.Debug("handled jwt", "token", token, "claims", claims, "sessionClaims", sessionClaims, "headers", encore.CurrentRequest().Headers)
 
 	return

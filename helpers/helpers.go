@@ -1,10 +1,21 @@
 package helpers
 
-func Find[T any](slice []T, pred func(a T) bool) (ans int, ok bool) {
+func FindIndex[T any](slice []T, pred func(a T) bool) (ans int, ok bool) {
 	ans = -1
 	for i, v := range slice {
 		if ok = pred(v); ok {
 			ans = i
+			break
+		}
+	}
+	return
+}
+
+func Find[T any](slice []T, pred func(a T) bool) (ans T, ok bool) {
+	for _, v := range slice {
+		if ok = pred(v); ok {
+			ans = v
+			break
 		}
 	}
 	return

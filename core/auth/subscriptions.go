@@ -20,7 +20,7 @@ func onNewClerkUserCreated(ctx context.Context, data dto.ClerkNewUserEventData) 
 	var dob *string
 	rawJson, _ := json.Marshal(data)
 	jsonData := string(rawJson)
-	primaryEmailIndex, _ := helpers.Find(data.EmailAddresses, func(a dto.ClerkEmailAddress) bool {
+	primaryEmailIndex, _ := helpers.FindIndex(data.EmailAddresses, func(a dto.ClerkEmailAddress) bool {
 		return a.ID == data.PrimaryEmailAddressID
 	})
 

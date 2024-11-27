@@ -277,7 +277,7 @@ func FindUserByExternalId(ctx context.Context, id string) (ans *FindUserByExtern
 		return
 	}
 
-	accountIndex, _ := helpers.Find(user.ProvidedAccounts, func(a models.UserAccount) bool {
+	accountIndex, _ := helpers.FindIndex(user.ProvidedAccounts, func(a models.UserAccount) bool {
 		return a.ExternalId == id
 	})
 
