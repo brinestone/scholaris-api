@@ -64,13 +64,16 @@ func TestMain(t *testing.M) {
 	t.Run()
 }
 
-func makeUser() (auth.UID, sAuth.AuthClaims) {
+func makeUser() (auth.UID, dto.AuthClaims) {
 	uid := uint64(rand.Int63n(1000))
-	userData := sAuth.AuthClaims{
-		Email:    gofakeit.Person().Contact.Email,
-		Avatar:   gofakeit.Person().Image,
-		FullName: gofakeit.Name(),
-		Sub:      uid,
+	userData := dto.AuthClaims{
+		Email:      gofakeit.Person().Contact.Email,
+		Avatar:     &gofakeit.Person().Image,
+		FullName:   gofakeit.Name(),
+		Provider:   gofakeit.RandomString(sAuth.ValidProviders),
+		ExternalId: randomString(30),
+		Account:    uint64(gofakeit.UintRange(1, 10000)),
+		Sub:        uid,
 	}
 	return auth.UID(fmt.Sprintf("%d", uid)), userData
 }

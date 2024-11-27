@@ -222,7 +222,7 @@ func NewInternalUser(ctx context.Context, req dto.NewInternalUserRequest) (ans *
 //
 //encore:api public method=GET path=/users/:id
 func FindUserByIdPublic(ctx context.Context, id uint64) (ans *dto.User, err error) {
-	user, err := FindUserByIdInternal(ctx, id)
+	user, err := FindUserById(ctx, id)
 	if err != nil {
 		if errs.Convert(err) == nil {
 			return
@@ -241,10 +241,10 @@ func FindUserByIdPublic(ctx context.Context, id uint64) (ans *dto.User, err erro
 	return
 }
 
-// Find a user by their internal account's ID
+// Find a user by their internal account's ID (Private API)
 //
 //encore:api private method=GET path=/users/:id/internal-by-internal-id
-func FindUserByIdInternal(ctx context.Context, id uint64) (*models.User, error) {
+func FindUserById(ctx context.Context, id uint64) (*models.User, error) {
 	var user *models.User
 	var err error
 
@@ -263,7 +263,7 @@ type FindUserByExternalIdResponse struct {
 	User         models.User
 }
 
-// Find a user by their external account's ID
+// Find a user by their external account's ID (internal API)
 //
 //encore:api private method=GET path=/users/:id/internal-by-external-id
 func FindUserByExternalId(ctx context.Context, id string) (ans *FindUserByExternalIdResponse, err error) {

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -14,6 +15,7 @@ import (
 
 	"encore.dev"
 	"encore.dev/beta/auth"
+	"encore.dev/beta/errs"
 	"encore.dev/rlog"
 	"github.com/brinestone/scholaris/core/users"
 	"github.com/brinestone/scholaris/dto"
@@ -24,13 +26,16 @@ import (
 	"github.com/golang-jwt/jwt/v4"
 )
 
-var jwtSigningMethod = jwt.SigningMethodHS256
+var (
+	jwtSigningMethod = jwt.SigningMethodHS256
+	ValidProviders   = helpers.SliceOf(dto.ProvClerk, dto.ProvInternal)
+)
 
 // Service definition
 //
 //encore:service
 type Service struct {
-	client clerk.Client
+	clerkClient clerk.Client
 }
 
 type VerifyCaptchaRequest struct {
@@ -89,14 +94,14 @@ func (s *Service) SignIn(ctx context.Context, req dto.LoginRequest) (*LoginRespo
 	var account = user.ProvidedAccounts[accountIndex]
 
 	claims := jwt.MapClaims{
-		"sub":      user.Id,
-		"iss":      "scholaris",
-		"avatar":   account.ImageUrl,
-		"email":    req.Email,
-		"exp":      time.Now().Add(time.Hour * 24).Unix(),
-		"fullName": account.FullName(),
-		"provider": account.Provider,
-		"mode":     encore.Meta().Environment,
+		"sub":         user.Id,
+		"iss":         encore.Meta().APIBaseURL,
+		"avatar":      account.ImageUrl,
+		"email":       req.Email,
+		"exp":         time.Now().Add(time.Hour * 24).Unix(),
+		"displayName": account.FullName(),
+		"provider":    account.Provider,
+		"mode":        encore.Meta().Environment,
 	}
 
 	token := jwt.NewWithClaims(jwtSigningMethod, claims)
@@ -174,16 +179,6 @@ func (s *Service) SignUp(ctx context.Context, req dto.NewInternalUserRequest) er
 
 // ----
 
-type AuthClaims struct {
-	Email      string  `json:"email"`
-	Avatar     *string `json:"avatar"`
-	Provider   string  `json:"provider"`
-	ExternalId string  `json:"externalId"`
-	FullName   string  `json:"displayName"`
-	Mode       string  `json:"mode"`
-	Sub        uint64
-}
-
 var secrets struct {
 	JwtKey           string
 	CaptchaSecretKey string
@@ -195,44 +190,161 @@ func initService() (ans *Service, err error) {
 	if err != nil {
 		return
 	}
-	ans = &Service{client: client}
+	ans = &Service{clerkClient: client}
+	return
+}
+
+func getValidIssuerDomain(issuerDomain string) (result string, valid bool) {
+	u, err := url.Parse(issuerDomain)
+	if err != nil {
+		return
+	}
+
+	result, valid = helpers.Find(dto.ValidIssuerDomains, func(validDomain string) bool {
+		return strings.HasSuffix(u.Hostname(), validDomain)
+	})
 	return
 }
 
 //encore:authhandler
-func (s *Service) AuthHandler(ctx context.Context, token string) (ans auth.UID, claims *AuthClaims, err error) {
-	claims = &AuthClaims{}
-	sessionClaims, err := s.client.VerifyToken(token)
+func (s *Service) AuthHandler(ctx context.Context, token string) (ans auth.UID, claims *dto.AuthClaims, err error) {
+	t, _, err := new(jwt.Parser).ParseUnverified(token, jwt.MapClaims{})
 	if err != nil {
-		rlog.Error("clerk error", "msg", err)
+		rlog.Error("jwt parse error", "err", err)
+		err = &util.ErrUnknown
+		return
+	}
+
+	sentClaims, ok := t.Claims.(jwt.MapClaims)
+	if !ok {
+		rlog.Warn("invalid claims structure", "actualClaims", t.Claims)
 		err = &util.ErrUnauthorized
+		return
+	}
+
+	issuerClaim, ok := sentClaims["iss"]
+	if !ok {
+		rlog.Warn("no issuer specified", "actualClaims", t.Claims)
+		err = &util.ErrUnauthorized
+		return
+	}
+
+	issuerDomain, valid := getValidIssuerDomain(issuerClaim.(string))
+	if !valid {
+		rlog.Warn("invalid issuer", "actualClaims", t.Claims, "issuerClaim", issuerClaim)
+		err = &util.ErrUnauthorized
+		return
+	}
+
+	var user *models.User
+	switch issuerDomain {
+	case dto.ScholarisIssuerDomain:
+		claims, user, err = doInternalJwtValidation(ctx, token)
+	case dto.ClerkIssuerDomain:
+		claims, user, err = s.doClerkJwtValidation(ctx, token)
+	default:
+		rlog.Warn("unsupported issuer", "actualClaims", t.Claims, "issuerDomain", issuerDomain)
+		err = &util.ErrUnauthorized
+		return
+	}
+
+	if err != nil && errs.Convert(err) == nil {
+		return
+	} else if err != nil {
+		rlog.Error("jwt parse error", "err", err.Error())
+		err = &util.ErrUnauthorized
+		return
+	}
+
+	ans = auth.UID(fmt.Sprint(user.Id))
+
+	return
+}
+
+// Performs JWT validation and parsing using Clerk client
+func (s *Service) doClerkJwtValidation(ctx context.Context, token string) (ans *dto.AuthClaims, user *models.User, err error) {
+	sessionClaims, err := s.clerkClient.VerifyToken(token)
+	if err != nil {
 		return
 	}
 
 	res, err := users.FindUserByExternalId(ctx, sessionClaims.Subject)
 	if err != nil {
-		rlog.Error(util.MsgCallError, "msg", err)
-		err = &util.ErrUnknown
 		return
 	}
 
-	email, _ := helpers.Find(res.User.Emails, func(a models.UserEmailAddress) bool {
-		return a.IsPrimary
-	})
-	acc := res.User.ProvidedAccounts[res.AccountIndex]
-	claims.Sub = res.User.Id
-	claims.Avatar = acc.ImageUrl
-	claims.Email = email.Email
-	claims.ExternalId = sessionClaims.Subject
-	claims.Provider = "clerk"
-	claims.FullName = acc.FullName()
+	account := res.User.ProvidedAccounts[res.AccountIndex]
+	email, _ := helpers.Find(res.User.Emails, func(a models.UserEmailAddress) bool { return a.IsPrimary })
+	user = &res.User
 
-	rlog.Debug("handled jwt", "token", token, "claims", claims, "sessionClaims", sessionClaims, "headers", encore.CurrentRequest().Headers)
+	ans = &dto.AuthClaims{
+		Email:      email.Email,
+		Avatar:     account.ImageUrl,
+		Provider:   "clerk",
+		ExternalId: sessionClaims.Subject,
+		FullName:   account.FullName(),
+		Sub:        res.User.Id,
+		Account:    account.Id,
+	}
+
+	return
+}
+
+// Performs JWT validation and parsing
+func doInternalJwtValidation(ctx context.Context, token string) (ans *dto.AuthClaims, user *models.User, err error) {
+	var claims jwt.MapClaims = make(jwt.MapClaims)
+
+	t, err := jwt.ParseWithClaims(token, claims, findJwtKey, jwt.WithValidMethods(helpers.SliceOf(jwtSigningMethod.Alg())))
+	if errors.Is(err, jwt.ErrTokenExpired) {
+		err = &util.ErrUnauthorized
+		return
+	} else if err != nil {
+		return
+	}
+
+	if !t.Valid {
+		err = &util.ErrUnauthorized
+		return
+	}
+
+	ans = new(dto.AuthClaims)
+	ans.Provider = "internal"
+	var userId uint64
+	if temp, ok := claims["avatar"].(string); ok {
+		ans.Avatar = &temp
+	}
+	if temp, ok := claims["displayName"].(string); ok {
+		ans.FullName = temp
+	}
+
+	if temp, ok := claims["email"].(string); ok {
+		ans.Email = temp
+	}
+
+	if temp, ok := claims["sub"].(float64); ok {
+		userId = uint64(temp)
+		ans.Sub = userId
+	}
+
+	if temp, ok := claims["account"].(float64); ok {
+		ans.Account = uint64(temp)
+	}
+
+	user, err = users.FindUserById(ctx, userId)
+	if err != nil || user == nil || user.Id != userId {
+		err = &util.ErrUnauthorized
+		return
+	}
 
 	return
 }
 
 func deleteUserAccount(ctx context.Context, user uint64) (err error) {
 	err = users.DeleteInternal(ctx, user)
+	return
+}
+
+func findJwtKey(t *jwt.Token) (ans any, err error) {
+	ans = []byte(secrets.JwtKey)
 	return
 }

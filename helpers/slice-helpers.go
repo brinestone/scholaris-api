@@ -1,5 +1,17 @@
 package helpers
 
+func MemberOf[T comparable](target T, slice ...T) bool {
+	index, found := FindIndex(slice, func(a T) bool {
+		return a == target
+	})
+	return found && index >= 0
+}
+
+func SliceOf[T any](t ...T) (ans []T) {
+	ans = t[:]
+	return
+}
+
 func FindIndex[T any](slice []T, pred func(a T) bool) (ans int, ok bool) {
 	ans = -1
 	for i, v := range slice {
