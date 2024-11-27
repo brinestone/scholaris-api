@@ -32,7 +32,7 @@ func ClerkWebhook(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	var event = new(dto.ClerkEvent[any])
+	var event = new(dto.ClerkEvent)
 	if err := json.Unmarshal(requestBody, event); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		rlog.Error(util.MsgWebhookError, "webhook", "ClerkWebhook", "msg", err.Error())
