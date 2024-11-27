@@ -270,7 +270,12 @@ func FindUserByExternalId(ctx context.Context, id string) (ans *FindUserByExtern
 
 	user, err := findUserByExternalIdFromCache(ctx, id)
 	if errors.Is(err, cache.Miss) {
-		user, err = findUserByExternalIdFromdb(ctx, id)
+		rlog.Warn("cache miss", "userId", id)
+		var t *models.User
+		t, err = findUserByExternalIdFromdb(ctx, id)
+		if t != nil {
+			user = *t
+		}
 	}
 
 	if err != nil {
@@ -283,7 +288,7 @@ func FindUserByExternalId(ctx context.Context, id string) (ans *FindUserByExtern
 
 	ans = &FindUserByExternalIdResponse{
 		AccountIndex: accountIndex,
-		User:         *user,
+		User:         user,
 	}
 	return
 }
@@ -297,20 +302,19 @@ func findUserByIdFromCache(ctx context.Context, id uint64) (*models.User, error)
 	return &u, err
 }
 
-func findUserByExternalIdFromCache(ctx context.Context, id string) (u *models.User, err error) {
-	t, err := idCache.Get(ctx, cacheKey(id))
+func findUserByExternalIdFromCache(ctx context.Context, id string) (u models.User, err error) {
+	u, err = idCache.Get(ctx, cacheKey(id))
 	if err != nil {
 		return
 	}
 
-	u = &t
 	return
 }
 
 func cacheKey[T string | uint64](id T) string {
 	var identifier string
 	switch v := any(id).(type) {
-	case int64:
+	case uint64:
 		identifier = fmt.Sprintf("%d", v)
 	case string:
 		identifier = v
@@ -322,7 +326,7 @@ func findUserByExternalIdFromdb(ctx context.Context, id string) (ans *models.Use
 	query := `SELECT * FROM vw_AllUsers WHERE id=(SELECT "user" FROM provider_accounts WHERE external_id=$1);`
 	ans, err = parseUserRow(userDb.QueryRow(ctx, query, id))
 	if ans != nil {
-		idCache.Set(ctx, cacheKey(ans.Id), *ans)
+		idCache.Set(ctx, cacheKey(id), *ans)
 	}
 	return
 }
@@ -331,7 +335,7 @@ func findUserByIdFromDb(ctx context.Context, id uint64) (ans *models.User, err e
 	query := "SELECT * FROM vw_AllUsers WHERE id=$1"
 	ans, err = parseUserRow(userDb.QueryRow(ctx, query, id))
 	if ans != nil {
-		idCache.Set(ctx, cacheKey(ans.Id), *ans)
+		idCache.Set(ctx, cacheKey(id), *ans)
 	}
 	return
 }
