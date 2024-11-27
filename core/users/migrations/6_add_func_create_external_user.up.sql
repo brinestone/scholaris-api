@@ -66,10 +66,12 @@ BEGIN
         );
     END LOOP;
 
-    FOREACH current_phone_info IN ARRAY arg_phones LOOP
+    IF ARRAY_LENGTH(arg_phones,1) > 0 THEN
+        FOREACH current_phone_info IN ARRAY arg_phones LOOP
         current__ := current_phone_info ->> 'phoneNumber';
         current__external_id := COALESCE(current_phone_info ->> 'externalId', GEN_RANDOM_UUID()::TEXT);
         current__primary := current_phone_info ->> 'isPrimary';
+        current__verified := current_phone_info ->> 'verified';
 
         INSERT INTO account_phones(
             phone,
@@ -86,7 +88,9 @@ BEGIN
             current__primary,
             current__verified
         );
-    END LOOP;
+
+        END LOOP;
+    END IF;
 
     RETURN user_id;
 END;
