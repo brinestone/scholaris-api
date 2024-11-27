@@ -201,6 +201,7 @@ func initService() (ans *Service, err error) {
 
 //encore:authhandler
 func (s *Service) AuthHandler(ctx context.Context, token string) (ans auth.UID, claims *AuthClaims, err error) {
+	rlog.Debug("handling", "token", token)
 	claims = &AuthClaims{}
 	sessionClaims, err := s.client.VerifyToken(token, clerk.WithCustomClaims(claims))
 	if err != nil {
