@@ -217,7 +217,7 @@ func (s *Service) AuthHandler(ctx context.Context, token string) (ans auth.UID, 
 	}
 
 	claims.Sub = res.User.Id
-	rlog.Debug("handled jwt", "token", token, "claims", claims, "sessionClaims", sessionClaims)
+	rlog.Debug("handled jwt", "token", token, "claims", claims, "sessionClaims", sessionClaims, "headers", encore.CurrentRequest().Headers)
 
 	return
 }
