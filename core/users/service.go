@@ -268,7 +268,11 @@ type FindUserByExternalIdResponse struct {
 //encore:api private method=GET path=/users/:id/internal-by-external-id
 func FindUserByExternalId(ctx context.Context, id string) (ans *FindUserByExternalIdResponse, err error) {
 
-	user, err := findUserByExternalIdFromdb(ctx, id)
+	user, err := findUserByExternalIdFromCache(ctx, id)
+	if errors.Is(err, cache.Miss) {
+		user, err = findUserByExternalIdFromdb(ctx, id)
+	}
+
 	if err != nil {
 		return
 	}
@@ -285,18 +289,40 @@ func FindUserByExternalId(ctx context.Context, id string) (ans *FindUserByExtern
 }
 
 func findUserByIdFromCache(ctx context.Context, id uint64) (*models.User, error) {
-	u, err := idCache.Get(ctx, id)
+
+	u, err := idCache.Get(ctx, cacheKey(id))
 	if err != nil {
 		return nil, err
 	}
 	return &u, err
 }
 
+func findUserByExternalIdFromCache(ctx context.Context, id string) (u *models.User, err error) {
+	t, err := idCache.Get(ctx, cacheKey(id))
+	if err != nil {
+		return
+	}
+
+	u = &t
+	return
+}
+
+func cacheKey[T string | uint64](id T) string {
+	var identifier string
+	switch v := any(id).(type) {
+	case int64:
+		identifier = fmt.Sprintf("%d", v)
+	case string:
+		identifier = v
+	}
+	return identifier
+}
+
 func findUserByExternalIdFromdb(ctx context.Context, id string) (ans *models.User, err error) {
 	query := `SELECT * FROM vw_AllUsers WHERE id=(SELECT "user" FROM provider_accounts WHERE external_id=$1);`
 	ans, err = parseUserRow(userDb.QueryRow(ctx, query, id))
 	if ans != nil {
-		idCache.Set(ctx, ans.Id, *ans)
+		idCache.Set(ctx, cacheKey(ans.Id), *ans)
 	}
 	return
 }
@@ -305,7 +331,7 @@ func findUserByIdFromDb(ctx context.Context, id uint64) (ans *models.User, err e
 	query := "SELECT * FROM vw_AllUsers WHERE id=$1"
 	ans, err = parseUserRow(userDb.QueryRow(ctx, query, id))
 	if ans != nil {
-		idCache.Set(ctx, id, *ans)
+		idCache.Set(ctx, cacheKey(ans.Id), *ans)
 	}
 	return
 }
@@ -401,7 +427,7 @@ func findAllUsers(ctx context.Context, offset uint64, size uint) ([]*models.User
 			return nil, err
 		}
 		ans = append(ans, user)
-		idCache.Set(ctx, user.Id, *user)
+		idCache.Set(ctx, cacheKey(user.Id), *user)
 	}
 
 	return ans, nil
