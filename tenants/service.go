@@ -100,29 +100,32 @@ func DeleteTenant(ctx context.Context, id uint64) error {
 // Creates a new Tenant
 //
 //encore:api auth method=POST path=/tenants tag:needs_captcha_ver
-func NewTenant(ctx context.Context, req dto.NewTenantRequest) (*dto.TenantLookup, error) {
+func NewTenant(ctx context.Context, req dto.NewTenantRequest) (err error) {
 
 	tx, err := tenantDb.Begin(ctx)
 	if err != nil {
-		return nil, err
+		rlog.Error(util.MsgDbAccessError, "err", err)
+		err = &util.ErrUnknown
+		return
 	}
 
 	user, _ := auth.UserID()
 
 	tenant, err := createTenant(ctx, tx, req, &user)
 	if err != nil {
-		rlog.Error(err.Error())
-		_ = tx.Rollback()
-		return nil, &util.ErrUnknown
+		tx.Rollback()
+		rlog.Error(util.MsgDbAccessError, "err", err)
+		err = &util.ErrUnknown
+		return
 	}
 
-	_ = tx.Commit()
+	tx.Commit()
 
 	NewTenants.Publish(ctx, &TenantCreated{
 		Id:        tenant.Id,
 		CreatedBy: &user,
 	})
-	return &tenantsToDto(tenant)[0], nil
+	return
 }
 
 // Find all Tenants
