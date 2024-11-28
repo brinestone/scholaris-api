@@ -53,9 +53,8 @@ type NewSubscriptionPlan struct {
 }
 
 type NewTenantRequest struct {
-	Name               string `json:"name"`
-	SubscriptionPlanId uint64 `json:"subscriptionPlan,omitempty" encore:"optional"`
-	CaptchaToken       string `json:"captchaToken"`
+	Name         string `json:"name"`
+	CaptchaToken string `json:"captchaToken"`
 }
 
 func (n NewTenantRequest) GetCaptchaToken() string {
@@ -71,10 +70,6 @@ func (n NewTenantRequest) Validate() error {
 
 	if len(n.Name) == 0 {
 		msgs = append(msgs, "The name field is required")
-	}
-
-	if n.SubscriptionPlanId == 0 {
-		msgs = append(msgs, "The subscriptionPlan field is required")
 	}
 
 	if len(msgs) > 0 {
