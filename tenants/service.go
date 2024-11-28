@@ -105,7 +105,7 @@ func NewTenant(ctx context.Context, req dto.NewTenantRequest) (err error) {
 
 	nameUnavailable, err := tenantNameExists(ctx, req.Name)
 	if err != nil {
-		rlog.Error(util.MsgDbAccessError, "err", err)
+		rlog.Error("error while checking tenant name existence", "err", err)
 		err = &util.ErrUnknown
 		return
 	}
@@ -119,7 +119,7 @@ func NewTenant(ctx context.Context, req dto.NewTenantRequest) (err error) {
 	}
 	tx, err := tenantDb.Begin(ctx)
 	if err != nil {
-		rlog.Error(util.MsgDbAccessError, "err", err)
+		rlog.Error("transaction error", "err", err)
 		err = &util.ErrUnknown
 		return
 	}
@@ -127,7 +127,7 @@ func NewTenant(ctx context.Context, req dto.NewTenantRequest) (err error) {
 	subId, err := createTenantSubscription(ctx, tx, 1) // Use basic plan by default
 	if err != nil {
 		tx.Rollback()
-		rlog.Error(util.MsgDbAccessError, "err", err)
+		rlog.Error("error while creating tenant subscription", "err", err)
 		err = &util.ErrUnknown
 		return
 	}
@@ -135,7 +135,7 @@ func NewTenant(ctx context.Context, req dto.NewTenantRequest) (err error) {
 	tenant, err := createTenant(ctx, tx, req, subId)
 	if err != nil {
 		tx.Rollback()
-		rlog.Error(util.MsgDbAccessError, "err", err)
+		rlog.Error("error while creating tenant", "err", err)
 		err = &util.ErrUnknown
 		return
 	}
@@ -219,7 +219,19 @@ func lookupViewableTenantIds(ctx context.Context, uid auth.UID) (ans []uint64, e
 }
 
 func findViewableTenants(ctx context.Context, page, size uint, ids []uint64) (ans []*models.Tenant, err error) {
-	query := "SELECT id,name,created_at,updated_at FROM vw_AllTenants WHERE id=ANY($1) OFFSET=$2 LIMIT $3;"
+	query := `
+		SELECT 
+			id, name, created_at, updated_at
+		FROM 
+			vw_AllTenants
+		WHERE 
+			id = ANY(SELECT * FROM UNNEST($1::BIGINT[]))
+		ORDER BY 
+			created_at DESC
+		OFFSET $2
+		LIMIT $3
+		;
+	`
 
 	rows, err := tenantDb.Query(ctx, query, pq.Array(ids), page*size, size)
 	if err != nil {
@@ -253,7 +265,7 @@ func tenantNameExists(ctx context.Context, name string) (ans bool, err error) {
 }
 
 func createTenant(ctx context.Context, tx *sqldb.Tx, req dto.NewTenantRequest, subId uint64) (id uint64, err error) {
-	query := "INSERT INTO tenants(name,subscription) VALUES ($1,$2);"
+	query := "INSERT INTO tenants(name,subscription) VALUES ($1,$2) RETURNING id;"
 	err = tx.QueryRow(ctx, query, req.Name, subId).Scan(&id)
 	return
 }
@@ -270,10 +282,9 @@ func createTenantSubscription(ctx context.Context, tx *sqldb.Tx, planId uint64) 
 			AND SP.ENABLED = TRUE;
 	`, planId)
 
-	var count int
 	var billingCycle sql.NullInt32
 
-	if err = row.Scan(&count, &billingCycle); err != nil {
+	if err = row.Scan(&billingCycle); err != nil {
 		return
 	}
 
