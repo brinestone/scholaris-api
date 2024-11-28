@@ -1,4 +1,5 @@
-CREATE VIEW vw_AllTenants AS
+CREATE VIEW
+    vw_AllTenants AS
 SELECT
     t.id,
     t.name,
@@ -12,5 +13,4 @@ SELECT
     ts.updated_at as subscription_updated_at
 FROM
     tenants t
-JOIN 
-    tenant_subscriptions ts ON ts.id=t.subscription;
+    JOIN tenant_subscriptions ts ON ts.id = t.subscription;

@@ -21,6 +21,6 @@ var NewTenants = pubsub.NewTopic[*TenantCreated]("new-tenant", pubsub.TopicConfi
 	DeliveryGuarantee: pubsub.ExactlyOnce,
 })
 
-var DeletedTenants = pubsub.NewTopic[*TenantDeleted]("delete-tenant", pubsub.TopicConfig{
+var DeletedTenants = pubsub.NewTopic[*TenantDeleted]("tenant-deleted", pubsub.TopicConfig{
 	DeliveryGuarantee: pubsub.ExactlyOnce,
 })

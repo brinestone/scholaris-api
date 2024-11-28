@@ -13,17 +13,48 @@ type FetchUsersResponse struct {
 	Users []User `json:"users"`
 }
 
+type UserEmailAddress struct {
+	Id         uint64 `json:"id"`
+	Email      string `json:"email"`
+	Account    uint64 `json:"account"`
+	ExternalId string `json:"externalId"`
+	IsPrimary  bool   `json:"isPrimary"`
+	Verified   bool   `json:"verified"`
+}
+
+type UserPhoneNumber struct {
+	Id         uint64 `json:"id"`
+	Phone      string `json:"phone"`
+	Account    uint64 `json:"account"`
+	ExternalId string `json:"externalId"`
+	IsPrimary  bool   `json:"isPrimary"`
+	Verified   bool   `json:"verified"`
+}
+
+type UserAccount struct {
+	Id                  uint64     `json:"id"`
+	ExternalId          string     `json:"externalId"`
+	ImageUrl            *string    `json:"imageUrl,omitempty" encore:"optional"`
+	User                uint64     `json:"user"`
+	FirstName           *string    `json:"firstName,omitempty" encore:"optional"`
+	LastName            *string    `json:"lastName,omitempty" encore:"optional"`
+	Provider            string     `json:"provider"`
+	ProviderProfileData *string    `json:"providerProfileData,omitempty" encore:"optional"`
+	Gender              *string    `json:"gender,omitempty" encore:"optional"`
+	Dob                 *time.Time `json:"dob,omitempty" encore:"optional"`
+}
+
 type User struct {
-	Id        uint64    `json:"id"`
-	FirstName string    `json:"firstName"`
-	LastName  *string   `json:"lastName,omitempty" encore:"optional"`
-	Email     string    `json:"email"`
-	Dob       time.Time `json:"dob"`
-	Phone     string    `json:"phone"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
-	Gender    Gender    `json:"gender"`
-	Avatar    *string   `json:"avatar,omitempty" encore:"optional"`
+	Id               uint64             `json:"id"`
+	Banned           bool               `json:"banned"`
+	CreatedAt        time.Time          `json:"createdAt"`
+	UpdatedAt        time.Time          `json:"updatedAt"`
+	Locked           bool               `json:"locked"`
+	PrimaryEmail     *uint64            `json:"primaryEmail,omitempty" encore:"optional"`
+	PrimaryPhone     *uint64            `json:"primaryPhone,omitempty" encore:"optional"`
+	EmailsAddresses  []UserEmailAddress `json:"emailsAddresses"`
+	PhoneNumbers     []UserPhoneNumber  `json:"phoneNumbers"`
+	ProvidedAccounts []UserAccount      `json:"providedAccounts"`
 }
 
 type LoginRequest struct {
@@ -80,7 +111,34 @@ type NewUserResponse struct {
 	UserId uint64 `json:"userId"`
 }
 
-type NewUserRequest struct {
+type ExternalUserEmailAddressData struct {
+	Email      string  `json:"emailAddress"`
+	Verified   bool    `json:"verified"`
+	ExternalId *string `json:"externalId,omitempty" encore:"optional"`
+	Primary    bool    `json:"isPrimary"`
+}
+
+type ExternalUserPhoneData struct {
+	Phone      string  `json:"phoneNumber"`
+	Verified   bool    `json:"verified"`
+	ExternalId *string `json:"externalId,omitempty" encore:"optional"`
+	Primary    bool    `json:"isPrimary"`
+}
+
+type NewExternalUserRequest struct {
+	FirstName    string                         `json:"firstName"`
+	LastName     string                         `json:"lastName"`
+	ExternalId   string                         `json:"externalId"`
+	Provider     string                         `json:"provider"`
+	Emails       []ExternalUserEmailAddressData `json:"emailAddresses"`
+	Phones       []ExternalUserPhoneData        `json:"phoneNumbers"`
+	Gender       *string                        `json:"gender,omitempty" encore:"optional"`
+	Dob          *string                        `json:"dob,omitempty" encore:"optional"`
+	Avatar       *string                        `json:"avatar,omitempty" encore:"optional"`
+	ProviderData *string                        `json:"providerData,omitempty" encore:"optional"`
+}
+
+type NewInternalUserRequest struct {
 	// The user's first name
 	FirstName string `json:"firstName"`
 	// The user's last name (optional)
@@ -108,7 +166,7 @@ func (g Gender) Validate() error {
 	return nil
 }
 
-func (n NewUserRequest) Validate() error {
+func (n NewInternalUserRequest) Validate() error {
 	var ans error
 	msgs := make([]string, 0)
 
@@ -148,9 +206,9 @@ func (n NewUserRequest) Validate() error {
 		msgs = append(msgs, err.Error())
 	}
 
-	if len(n.Phone) > 0 && !regexp.MustCompile(`\+(9[976]\d|8[987530]\d|6[987]\d|5[90]\d|42\d|3[875]\d|2[98654321]\d|9[8543210]|8[6421]|6[6543210]|5[87654321]|4[987654310]|3[9643210]|2[70]|7|1)\d{1,14}$`).MatchString(n.Phone) {
-		msgs = append(msgs, "Invalid phone number. Phone numbers must be in international format")
-	}
+	// if len(n.Phone) > 0 && !regexp.MustCompile(`\+(9[976]\d|8[987530]\d|6[987]\d|5[90]\d|42\d|3[875]\d|2[98654321]\d|9[8543210]|8[6421]|6[6543210]|5[87654321]|4[987654310]|3[9643210]|2[70]|7|1)\d{1,14}$`).MatchString(n.Phone) {
+	// 	msgs = append(msgs, "Invalid phone number. Phone numbers must be in international format")
+	// }
 
 	if len(n.CaptchaToken) == 0 {
 		msgs = append(msgs, "Invalid captcha token")

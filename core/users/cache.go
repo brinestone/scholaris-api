@@ -12,7 +12,7 @@ import (
 // 	EvictionPolicy: cache.AllKeysLRU,
 // })
 
-var idCache = cache.NewStructKeyspace[uint64, models.User](pkg.CacheCluster, cache.KeyspaceConfig{
+var idCache = cache.NewStructKeyspace[string, models.User](pkg.CacheCluster, cache.KeyspaceConfig{
 	KeyPattern:    "users/:key",
 	DefaultExpiry: cache.ExpireIn(1 * time.Hour),
 })

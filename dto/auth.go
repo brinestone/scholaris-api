@@ -3,7 +3,31 @@ package dto
 import (
 	"errors"
 	"strings"
+
+	"encore.dev"
+	"github.com/brinestone/scholaris/helpers"
 )
+
+const (
+	ProvInternal = "internal"
+	ProvClerk    = "clerk"
+)
+
+var (
+	ClerkIssuerDomain     = "clerk.accounts.dev"
+	ScholarisIssuerDomain = encore.Meta().APIBaseURL.Hostname()
+	ValidIssuerDomains    = helpers.SliceOf(ClerkIssuerDomain, ScholarisIssuerDomain)
+)
+
+type AuthClaims struct {
+	Email      string  `json:"email"`
+	Avatar     *string `json:"avatar"`
+	Provider   string  `json:"provider"`
+	ExternalId string  `json:"externalId"`
+	FullName   string  `json:"displayName"`
+	Sub        uint64  `json:"sub"`
+	Account    uint64  `json:"account"`
+}
 
 type DeleteAccountRequest struct {
 	CaptchaToken string `header:"x-captcha" encore:"sensitive"`

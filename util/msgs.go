@@ -7,6 +7,7 @@ import (
 const (
 	MsgDbAccessError    = "db access error"
 	MsgCacheAccessError = "cache access error"
+	MsgWebhookError     = "webhook error"
 	MsgForbidden        = "forbidden action"
 	MsgCallError        = "error while calling API"
 	MsgUploadError      = "error while uploading file"

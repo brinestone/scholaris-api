@@ -1,10 +1,13 @@
 package institutions_test
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
+	"encore.dev/et"
 	"github.com/brianvoe/gofakeit/v6"
+	"github.com/brinestone/scholaris/core/permissions"
 	"github.com/brinestone/scholaris/dto"
 	"github.com/brinestone/scholaris/institutions"
 	"github.com/stretchr/testify/assert"
@@ -12,13 +15,25 @@ import (
 
 func TestLookup(t *testing.T) {
 	cnt := gofakeit.UintRange(1, 10)
+	ids := make([]uint64, cnt)
 	for i := uint(0); i < cnt; i++ {
-		_, err := makeInstitution()
+		created, err := makeInstitution()
 		if err != nil {
 			t.Error(err)
 			return
 		}
+		ids[i] = created.Id
 	}
+
+	et.MockEndpoint(permissions.ListRelations, func(ctx context.Context, p dto.ListRelationsRequest) (ans *dto.ListRelationsResponse, err error) {
+		ans = &dto.ListRelationsResponse{
+			Relations: map[dto.PermissionType][]uint64{
+				dto.PTInstitution: ids,
+			},
+		}
+		return
+	})
+	defer mockEndpoints()
 
 	res, err := institutions.Lookup(mainContext, &dto.PageBasedPaginationParams{
 		Page: 0,
@@ -31,7 +46,7 @@ func TestLookup(t *testing.T) {
 	}
 
 	assert.NotNil(t, res)
-	assert.GreaterOrEqual(t, res.Meta.Total, cnt)
+	assert.GreaterOrEqual(t, uint(len(res.Institutions)), cnt)
 }
 
 func TestNewIntitution(t *testing.T) {

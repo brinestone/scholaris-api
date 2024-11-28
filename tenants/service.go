@@ -39,7 +39,7 @@ func FindSubscriptionPlans(ctx context.Context) (*dto.FindSubscriptionPlansRespo
 // Finds a tenant using its ID
 //
 //encore:api auth method=GET path=/tenants/:id tag:can_view_tenant
-func FindTenant(ctx context.Context, id uint64) (*models.Tenant, error) {
+func FindTenant(ctx context.Context, id uint64) (*dto.TenantLookup, error) {
 	var t *models.Tenant
 	var err error
 
@@ -52,7 +52,7 @@ func FindTenant(ctx context.Context, id uint64) (*models.Tenant, error) {
 		return nil, &util.ErrUnknown
 	}
 
-	return t, err
+	return &tenantsToDto(t)[0], err
 }
 
 // Deletes a Tenant
@@ -100,29 +100,73 @@ func DeleteTenant(ctx context.Context, id uint64) error {
 // Creates a new Tenant
 //
 //encore:api auth method=POST path=/tenants tag:needs_captcha_ver
-func NewTenant(ctx context.Context, req dto.NewTenantRequest) (*dto.TenantLookup, error) {
-
-	tx, err := tenantDb.Begin(ctx)
-	if err != nil {
-		return nil, err
-	}
-
+func NewTenant(ctx context.Context, req dto.NewTenantRequest) (err error) {
 	user, _ := auth.UserID()
 
-	tenant, err := createTenant(ctx, tx, req, &user)
+	nameUnavailable, err := tenantNameExists(ctx, req.Name)
 	if err != nil {
-		rlog.Error(err.Error())
-		_ = tx.Rollback()
-		return nil, &util.ErrUnknown
+		rlog.Error("error while checking tenant name existence", "err", err)
+		err = &util.ErrUnknown
+		return
 	}
 
-	_ = tx.Commit()
+	if nameUnavailable {
+		err = &errs.Error{
+			Code:    errs.AlreadyExists,
+			Message: fmt.Sprintf("The name: \"%s\" is not available. Please use another", req.Name),
+		}
+		return
+	}
+	tx, err := tenantDb.Begin(ctx)
+	if err != nil {
+		rlog.Error("transaction error", "err", err)
+		err = &util.ErrUnknown
+		return
+	}
+
+	subId, err := createTenantSubscription(ctx, tx, 1) // Use basic plan by default
+	if err != nil {
+		tx.Rollback()
+		rlog.Error("error while creating tenant subscription", "err", err)
+		err = &util.ErrUnknown
+		return
+	}
+
+	tenant, err := createTenant(ctx, tx, req, subId)
+	if err != nil {
+		tx.Rollback()
+		rlog.Error("error while creating tenant", "err", err)
+		err = &util.ErrUnknown
+		return
+	}
+
+	if err = permissions.SetPermissions(ctx, dto.UpdatePermissionsRequest{
+		Updates: []dto.PermissionUpdate{
+			{
+				Actor:    dto.IdentifierString(dto.PTUser, user),
+				Relation: models.PermOwner,
+				Target:   dto.IdentifierString(dto.PTTenant, tenant),
+			},
+			{
+				Actor:    dto.IdentifierString(dto.PTTenant, tenant),
+				Relation: models.PermOwner,
+				Target:   dto.IdentifierString(dto.PTSubscription, subId),
+			},
+		},
+	}); err != nil {
+		tx.Rollback()
+		rlog.Error(util.MsgCallError, "err", err)
+		err = &util.ErrUnknown
+		return
+	}
+
+	tx.Commit()
 
 	NewTenants.Publish(ctx, &TenantCreated{
-		Id:        tenant.Id,
+		Id:        tenant,
 		CreatedBy: &user,
 	})
-	return &tenantsToDto(tenant)[0], nil
+	return
 }
 
 // Find all Tenants
@@ -175,7 +219,19 @@ func lookupViewableTenantIds(ctx context.Context, uid auth.UID) (ans []uint64, e
 }
 
 func findViewableTenants(ctx context.Context, page, size uint, ids []uint64) (ans []*models.Tenant, err error) {
-	query := "SELECT id,name,created_at,updated_at FROM vw_AllTenants WHERE id=ANY($1) OFFSET=$2 LIMIT $3;"
+	query := `
+		SELECT 
+			id, name, created_at, updated_at
+		FROM 
+			vw_AllTenants
+		WHERE 
+			id = ANY(SELECT * FROM UNNEST($1::BIGINT[]))
+		ORDER BY 
+			created_at DESC
+		OFFSET $2
+		LIMIT $3
+		;
+	`
 
 	rows, err := tenantDb.Query(ctx, query, pq.Array(ids), page*size, size)
 	if err != nil {
@@ -197,92 +253,39 @@ func findViewableTenants(ctx context.Context, page, size uint, ids []uint64) (an
 
 const tenantFields = "id,name,created_at,updated_at,subscription"
 
-func createTenant(ctx context.Context, tx *sqldb.Tx, req dto.NewTenantRequest, owner *auth.UID) (*models.Tenant, error) {
-	// Check whether a tenant with the same name already exists.
-	row := tx.QueryRow(ctx, "SELECT COUNT(name) AS cnt FROM tenants WHERE name=$1;", req.Name)
-	var count int
-	_ = row.Scan(&count)
-	if count > 0 {
-		return nil, &errs.Error{
-			Code:    errs.AlreadyExists,
-			Message: fmt.Sprintf("An organization with name \"%s\" already exists", req.Name),
-		}
+func tenantNameExists(ctx context.Context, name string) (ans bool, err error) {
+	query := "SELECT COUNT(id) FROM tenants WHERE LOWER(name) = LOWER($1);"
+	var cnt int
+	if err = tenantDb.QueryRow(ctx, query, name).Scan(&cnt); err != nil {
+		return
 	}
+	ans = cnt > 0
 
-	subId, err := createTenantSubscription(ctx, tx, req.SubscriptionPlanId)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create the database record.
-	row = tx.QueryRow(ctx, `
-		INSERT INTO
-			TENANTS (NAME, SUBSCRIPTION)
-		VALUES ($1, $2)
-		RETURNING
-			ID;
-	`, req.Name, *subId)
-	var newId uint64
-
-	if err := row.Scan(&newId); err != nil {
-		return nil, err
-	}
-
-	// Get the tenant from the database
-	var tenant = new(models.Tenant)
-	row = tx.QueryRow(ctx, fmt.Sprintf("SELECT %s FROM tenants WHERE id = $1;", tenantFields), newId)
-	if err := row.Scan(&tenant.Id, &tenant.Name, &tenant.CreatedAt, &tenant.UpdatedAt, &tenant.Subscription); err != nil {
-		return nil, err
-	}
-
-	if err = permissions.SetPermissions(ctx, dto.UpdatePermissionsRequest{
-		Updates: []dto.PermissionUpdate{
-			{
-				Actor:    fmt.Sprintf("%s:%s", dto.PTUser, string(*owner)),
-				Relation: models.PermOwner,
-				Target:   fmt.Sprintf("%s:%d", dto.PTTenant, tenant.Id),
-			},
-			{
-				Actor:    fmt.Sprintf("%s:%d", dto.PTTenant, tenant.Id),
-				Relation: models.PermOwner,
-				Target:   fmt.Sprintf("%s:%d", dto.PTSubscription, *subId),
-			},
-		},
-	}); err != nil {
-		return nil, err
-	}
-
-	return tenant, nil
+	return
 }
 
-func createTenantSubscription(ctx context.Context, tx *sqldb.Tx, planId uint64) (*uint64, error) {
-	var ans = new(uint64)
+func createTenant(ctx context.Context, tx *sqldb.Tx, req dto.NewTenantRequest, subId uint64) (id uint64, err error) {
+	query := "INSERT INTO tenants(name,subscription) VALUES ($1,$2) RETURNING id;"
+	err = tx.QueryRow(ctx, query, req.Name, subId).Scan(&id)
+	return
+}
 
+func createTenantSubscription(ctx context.Context, tx *sqldb.Tx, planId uint64) (id uint64, err error) {
 	// Check whether the subscription plan exists
 	row := tx.QueryRow(ctx, `
 		SELECT
-			COUNT(SP.ID) AS CNT,
 			SP.BILLING_CYCLE
 		FROM
 			SUBSCRIPTION_PLANS AS SP
 		WHERE
 			SP.ID = $1
-			AND SP.ENABLED = TRUE
-		GROUP BY
-			SP.ID;
+			AND SP.ENABLED = TRUE;
 	`, planId)
 
-	var count int
 	var billingCycle sql.NullInt32
 
-	if err := row.Scan(&count, &billingCycle); err != nil {
-		rlog.Error(err.Error())
-	}
-	if count <= 0 {
-		return nil, &errs.Error{
-			Code:    errs.NotFound,
-			Message: "No such subscription plan exists",
-		}
+	if err = row.Scan(&billingCycle); err != nil {
+		return
 	}
 
 	now := time.Now()
@@ -291,11 +294,11 @@ func createTenantSubscription(ctx context.Context, tx *sqldb.Tx, planId uint64) 
 
 	// Create Subscription record
 	row = tx.QueryRow(ctx, "INSERT INTO tenant_subscriptions(subscription_plan,next_billing_cycle) VALUES ($1,$2) RETURNING id;", planId, nextBillingCycle)
-	if err := row.Scan(ans); err != nil {
-		return nil, err
+	if err = row.Scan(&id); err != nil {
+		return
 	}
 
-	return ans, nil
+	return
 }
 
 func deleteTenantById(ctx context.Context, tx *sqldb.Tx, id uint64) error {
