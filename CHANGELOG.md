@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [2.1.0](https://github.com/brinestone/scholaris-api/compare/v2.0.1...v2.1.0) (2024-11-28)
+
+
+### Features
+
+* **auth,users:** clerk integration ([ae09124](https://github.com/brinestone/scholaris-api/commit/ae09124d3ff16a80e95bbbcc7990d60628ef54b3))
+* **auth:** per provider jwt-validation/verification ([f1c4c2a](https://github.com/brinestone/scholaris-api/commit/f1c4c2aeed61f520efd537aedd573ca9b4549dfc))
+
+
+### Bug Fixes
+
+* **auth:** clerk jwt auth & user creation webhook ([d846710](https://github.com/brinestone/scholaris-api/commit/d84671016b762fe48647bba2e581ba7224b78f97))
+* **auth:** clerk jwt auth & user creation webhook 2 ([bb39a3a](https://github.com/brinestone/scholaris-api/commit/bb39a3a6de8bafb21c1c114a978020dae7488ea1))
+* **auth:** clerk jwt auth & user creation webhook 3 ([5c97cfd](https://github.com/brinestone/scholaris-api/commit/5c97cfd3adccb1088669465c71fd9f4012ac9dde))
+* **auth:** clerk jwt auth & user creation webhook 4 ([ac273b5](https://github.com/brinestone/scholaris-api/commit/ac273b503fb444df887d03cb0bb68f02c3d8e581))
+* **auth:** clerk jwt auth & user creation webhook 5 ([0db6861](https://github.com/brinestone/scholaris-api/commit/0db68617a82f677617f55131209f6b7b9d95fe12))
+* **auth:** clerk jwt auth & user creation webhook 6 ([0d53231](https://github.com/brinestone/scholaris-api/commit/0d532315f7c3deb850b723c1902b8865da32b0df))
+* **institutions:** enfore permissions while retrieving instiutions ([7dedf57](https://github.com/brinestone/scholaris-api/commit/7dedf570ba78800241961b796953e4e801c0094e))
+* **institutions:** update academic-year_test.go ([8eba1c7](https://github.com/brinestone/scholaris-api/commit/8eba1c737a20078b848c9c018e46ab14588c3c9d))
+* **tenants:** fix sql erroneous quries ([7fa4cc1](https://github.com/brinestone/scholaris-api/commit/7fa4cc102ed25fdc6fb366d9f98ca5fda8de6c68))
+* **tenants:** minor refactor ([8ae8cc6](https://github.com/brinestone/scholaris-api/commit/8ae8cc620c34156f3a411c826cff594fae48054b))
+* **tenants:** use basic subscription plan on new tenant ([42247fc](https://github.com/brinestone/scholaris-api/commit/42247fc6a0a1c31720d0f28acad30d612da41a27))
+* **users:** cache external users on fetch ([3760b75](https://github.com/brinestone/scholaris-api/commit/3760b759aebafa65ca2536366f6b8d93bb61929a))
+* **users:** update external user creation DB function ([1b3ed91](https://github.com/brinestone/scholaris-api/commit/1b3ed91a5eba0083a4ad7f679ac1698257286b6a))
+* **webhooks,users,auth:** fix clerk user.created integration ([f21f07f](https://github.com/brinestone/scholaris-api/commit/f21f07ff9db963762dea994cc7bc91c30cf625f2))
+
 ### [2.0.1](https://github.com/brinestone/scholaris-api/compare/v2.0.0...v2.0.1) (2024-11-20)
 
 
