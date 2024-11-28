@@ -113,7 +113,7 @@ func NewTenant(ctx context.Context, req dto.NewTenantRequest) (err error) {
 	if nameUnavailable {
 		err = &errs.Error{
 			Code:    errs.AlreadyExists,
-			Message: fmt.Sprintf("An organization with name \"%s\" already exists", req.Name),
+			Message: fmt.Sprintf("The name: \"%s\" is not available. Please use another", req.Name),
 		}
 		return
 	}
