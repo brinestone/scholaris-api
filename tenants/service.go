@@ -172,7 +172,7 @@ func NewTenant(ctx context.Context, req dto.NewTenantRequest) (err error) {
 // Find all Tenants
 //
 //encore:api auth method=GET path=/tenants
-func Lookup(ctx context.Context, req dto.PageBasedPaginationParams) (ans *dto.FindTenantResponse, err error) {
+func Lookup(ctx context.Context) (ans *dto.FindTenantResponse, err error) {
 	uid, _ := auth.UserID()
 
 	viewable, err := lookupViewableTenantIds(ctx, uid)
@@ -187,7 +187,7 @@ func Lookup(ctx context.Context, req dto.PageBasedPaginationParams) (ans *dto.Fi
 		return
 	}
 
-	found, err := findViewableTenants(ctx, req.Page, req.Size, viewable)
+	found, err := findViewableTenants(ctx, viewable)
 	if errors.Is(err, sql.ErrNoRows) {
 		err = &util.ErrNotFound
 		return
@@ -218,7 +218,7 @@ func lookupViewableTenantIds(ctx context.Context, uid auth.UID) (ans []uint64, e
 	return
 }
 
-func findViewableTenants(ctx context.Context, page, size uint, ids []uint64) (ans []*models.Tenant, err error) {
+func findViewableTenants(ctx context.Context, ids []uint64) (ans []*models.Tenant, err error) {
 	query := `
 		SELECT 
 			id, name, created_at, updated_at
@@ -228,12 +228,10 @@ func findViewableTenants(ctx context.Context, page, size uint, ids []uint64) (an
 			id = ANY(SELECT * FROM UNNEST($1::BIGINT[]))
 		ORDER BY 
 			created_at DESC
-		OFFSET $2
-		LIMIT $3
 		;
 	`
 
-	rows, err := tenantDb.Query(ctx, query, pq.Array(ids), page*size, size)
+	rows, err := tenantDb.Query(ctx, query, pq.Array(ids))
 	if err != nil {
 		rlog.Debug("here")
 		return

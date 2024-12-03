@@ -150,10 +150,7 @@ func TestLookup(t *testing.T) {
 		return
 	}
 
-	res, err := tenants.Lookup(mainContext, dto.PageBasedPaginationParams{
-		Page: 0,
-		Size: 100,
-	})
+	res, err := tenants.Lookup(mainContext)
 
 	if err != nil {
 		t.Error(err)
