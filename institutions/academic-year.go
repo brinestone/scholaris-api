@@ -117,21 +117,21 @@ func doAutocreateAcademicYears(ctx context.Context, wg *sync.WaitGroup, page, si
 	for rows.Next() {
 		tx, err := db.Begin(ctx)
 		if err != nil {
-			rlog.Debug(util.MsgDbAccessError, "err", err)
+			rlog.Error(util.MsgDbAccessError, "err", err)
 			return
 		}
 
 		var institution uint64
 		if err := rows.Scan(&institution); err != nil {
 			tx.Rollback()
-			rlog.Debug(util.MsgDbAccessError, "err", err)
+			rlog.Error(util.MsgDbAccessError, "err", err)
 			return
 		}
 
 		yearAndTermsMap, err := autoCreateAcademicYear(ctx, tx, institution)
 		if err != nil {
 			tx.Rollback()
-			rlog.Debug("error while auto-creating academic year", "institution", institution, "err", err)
+			rlog.Error("error while auto-creating academic year", "institution", institution, "err", err)
 			return
 		}
 

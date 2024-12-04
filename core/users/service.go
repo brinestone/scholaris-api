@@ -36,7 +36,6 @@ func NewExternalUser(ctx context.Context, req dto.NewExternalUserRequest) (ans *
 
 	uid, err := createExternalUser(ctx, tx, req)
 	if err != nil {
-		rlog.Debug("here1")
 		tx.Rollback()
 		return
 	}
@@ -542,12 +541,12 @@ func findUserPasswordHashById(ctx context.Context, id uint64) (ans *string, err 
 func createExternalUser(ctx context.Context, tx *sqldb.Tx, req dto.NewExternalUserRequest) (ans uint64, err error) {
 	query := "SELECT func_create_external_user($1,$2,$3,$4,$5,$6,$7,$8,$9,$10);"
 
-	emailsJson := helpers.Map(req.Emails, func(e dto.ExternalUserEmailAddressData) string {
+	emailsJson := helpers.SliceMap(req.Emails, func(e dto.ExternalUserEmailAddressData) string {
 		j, _ := json.Marshal(e)
 		return string(j)
 	})
 
-	phonesJson := helpers.Map(req.Phones, func(a dto.ExternalUserPhoneData) string {
+	phonesJson := helpers.SliceMap(req.Phones, func(a dto.ExternalUserPhoneData) string {
 		j, _ := json.Marshal(a)
 		return string(j)
 	})

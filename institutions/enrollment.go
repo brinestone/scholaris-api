@@ -25,7 +25,7 @@ func NewEnrollment(ctx context.Context, req dto.NewEnrollmentRequest) (err error
 
 	tx, err := db.Begin(ctx)
 	if err != nil {
-		rlog.Debug(util.MsgDbAccessError, "msg", err.Error())
+		rlog.Error(util.MsgDbAccessError, "msg", err.Error())
 		err = &util.ErrUnknown
 		return
 	}

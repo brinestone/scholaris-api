@@ -103,7 +103,6 @@ func AllowedToCreateEnrollmentForm(request middleware.Request, next middleware.N
 	uid, _ := auth.UserID()
 	ownerInfo, ok := request.Data().Payload.(models.OwnerInfo)
 	if !ok {
-		rlog.Debug("here")
 		return middleware.Response{
 			Err: &util.ErrForbidden,
 		}
@@ -137,7 +136,6 @@ func AllowedToCreateAcademicYear(request middleware.Request, next middleware.Nex
 	uid, _ := auth.UserID()
 	ownerInfo, ok := request.Data().Payload.(models.OwnerInfo)
 	if !ok {
-		rlog.Debug("here")
 		return middleware.Response{
 			Err: &util.ErrForbidden,
 		}

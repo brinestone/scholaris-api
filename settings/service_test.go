@@ -13,7 +13,6 @@ import (
 
 	"encore.dev/beta/auth"
 	"encore.dev/et"
-	"encore.dev/rlog"
 	"github.com/brianvoe/gofakeit/v6"
 	sAuth "github.com/brinestone/scholaris/core/auth"
 	"github.com/brinestone/scholaris/core/permissions"
@@ -119,7 +118,6 @@ func TestUpdateSettings(t *testing.T) {
 		t.Run("ExistingSetting", func(t *testing.T) {
 			index := gofakeit.IntRange(0, len(res.Settings)-1)
 			if index < 0 || index >= len(res.Settings) {
-				rlog.Debug("test", "index", index, "len", len(res.Settings))
 				t.FailNow()
 				return
 			}

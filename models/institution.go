@@ -46,4 +46,6 @@ type Institution struct {
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 	Verified    bool
+	CurrentYear sql.NullInt64
+	CurrentTerm sql.NullInt64
 }

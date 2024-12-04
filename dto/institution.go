@@ -112,6 +112,14 @@ type Institution struct {
 	IsMember    bool      `json:"isMember"`
 	Verified    bool      `json:"verified"`
 	Members     int       `json:"members"`
+	CurrentYear *uint64   `json:"currentYear" encore:"optional"`
+	CurrentTerm *uint64   `json:"currentTerm" encore:"optional"`
+}
+
+type LookupInstitutionsRequest struct {
+	Page           uint `query:"page" encore:"optional"`
+	Size           uint `query:"size" encore:"optional"`
+	SubscribedOnly bool `query:"subscribedOnly" encore:"optional"`
 }
 
 type LookupInstitutionsResponse struct {

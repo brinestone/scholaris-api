@@ -233,7 +233,6 @@ func findViewableTenants(ctx context.Context, ids []uint64) (ans []*models.Tenan
 
 	rows, err := tenantDb.Query(ctx, query, pq.Array(ids))
 	if err != nil {
-		rlog.Debug("here")
 		return
 	}
 	defer rows.Close()

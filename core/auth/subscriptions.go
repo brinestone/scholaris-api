@@ -29,7 +29,7 @@ func onNewClerkUserCreated(ctx context.Context, data dto.ClerkNewUserEventData) 
 		LastName:   data.LastName,
 		ExternalId: data.ID,
 		Provider:   "clerk",
-		Emails: helpers.Map[dto.ClerkEmailAddress, dto.ExternalUserEmailAddressData](data.EmailAddresses, func(a dto.ClerkEmailAddress) dto.ExternalUserEmailAddressData {
+		Emails: helpers.SliceMap[dto.ClerkEmailAddress, dto.ExternalUserEmailAddressData](data.EmailAddresses, func(a dto.ClerkEmailAddress) dto.ExternalUserEmailAddressData {
 			return dto.ExternalUserEmailAddressData{
 				Email:      a.EmailAddress,
 				Verified:   a.Verification.Status == "verified",
@@ -37,7 +37,7 @@ func onNewClerkUserCreated(ctx context.Context, data dto.ClerkNewUserEventData) 
 				Primary:    a.ID == data.PrimaryEmailAddressID,
 			}
 		}),
-		Phones: helpers.Map[dto.ClerkPhoneNumber, dto.ExternalUserPhoneData](data.PhoneNumbers, func(a dto.ClerkPhoneNumber) dto.ExternalUserPhoneData {
+		Phones: helpers.SliceMap[dto.ClerkPhoneNumber, dto.ExternalUserPhoneData](data.PhoneNumbers, func(a dto.ClerkPhoneNumber) dto.ExternalUserPhoneData {
 			return dto.ExternalUserPhoneData{
 				Phone:      a.PhoneNumber,
 				Verified:   a.Verification.Status == "verfified",
