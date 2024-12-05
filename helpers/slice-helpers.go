@@ -1,5 +1,14 @@
 package helpers
 
+func Every[T any](slice []T, pred func(a T) bool) (ok bool) {
+	for _, v := range slice {
+		if ok = pred(v); !ok {
+			return
+		}
+	}
+	return
+}
+
 func MemberOf[T comparable](target T, slice ...T) bool {
 	index, found := FindIndex(slice, func(a T) bool {
 		return a == target

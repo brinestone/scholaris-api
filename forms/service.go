@@ -644,7 +644,7 @@ func FindFormQuestions(ctx context.Context, id uint64) (*dto.GetFormQuestionsRes
 //
 //encore:api public method=GET path=/forms
 func FindForms(ctx context.Context, params dto.FindFormsRequest) (*dto.GetFormsResponse, error) {
-	ownerType, _ := dto.PermissionTypeFromString(params.OwnerType)
+	ownerType, _ := dto.ParsePermissionType(params.OwnerType)
 	var overrides []uint64
 	uid, authed := auth.UserID()
 	if authed {
@@ -692,7 +692,7 @@ func FindForms(ctx context.Context, params dto.FindFormsRequest) (*dto.GetFormsR
 //encore:api auth method=POST path=/forms tag:needs_captcha_ver
 func NewForm(ctx context.Context, req dto.NewFormInput) (response dto.NewFormResponse, err error) {
 	uid, _ := auth.UserID()
-	pt, _ := dto.PermissionTypeFromString(req.OwnerType)
+	pt, _ := dto.ParsePermissionType(req.OwnerType)
 	permission, err := permissions.CheckPermission(ctx, dto.RelationCheckRequest{
 		Actor:    dto.IdentifierString(dto.PTUser, uid),
 		Relation: models.PermCanCreateForms,

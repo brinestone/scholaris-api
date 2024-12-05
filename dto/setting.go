@@ -38,7 +38,7 @@ func (s SetSettingValueRequest) Validate() error {
 
 	if len(s.OwnerType) == 0 {
 		msgs = append(msgs, "The x-owner-type header is required")
-	} else if _, ok := PermissionTypeFromString(s.OwnerType); !ok {
+	} else if _, ok := ParsePermissionType(s.OwnerType); !ok {
 		msgs = append(msgs, "The x-owner-type header value is invalid")
 	}
 
@@ -220,7 +220,7 @@ func (u UpdateSettingsRequest) Validate() error {
 
 	if len(u.OwnerType) == 0 {
 		msgs = append(msgs, "The x-owner-type header is required")
-	} else if _, ok := PermissionTypeFromString(u.OwnerType); !ok {
+	} else if _, ok := ParsePermissionType(u.OwnerType); !ok {
 		msgs = append(msgs, "The x-owner-type header value is invalid")
 	}
 
@@ -266,7 +266,7 @@ func (g GetSettingsRequest) Validate() error {
 
 	if len(g.OwnerType) == 0 {
 		msgs = append(msgs, "The x-owner-type header is required")
-	} else if _, ok := PermissionTypeFromString(g.OwnerType); !ok {
+	} else if _, ok := ParsePermissionType(g.OwnerType); !ok {
 		msgs = append(msgs, "The x-owner-type header value is invalid")
 	}
 

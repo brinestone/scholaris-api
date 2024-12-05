@@ -2,7 +2,7 @@ module forms
 
 type form
   relations
-    define can_add_editor: editor
+    define can_add_editor: maintainer from owner
     define can_delete: maintainer from owner
     define editor: [user] or maintainer from owner
     define owner: [institution, tenant]

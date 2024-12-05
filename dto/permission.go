@@ -12,7 +12,7 @@ func IdentifierString[T auth.UID | uint64 | string](pt PermissionType, id T) str
 	return fmt.Sprintf("%s:%v", pt, id)
 }
 
-func PermissionTypeFromString(s string) (PermissionType, bool) {
+func ParsePermissionType(s string) (PermissionType, bool) {
 	switch s {
 	case string(PTInstitution):
 		return PTInstitution, true
@@ -32,6 +32,10 @@ func PermissionTypeFromString(s string) (PermissionType, bool) {
 		return PTAcademicYear, true
 	case string(PTAcademicTerm):
 		return PTAcademicTerm, true
+	case string(PTUserFile):
+		return PTUserFile, true
+	case string(PTSharedFile):
+		return PTSharedFile, true
 	default:
 		return unknown, false
 	}
@@ -47,6 +51,8 @@ const (
 	PTSetting      PermissionType = "setting"
 	PTAcademicYear PermissionType = "academicYear"
 	PTAcademicTerm PermissionType = "academicTerm"
+	PTUserFile     PermissionType = "file"
+	PTSharedFile   PermissionType = "shared_file"
 	unknown        PermissionType = ""
 )
 

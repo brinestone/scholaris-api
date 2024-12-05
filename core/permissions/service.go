@@ -78,7 +78,7 @@ func (s *Service) ListRelations(ctx context.Context, req dto.ListRelationsReques
 
 	for _, rel := range data.GetObjects() {
 		arr := strings.Split(rel, ":")
-		p, _ := dto.PermissionTypeFromString(arr[0])
+		p, _ := dto.ParsePermissionType(arr[0])
 		id, _ := strconv.ParseUint(arr[1], 10, 64)
 		resultMap[p] = append(resultMap[p], id)
 	}

@@ -1,0 +1,29 @@
+module blob
+
+
+type user_file
+    relations
+        define owner: [user]
+        define can_edit: [user] or owner
+        define can_view: [user] or owner
+        define can_change_owner: owner
+        define can_delete: owner
+
+extend type institution
+    relations
+        define can_upload_file: maintainer or admin
+
+extend type tenant
+    relations
+        define can_upload_file: maintainer or admin
+
+type shared_file
+    relations
+        define owner: [institution, tenant]
+        define can_edit: [institution#member,tenant#member] or admin from owner
+        define can_view: [institution#member with when_visible, tenant#member with when_visible] or can_edit or admin from owner
+        define can_delete: can_upload_file from owner
+
+condition when_visible(current_role: string, visible_to: string) {
+    visible_to == current_role
+}

@@ -81,7 +81,7 @@ func doPermissionCheck(ctx context.Context, oi models.OwnerInfo, perm string) er
 		return &util.ErrForbidden
 	}
 
-	parsed, _ := dto.PermissionTypeFromString(oi.GetOwnerType())
+	parsed, _ := dto.ParsePermissionType(oi.GetOwnerType())
 	perms, err := permissions.CheckPermission(ctx, dto.RelationCheckRequest{
 		Relation: perm,
 		Actor:    dto.IdentifierString(dto.PTUser, uid),

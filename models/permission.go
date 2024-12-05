@@ -9,6 +9,7 @@ const (
 	PermFormResponder      = "responder"
 	PermCanView            = "can_view"
 	PermCanViewSettings    = "can_view_settings"
+	PermCanUploadFile      = "can_upload_file"
 	PermCanSetSettingValue = "can_set_setting_value"
 	PermCanEditSettings    = "can_edit_settings"
 	PermEditor             = "editor"

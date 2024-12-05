@@ -340,7 +340,7 @@ func (i FindFormsRequest) Validate() error {
 	var msgs []string
 	if len(i.OwnerType) == 0 {
 		msgs = append(msgs, "x-owner-type header is required")
-	} else if _, ok := PermissionTypeFromString(i.OwnerType); !ok {
+	} else if _, ok := ParsePermissionType(i.OwnerType); !ok {
 		msgs = append(msgs, "Invalid owner type")
 	}
 
@@ -405,7 +405,7 @@ func (n NewFormInput) Validate() error {
 
 	if len(n.OwnerType) == 0 {
 		msgs = append(msgs, "x-owner-type header is required")
-	} else if _, ok := PermissionTypeFromString(n.OwnerType); !ok {
+	} else if _, ok := ParsePermissionType(n.OwnerType); !ok {
 		msgs = append(msgs, "Invalid owner type")
 	}
 
