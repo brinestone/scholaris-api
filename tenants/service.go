@@ -21,6 +21,21 @@ import (
 	"github.com/lib/pq"
 )
 
+// Checks whether a tenant name exists or not
+//
+//encore:api public method=GET path=/tenants/name-available
+func NameAvailable(ctx context.Context, req dto.TenantNameAvailableRequest) (ans dto.TenantNameAvailableResponse, err error) {
+	exists, err := tenantNameExists(ctx, req.Name)
+	if err != nil {
+		rlog.Error(util.MsgDbAccessError, "err", err)
+		err = &util.ErrUnknown
+		return
+	}
+
+	ans.Available = !exists
+	return
+}
+
 // Finds Subscription plans
 //
 //encore:api public method=GET path=/subscription-plans
@@ -38,7 +53,7 @@ func FindSubscriptionPlans(ctx context.Context) (*dto.FindSubscriptionPlansRespo
 
 // Finds a tenant using its ID
 //
-//encore:api auth method=GET path=/tenants/:id tag:can_view_tenant
+//encore:api auth method=GET path=/tenants/find/:id tag:can_view_tenant
 func FindTenant(ctx context.Context, id uint64) (*dto.TenantLookup, error) {
 	var t *models.Tenant
 	var err error
