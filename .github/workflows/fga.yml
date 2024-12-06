@@ -53,11 +53,13 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
       - name: Download CLI
+        id: download-cli
         uses: actions/download-artifact@v4.1.8
         with:
           name: fga-cli
+      - run: chmod +x ${{ steps.download-cli.outputs.download-path }}/fga-cli
       - name: Deploy model
-        run: ./fga-cli model write --store-id=$FGA_STORE_ID --file fga.mod
+        run: ${{ steps.download-cli.outputs.download-path }}/fga-cli model write --store-id=$FGA_STORE_ID --file fga.mod
 
   deploy_staging:
     needs: build_cli
