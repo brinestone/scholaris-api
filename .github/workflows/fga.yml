@@ -78,6 +78,6 @@ jobs:
         uses: actions/download-artifact@v4.1.8
         with:
           name: fga-cli
-      - run: chomod +x ${{ steps.download-cli.outputs.download-path }}/fga-cli
+      - run: chmod +x ${{ steps.download-cli.outputs.download-path }}/fga-cli
       - name: Deploy model
         run: ${{ steps.download-cli.outputs.download-path }}/fga-cli model write --store-id=$FGA_STORE_ID --file fga.mod
