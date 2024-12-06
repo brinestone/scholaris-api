@@ -18,7 +18,6 @@ jobs:
         continue-on-error: true
         with:
           name: fga-cli
-          path: dl/fga-cli
       - name: Setup Golang
         if: ${{ steps.restore-previous-cli.outcome == 'failure' }}
         uses: actions/setup-go@v5
@@ -30,13 +29,15 @@ jobs:
           git clone --depth 1 --branch v0.6.1 https://github.com/openfga/cli.git cli
           cd cli
           go build -o ../fga-cli ./cmd/fga/main.go
+      - name: Tar CLI
+        run: tar -cvf fga-cli.tar.gz fga-cli
       - name: Upload FGA CLI Artifact
         if: ${{ steps.restore-previous-cli.outcome == 'failure' }}
         uses: actions/upload-artifact@v4
         with:
           name: fga-cli
           overwrite: true
-          path: fga-cli
+          path: fga-cli.tar.gz
 
   deploy_prod:
     needs: build_cli
@@ -79,6 +80,7 @@ jobs:
         uses: actions/download-artifact@v4.1.8
         with:
           name: fga-cli
-      - run: echo "${{ steps.download-cli.outputs.download-path }}"
+      - name: Untar
+        run: tar -xzvf ${{ steps.download-cli.outputs.download-path }}/fga-cli.tar.gz -C ${{ github.workspace }}
       - name: Deploy model
-        run: ${{ steps.download-cli.outputs.download-path }}/fga-cli model write --store-id=$FGA_STORE_ID --file fga.mod
+        run: ${{ github.workspace }}/fga-cli model write --store-id=$FGA_STORE_ID --file fga.mod
