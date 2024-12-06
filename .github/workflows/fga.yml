@@ -9,7 +9,7 @@ on:
 
 jobs:
   build_cli:
-    name: Download & Install OpenFGA CLI
+    name: Build CLI
     runs-on: ubuntu-22.04
     steps:
       - name: Restore previous cli
@@ -62,7 +62,6 @@ jobs:
 
   deploy_staging:
     needs: build_cli
-    if: ${{ startsWith(github.ref, 'refs/heads/') }}
     name: Deploy FGA Model (staging)
     runs-on: ubuntu-22.04
     env:
@@ -76,8 +75,10 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
       - name: Download CLI
+        id: download-cli
         uses: actions/download-artifact@v4.1.8
         with:
           name: fga-cli
+      - run: echo "${{ steps.download-cli.outputs.download-path }}"
       - name: Deploy model
-        run: ./fga-cli model write --store-id=$FGA_STORE_ID --file fga.mod
+        run: ${{ steps.download-cli.outputs.download-path }}/fga-cli model write --store-id=$FGA_STORE_ID --file fga.mod
