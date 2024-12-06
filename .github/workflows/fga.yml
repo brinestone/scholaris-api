@@ -1,38 +1,85 @@
 name: Open-FGA authorization model deployment
 
 on:
-    push:
-        branches:
-          - next
-        tags:
-          - v*
-        paths:
-          - '**/*.fga'
-          - fga.mod
+  push:
+    branches:
+      - next
+    tags:
+      - v*
+    paths:
+      - "**/*.fga"
+      - fga.mod
 
 jobs:
-  deploy_model:
-    name: Deploy FGA Model
-    runs-on: ubuntu-latest
-    env:
-      FGA_API_URL: ${{ vars.FGA_API_URL }}
-      FGA_STORE_ID: ${{ startsWith(github.ref, 'refs/tags/') && secrets.FGA_STORE_ID_PROD || secrets.FGA_STORE_ID }}
-      FGA_API_TOKEN_ISSUER: ${{ vars.FGA_API_TOKEN_ISSUER }}
-      FGA_API_AUDIENCE: ${{ vars.FGA_API_AUDIENCE }}
-      FGA_CLIENT_ID: ${{ startsWith(github.ref, 'refs/tags/') && secrets.FGA_CLIENT_ID_PROD || secrets.FGA_CLIENT_ID }}
-      FGA_CLIENT_SECRET: ${{ startsWith(github.ref, 'refs/tags/') && secrets.FGA_CLIENT_ID_PROD || secrets.FGA_CLIENT_SECRET }}
+  build_cli:
+    name: Download & Install OpenFGA CLI
+    runs-on: ubuntu-22.04
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - name: Restore previous cli
+        id: restore-previous-cli
+        uses: actions/download-artifact@v4.1.8
+        with:
+          name: fga-cli
+          path: dl/fga-cli
       - name: Setup Golang
+        if: ${{ steps.restore-previous-cli.outputs.download-path == github.workspace }}
         uses: actions/setup-go@v5
         with:
-          go-version: '>=1.23.0'
-      - run: go version
-      - name: Download & Install OpenFGA CLI
+          go-version: ">= 1.23.0"
+      - name: Build CLI
+        if: ${{ steps.restore-previous-cli.outputs.download-path == github.workspace }}
         run: |
           git clone --depth 1 --branch v0.6.1 https://github.com/openfga/cli.git cli
           cd cli
-          go build -o ../fga ./cmd/fga/main.go
+          go build -o ../fga-cli ./cmd/fga/main.go
+      - name: Upload FGA CLI Artifact
+        if: ${{ steps.restore-previous-cli.outputs.download-path == github.workspace }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: fga-cli
+          overwrite: true
+          path: fga-cli
+
+  deploy_prod:
+    needs: build_cli
+    if: ${{ startsWith(github.ref, 'refs/tags') }}
+    name: Deploy FGA model (production)
+    runs-on: ubuntu-22.04
+    env:
+      FGA_API_URL: ${{ vars.FGA_API_URL }}
+      FGA_STORE_ID: ${{ secrets.FGA_STORE_ID_PROD }}
+      FGA_API_TOKEN_ISSUER: ${{ vars.FGA_API_TOKEN_ISSUER }}
+      FGA_API_AUDIENCE: ${{ vars.FGA_API_AUDIENCE }}
+      FGA_CLIENT_ID: ${{ secrets.FGA_CLIENT_ID_PROD }}
+      FGA_CLIENT_SECRET: ${{ secrets.FGA_CLIENT_SECRET_PROD }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Download CLI
+        uses: actions/download-artifact@v4.1.8
+        with:
+          name: fga-cli
       - name: Deploy model
-        run: ./fga model write --store-id=$FGA_STORE_ID --file fga.mod
+        run: ./fga-cli model write --store-id=$FGA_STORE_ID --file fga.mod
+
+  deploy_staging:
+    needs: build_cli
+    if: ${{ startsWith(github.ref, 'refs/heads/') }}
+    name: Deploy FGA Model (staging)
+    runs-on: ubuntu-22.04
+    env:
+      FGA_API_URL: ${{ vars.FGA_API_URL }}
+      FGA_STORE_ID: ${{ secrets.FGA_STORE_ID }}
+      FGA_API_TOKEN_ISSUER: ${{ vars.FGA_API_TOKEN_ISSUER }}
+      FGA_API_AUDIENCE: ${{ vars.FGA_API_AUDIENCE }}
+      FGA_CLIENT_ID: ${{ secrets.FGA_CLIENT_ID }}
+      FGA_CLIENT_SECRET: ${{ secrets.FGA_CLIENT_SECRET }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Download CLI
+        uses: actions/download-artifact@v4.1.8
+        with:
+          name: fga-cli
+      - name: Deploy model
+        run: ./fga-cli model write --store-id=$FGA_STORE_ID --file fga.mod
