@@ -648,7 +648,7 @@ func FindForms(ctx context.Context, params dto.FindFormsRequest) (*dto.GetFormsR
 	var overrides []uint64
 	uid, authed := auth.UserID()
 	if authed {
-		res, err := permissions.ListRelations(ctx, dto.ListRelationsRequest{
+		res, err := permissions.ListRelationsInternal(ctx, dto.ListObjectsRequest{
 			Actor:    dto.IdentifierString(dto.PTUser, uid),
 			Relation: models.PermEditor,
 			Type:     string(dto.PTForm),

@@ -1,5 +1,9 @@
 package helpers
 
+func EmptySlice[T any]() []T {
+	return make([]T, 0)
+}
+
 func Every[T any](slice []T, pred func(a T) bool) (ok bool) {
 	for _, v := range slice {
 		if ok = pred(v); !ok {

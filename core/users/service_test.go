@@ -24,8 +24,8 @@ func mockEndpoints() {
 	// et.MockEndpoint(sAuth.VerifyCaptchaToken, func(ctx context.Context, req sAuth.VerifyCaptchaRequest) error {
 	// 	return nil
 	// })
-	et.MockEndpoint(permissions.ListRelations, func(ctx context.Context, req dto.ListRelationsRequest) (*dto.ListRelationsResponse, error) {
-		return &dto.ListRelationsResponse{
+	et.MockEndpoint(permissions.ListRelationsInternal, func(ctx context.Context, req dto.ListObjectsRequest) (*dto.ListObjectsResponse, error) {
+		return &dto.ListObjectsResponse{
 			Relations: map[dto.PermissionType][]uint64{
 				dto.PTForm: {},
 			},

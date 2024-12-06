@@ -1,9 +1,13 @@
 package dto
 
 import (
+	"errors"
 	"fmt"
+	"regexp"
+	"strings"
 
 	"encore.dev/beta/auth"
+	"github.com/brinestone/scholaris/helpers"
 )
 
 type PermissionType string
@@ -56,18 +60,54 @@ const (
 	unknown        PermissionType = ""
 )
 
-type ListRelationsResponse struct {
+type ListObjectsResponse struct {
 	// The valid relations
 	Relations map[PermissionType][]uint64 `json:"relations"`
 }
 
+type ListRelationsResponse struct {
+	Relations []string `json:"relations"`
+}
+
 type ListRelationsRequest struct {
+	// Context   *map[string]any `json:"context,omitempty" encore:"optional"`
+	Roles  []string `json:"roles"`
+	Target string   `json:"target"`
+}
+
+func (l ListRelationsRequest) Validate() (err error) {
+	msgs := make([]string, 0)
+
+	if len(l.Roles) == 0 {
+		msgs = append(msgs, "The relations field is required")
+	} else {
+		pattern := regexp.MustCompile(`^[a-zA-Z_\-0-9]+:[a-zA-Z_\-0-9]+$`)
+		fn := func(rel string) bool {
+			patternMatches := pattern.MatchString(rel)
+			_, validType := ParsePermissionType(strings.Split(rel, ":")[0])
+			return patternMatches && validType
+		}
+
+		valid := helpers.Every(l.Roles, fn)
+		if !valid {
+			msgs = append(msgs, "Erroneous relation specifier detected")
+		}
+	}
+
+	if len(msgs) > 0 {
+		err = errors.New(strings.Join(msgs, "\n"))
+	}
+	return
+}
+
+type ListObjectsRequest struct {
 	// The object claiming to own the relation.
 	Actor string `json:"subject"`
 	// The relation specifier
 	Relation string `json:"relation"`
 	// The target object
-	Type string `json:"type"`
+	Type    string         `json:"type"`
+	Context []ContextEntry `json:"context,omitempty" encore:"optional"`
 }
 
 type RelationCheckResponse struct {

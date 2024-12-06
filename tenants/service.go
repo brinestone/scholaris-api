@@ -220,7 +220,7 @@ func Lookup(ctx context.Context) (ans *dto.FindTenantResponse, err error) {
 }
 
 func lookupViewableTenantIds(ctx context.Context, uid auth.UID) (ans []uint64, err error) {
-	response, err := permissions.ListRelations(ctx, dto.ListRelationsRequest{
+	response, err := permissions.ListRelationsInternal(ctx, dto.ListObjectsRequest{
 		Actor:    dto.IdentifierString(dto.PTUser, uid),
 		Relation: models.PermCanView,
 		Type:     string(dto.PTTenant),

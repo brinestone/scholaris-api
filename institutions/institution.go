@@ -44,7 +44,7 @@ func Lookup(ctx context.Context, req dto.LookupInstitutionsRequest) (*dto.Lookup
 	var memberedRefs []uint64
 
 	if authed {
-		memberedInstitutions, err := permissions.ListRelations(ctx, dto.ListRelationsRequest{
+		memberedInstitutions, err := permissions.ListRelationsInternal(ctx, dto.ListObjectsRequest{
 			Actor:    dto.IdentifierString(dto.PTUser, uid),
 			Relation: models.PermMember,
 			Type:     string(dto.PTInstitution),

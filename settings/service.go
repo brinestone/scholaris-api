@@ -157,7 +157,7 @@ func FindSettings(ctx context.Context, req dto.GetSettingsRequest) (*dto.GetSett
 	uid, _ := auth.UserID()
 	s, err := settingsCache.Get(ctx, cacheKey(req.Owner, req.OwnerType))
 	if errors.Is(err, cache.Miss) {
-		perms, err := permissions.ListRelations(ctx, dto.ListRelationsRequest{
+		perms, err := permissions.ListRelationsInternal(ctx, dto.ListObjectsRequest{
 			Actor:    dto.IdentifierString(dto.PTUser, uid),
 			Relation: models.PermCanView,
 			Type:     string(dto.PTSetting),

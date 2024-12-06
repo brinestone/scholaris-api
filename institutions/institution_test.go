@@ -25,8 +25,8 @@ func TestLookup(t *testing.T) {
 		ids[i] = created.Id
 	}
 
-	et.MockEndpoint(permissions.ListRelations, func(ctx context.Context, p dto.ListRelationsRequest) (ans *dto.ListRelationsResponse, err error) {
-		ans = &dto.ListRelationsResponse{
+	et.MockEndpoint(permissions.ListRelationsInternal, func(ctx context.Context, p dto.ListObjectsRequest) (ans *dto.ListObjectsResponse, err error) {
+		ans = &dto.ListObjectsResponse{
 			Relations: map[dto.PermissionType][]uint64{
 				dto.PTInstitution: ids,
 			},

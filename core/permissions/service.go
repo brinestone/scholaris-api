@@ -7,8 +7,10 @@ import (
 	"time"
 
 	"encore.dev"
+	"encore.dev/beta/auth"
 	"encore.dev/rlog"
 	"github.com/brinestone/scholaris/dto"
+	"github.com/brinestone/scholaris/util"
 	openfga "github.com/openfga/go-sdk"
 	"github.com/openfga/go-sdk/client"
 	"github.com/openfga/go-sdk/credentials"
@@ -59,12 +61,41 @@ func initService() (*Service, error) {
 
 // List Objects with valid relations
 //
-//encore:api private method=POST path=/permissions/related
-func (s *Service) ListRelations(ctx context.Context, req dto.ListRelationsRequest) (*dto.ListRelationsResponse, error) {
+// encore:api auth method=POST path=/permissions/related
+func (s *Service) ListRelations(ctx context.Context, req dto.ListRelationsRequest) (ans *dto.ListRelationsResponse, err error) {
+	ans = new(dto.ListRelationsResponse)
+	uid, _ := auth.UserID()
+	body := client.ClientListRelationsRequest{
+		User:      dto.IdentifierString(dto.PTUser, uid),
+		Relations: req.Roles,
+		Object:    req.Target,
+	}
+
+	res, err := s.fgaClient.ListRelations(ctx).
+		Body(body).
+		Execute()
+	if err != nil {
+		rlog.Error(util.MsgCallError, "err", err)
+		err = &util.ErrUnknown
+		return
+	}
+
+	ans.Relations = res.Relations
+	return
+}
+
+// List Objects with valid relations (Internal API)
+//
+//encore:api private method=POST path=/permissions/related/internal
+func (s *Service) ListRelationsInternal(ctx context.Context, req dto.ListObjectsRequest) (*dto.ListObjectsResponse, error) {
 	reqBody := client.ClientListObjectsRequest{
 		User:     req.Actor,
 		Relation: req.Relation,
 		Type:     string(req.Type),
+	}
+
+	if len(req.Context) > 0 {
+		reqBody.Context = contextEntriesToMap(req.Context...)
 	}
 
 	data, err := s.fgaClient.ListObjects(ctx).
@@ -83,7 +114,7 @@ func (s *Service) ListRelations(ctx context.Context, req dto.ListRelationsReques
 		resultMap[p] = append(resultMap[p], id)
 	}
 
-	return &dto.ListRelationsResponse{
+	return &dto.ListObjectsResponse{
 		Relations: resultMap,
 	}, nil
 }
@@ -99,25 +130,7 @@ func (s *Service) CheckPermission(ctx context.Context, req dto.RelationCheckRequ
 	}
 
 	if req.Condition != nil {
-		c := make(map[string]interface{})
-		request.Context = &c
-
-		for _, v := range req.Condition.Context {
-			switch v.Type {
-			case dto.CETBool:
-				c[v.Name], _ = strconv.ParseBool(v.Value)
-			case dto.CETTimestamp:
-				c[v.Name], _ = time.Parse(time.RFC3339, v.Value)
-			case dto.CETDuration:
-				t, err := time.ParseDuration(v.Value)
-				if err != nil {
-					continue
-				}
-				c[v.Name] = t.String()
-			default:
-				c[v.Name] = v.Value
-			}
-		}
+		request.Context = contextEntriesToMap(req.Condition.Context...)
 	}
 
 	res, err := s.fgaClient.
@@ -196,4 +209,26 @@ func toOpenFgaWrites(updates []dto.PermissionUpdate) []openfga.TupleKey {
 	}
 
 	return ans
+}
+
+func contextEntriesToMap(entries ...dto.ContextEntry) (ans *map[string]any) {
+	ans = &map[string]any{}
+	c := *ans
+	for _, v := range entries {
+		switch v.Type {
+		case dto.CETBool:
+			c[v.Name], _ = strconv.ParseBool(v.Value)
+		case dto.CETTimestamp:
+			c[v.Name], _ = time.Parse(time.RFC3339, v.Value)
+		case dto.CETDuration:
+			t, err := time.ParseDuration(v.Value)
+			if err != nil {
+				continue
+			}
+			c[v.Name] = t.String()
+		default:
+			c[v.Name] = v.Value
+		}
+	}
+	return
 }

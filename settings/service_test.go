@@ -35,8 +35,8 @@ func mockEndpoints() {
 	et.MockEndpoint(sAuth.VerifyCaptchaToken, func(ctx context.Context, req sAuth.VerifyCaptchaRequest) error {
 		return nil
 	})
-	et.MockEndpoint(permissions.ListRelations, func(ctx context.Context, req dto.ListRelationsRequest) (*dto.ListRelationsResponse, error) {
-		return &dto.ListRelationsResponse{
+	et.MockEndpoint(permissions.ListRelationsInternal, func(ctx context.Context, req dto.ListObjectsRequest) (*dto.ListObjectsResponse, error) {
+		return &dto.ListObjectsResponse{
 			Relations: map[dto.PermissionType][]uint64{
 				dto.PTForm: {},
 			},
@@ -99,8 +99,8 @@ func TestUpdateSettings(t *testing.T) {
 	})
 
 	if passed {
-		et.MockEndpoint(permissions.ListRelations, func(ctx context.Context, p dto.ListRelationsRequest) (*dto.ListRelationsResponse, error) {
-			return &dto.ListRelationsResponse{
+		et.MockEndpoint(permissions.ListRelationsInternal, func(ctx context.Context, p dto.ListObjectsRequest) (*dto.ListObjectsResponse, error) {
+			return &dto.ListObjectsResponse{
 				Relations: map[dto.PermissionType][]uint64{
 					dto.PTSetting: {1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
 				},
@@ -141,8 +141,8 @@ func testUpdateUsingExistingSetting(t *testing.T, ctx context.Context, owner uin
 
 	err := settings.UpdateSettings(ctx, req)
 	assert.Nil(t, err)
-	et.MockEndpoint(permissions.ListRelations, func(ctx context.Context, p dto.ListRelationsRequest) (*dto.ListRelationsResponse, error) {
-		return &dto.ListRelationsResponse{
+	et.MockEndpoint(permissions.ListRelationsInternal, func(ctx context.Context, p dto.ListObjectsRequest) (*dto.ListObjectsResponse, error) {
+		return &dto.ListObjectsResponse{
 			Relations: map[dto.PermissionType][]uint64{
 				dto.PTSetting: {1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
 			},
@@ -220,14 +220,14 @@ func testUpdateSettingsWithNewSettings(t *testing.T, ctx context.Context, owner 
 	err := settings.UpdateSettings(ctx, req)
 	assert.Nil(t, err)
 
-	et.MockEndpoint(permissions.ListRelations, func(ctx context.Context, p dto.ListRelationsRequest) (*dto.ListRelationsResponse, error) {
+	et.MockEndpoint(permissions.ListRelationsInternal, func(ctx context.Context, p dto.ListObjectsRequest) (*dto.ListObjectsResponse, error) {
 		var settingIds []uint64
 		var i = 0
 		for i < maxCnt {
 			settingIds = append(settingIds, uint64(i+1))
 			i++
 		}
-		return &dto.ListRelationsResponse{
+		return &dto.ListObjectsResponse{
 			Relations: map[dto.PermissionType][]uint64{
 				dto.PTSetting: settingIds,
 			},
