@@ -70,9 +70,9 @@ type ListRelationsResponse struct {
 }
 
 type ListRelationsRequest struct {
-	// Context   *map[string]any `json:"context,omitempty" encore:"optional"`
 	Roles  []string `json:"roles"`
 	Target string   `json:"target"`
+	// Context   *map[string]any `json:"context,omitempty" encore:"optional"`
 }
 
 func (l ListRelationsRequest) Validate() (err error) {
