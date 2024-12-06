@@ -40,7 +40,7 @@ func TestNewEnrollmentForm(t *testing.T) {
 		return nil
 	})
 
-	et.MockEndpoint(permissions.ListRelationsInternal, func(ctx context.Context, p dto.ListObjectsRequest) (ans *dto.ListObjectsResponse, err error) {
+	et.MockEndpoint(permissions.ListObjectsInternal, func(ctx context.Context, p dto.ListObjectsRequest) (ans *dto.ListObjectsResponse, err error) {
 		ans = &dto.ListObjectsResponse{
 			Relations: map[dto.PermissionType][]uint64{},
 		}

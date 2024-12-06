@@ -19,7 +19,6 @@ import (
 	"github.com/brinestone/scholaris/core/permissions"
 	"github.com/brinestone/scholaris/dto"
 	"github.com/brinestone/scholaris/helpers"
-	"github.com/brinestone/scholaris/models"
 	"github.com/brinestone/scholaris/util"
 )
 
@@ -55,9 +54,9 @@ func ServeFile(w http.ResponseWriter, req *http.Request) {
 		fileType = dto.PTUserFile
 	}
 
-	p, err := permissions.CheckPermission(req.Context(), dto.RelationCheckRequest{
+	p, err := permissions.CheckPermissionInternal(req.Context(), dto.InternalRelationCheckRequest{
 		Actor:    dto.IdentifierString(dto.PTUser, userId),
-		Relation: models.PermCanView,
+		Relation: dto.PermCanView,
 		Target:   dto.IdentifierString(fileType, key),
 	})
 	if err != nil {
@@ -140,9 +139,9 @@ func UploadFile(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if requestData.OwnerInfoSet() {
-		p, err := permissions.CheckPermission(req.Context(), dto.RelationCheckRequest{
+		p, err := permissions.CheckPermissionInternal(req.Context(), dto.InternalRelationCheckRequest{
 			Actor:    dto.IdentifierString(dto.PTUser, uid),
-			Relation: models.PermCanUploadFile,
+			Relation: dto.PermCanUploadFile,
 			Target:   dto.IdentifierString(ownerType, owner),
 		})
 		if err != nil {
@@ -204,7 +203,7 @@ func UploadFile(w http.ResponseWriter, req *http.Request) {
 		Updates: []dto.PermissionUpdate{
 			{
 				Actor:    dto.IdentifierString(ownerType, owner),
-				Relation: models.PermOwner,
+				Relation: dto.PermOwner,
 				Target:   dto.IdentifierString(fileType, key),
 			},
 		},

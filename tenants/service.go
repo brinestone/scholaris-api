@@ -159,12 +159,12 @@ func NewTenant(ctx context.Context, req dto.NewTenantRequest) (err error) {
 		Updates: []dto.PermissionUpdate{
 			{
 				Actor:    dto.IdentifierString(dto.PTUser, user),
-				Relation: models.PermOwner,
+				Relation: dto.PermOwner,
 				Target:   dto.IdentifierString(dto.PTTenant, tenant),
 			},
 			{
 				Actor:    dto.IdentifierString(dto.PTTenant, tenant),
-				Relation: models.PermOwner,
+				Relation: dto.PermOwner,
 				Target:   dto.IdentifierString(dto.PTSubscription, subId),
 			},
 		},
@@ -220,9 +220,9 @@ func Lookup(ctx context.Context) (ans *dto.FindTenantResponse, err error) {
 }
 
 func lookupViewableTenantIds(ctx context.Context, uid auth.UID) (ans []uint64, err error) {
-	response, err := permissions.ListRelationsInternal(ctx, dto.ListObjectsRequest{
+	response, err := permissions.ListObjectsInternal(ctx, dto.ListObjectsRequest{
 		Actor:    dto.IdentifierString(dto.PTUser, uid),
-		Relation: models.PermCanView,
+		Relation: dto.PermCanView,
 		Type:     string(dto.PTTenant),
 	})
 	if err != nil {

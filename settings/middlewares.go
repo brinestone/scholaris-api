@@ -18,7 +18,7 @@ import (
 //encore:middleware target=tag:can_set_setting
 func UserCanSetSettingValue(req middleware.Request, next middleware.Next) middleware.Response {
 	var ownerInfo = req.Data().Payload.(models.OwnerInfo)
-	if err := doPermissionCheck(req.Context(), ownerInfo, models.PermCanSetSettingValue); err != nil {
+	if err := doPermissionCheck(req.Context(), ownerInfo, dto.PermCanSetSettingValue); err != nil {
 		return middleware.Response{
 			Err: err,
 		}
@@ -32,7 +32,7 @@ func UserCanSetSettingValue(req middleware.Request, next middleware.Next) middle
 //encore:middleware target=tag:can_update_settings
 func UserCanUpdateSettings(req middleware.Request, next middleware.Next) middleware.Response {
 	var ownerInfo = req.Data().Payload.(models.OwnerInfo)
-	if err := doPermissionCheck(req.Context(), ownerInfo, models.PermCanEditSettings); err != nil {
+	if err := doPermissionCheck(req.Context(), ownerInfo, dto.PermCanEditSettings); err != nil {
 		return middleware.Response{
 			Err: err,
 		}
@@ -46,7 +46,7 @@ func UserCanUpdateSettings(req middleware.Request, next middleware.Next) middlew
 //encore:middleware target=tag:can_view_settings
 func UserCanViewSettings(req middleware.Request, next middleware.Next) middleware.Response {
 	var ownerInfo = req.Data().Payload.(models.OwnerInfo)
-	if err := doPermissionCheck(req.Context(), ownerInfo, models.PermCanViewSettings); err != nil {
+	if err := doPermissionCheck(req.Context(), ownerInfo, dto.PermCanViewSettings); err != nil {
 		return middleware.Response{
 			Err: err,
 		}
@@ -75,14 +75,14 @@ func VerifyCaptcha(req middleware.Request, next middleware.Next) middleware.Resp
 	return next(req)
 }
 
-func doPermissionCheck(ctx context.Context, oi models.OwnerInfo, perm string) error {
+func doPermissionCheck(ctx context.Context, oi models.OwnerInfo, perm dto.PermissionName) error {
 	uid, authed := eAuth.UserID()
 	if !authed {
 		return &util.ErrForbidden
 	}
 
 	parsed, _ := dto.ParsePermissionType(oi.GetOwnerType())
-	perms, err := permissions.CheckPermission(ctx, dto.RelationCheckRequest{
+	perms, err := permissions.CheckPermissionInternal(ctx, dto.InternalRelationCheckRequest{
 		Relation: perm,
 		Actor:    dto.IdentifierString(dto.PTUser, uid),
 		Target:   dto.IdentifierString(parsed, oi.GetOwner()),

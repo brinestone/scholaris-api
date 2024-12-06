@@ -51,14 +51,14 @@ func CreateAcademicYear(ctx context.Context, req dto.NewAcademicYearRequest) err
 		Updates: []dto.PermissionUpdate{
 			{
 				Actor:    dto.IdentifierString(dto.PTInstitution, req.GetOwner()),
-				Relation: models.PermOwner,
+				Relation: dto.PermOwner,
 				Target:   dto.IdentifierString(dto.PTAcademicYear, yearId),
 			},
 		},
 	}
 
 	for _, termId := range termIds {
-		r.Updates = append(r.Updates, dto.NewPermissionUpdate[uint64](dto.IdentifierString(dto.PTAcademicYear, yearId), models.PermOwner, dto.IdentifierString(dto.PTAcademicTerm, termId)))
+		r.Updates = append(r.Updates, dto.NewPermissionUpdate[uint64](dto.IdentifierString(dto.PTAcademicYear, yearId), dto.PermOwner, dto.IdentifierString(dto.PTAcademicTerm, termId)))
 	}
 
 	if err := permissions.SetPermissions(ctx, r); err != nil {
@@ -144,14 +144,14 @@ func doAutocreateAcademicYears(ctx context.Context, wg *sync.WaitGroup, page, si
 				Updates: []dto.PermissionUpdate{
 					{
 						Actor:    dto.IdentifierString(dto.PTInstitution, institution),
-						Relation: models.PermOwner,
+						Relation: dto.PermOwner,
 						Target:   dto.IdentifierString(dto.PTAcademicYear, yearId),
 					},
 				},
 			}
 
 			for _, termId := range termIds {
-				req.Updates = append(req.Updates, dto.NewPermissionUpdate[uint64](dto.IdentifierString(dto.PTAcademicYear, yearId), models.PermOwner, dto.IdentifierString(dto.PTAcademicTerm, termId)))
+				req.Updates = append(req.Updates, dto.NewPermissionUpdate[uint64](dto.IdentifierString(dto.PTAcademicYear, yearId), dto.PermOwner, dto.IdentifierString(dto.PTAcademicTerm, termId)))
 			}
 
 			if err := permissions.SetPermissions(ctx, req); err != nil {

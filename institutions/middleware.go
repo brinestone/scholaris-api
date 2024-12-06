@@ -65,9 +65,9 @@ func AllowedToEnroll(request middleware.Request, next middleware.Next) (ans midd
 		deadline = &formInfo.Deadline.Time
 	}
 
-	req := dto.RelationCheckRequest{
+	req := dto.InternalRelationCheckRequest{
 		Actor:    dto.IdentifierString(dto.PTUser, uid),
-		Relation: "can_enroll",
+		Relation: dto.PermCanEnroll,
 		Target:   dto.IdentifierString(dto.PTInstitution, ownerInfo.GetOwner()),
 		Condition: &dto.RelationCondition{
 			Name: "enrollment_available",
@@ -78,7 +78,7 @@ func AllowedToEnroll(request middleware.Request, next middleware.Next) (ans midd
 			},
 		},
 	}
-	res, err := permissions.CheckPermission(request.Context(), req)
+	res, err := permissions.CheckPermissionInternal(request.Context(), req)
 	if err != nil {
 		rlog.Error(util.MsgCallError, "err", err)
 		return middleware.Response{
@@ -108,12 +108,12 @@ func AllowedToCreateEnrollmentForm(request middleware.Request, next middleware.N
 		}
 	}
 
-	req := dto.RelationCheckRequest{
+	req := dto.InternalRelationCheckRequest{
 		Actor:    dto.IdentifierString(dto.PTUser, uid),
 		Relation: "can_create_enrollment_forms",
 		Target:   dto.IdentifierString(dto.PTInstitution, ownerInfo.GetOwner()),
 	}
-	res, err := permissions.CheckPermission(request.Context(), req)
+	res, err := permissions.CheckPermissionInternal(request.Context(), req)
 	if err != nil {
 		rlog.Error(util.MsgCallError, "err", err)
 		return middleware.Response{
@@ -141,12 +141,12 @@ func AllowedToCreateAcademicYear(request middleware.Request, next middleware.Nex
 		}
 	}
 
-	req := dto.RelationCheckRequest{
+	req := dto.InternalRelationCheckRequest{
 		Actor:    dto.IdentifierString(dto.PTUser, uid),
-		Relation: "can_create_academic_year",
+		Relation: dto.PermCanCreateAcademicYear,
 		Target:   dto.IdentifierString(dto.PTInstitution, ownerInfo.GetOwner()),
 	}
-	res, err := permissions.CheckPermission(request.Context(), req)
+	res, err := permissions.CheckPermissionInternal(request.Context(), req)
 	if err != nil {
 		rlog.Error(util.MsgCallError, "err", err)
 		return middleware.Response{
@@ -217,9 +217,9 @@ func AllowedToCreateInstitutionMiddleware(req middleware.Request, next middlewar
 		}
 	}
 
-	ans, err := permissions.CheckPermission(req.Context(), dto.RelationCheckRequest{
+	ans, err := permissions.CheckPermissionInternal(req.Context(), dto.InternalRelationCheckRequest{
 		Actor:    dto.IdentifierString(dto.PTUser, userId),
-		Relation: "can_create_institution",
+		Relation: dto.PermCanCreateInstitution,
 		Target:   dto.IdentifierString(dto.PTTenant, data.TenantId),
 	})
 

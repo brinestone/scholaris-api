@@ -44,9 +44,9 @@ func Lookup(ctx context.Context, req dto.LookupInstitutionsRequest) (*dto.Lookup
 	var memberedRefs []uint64
 
 	if authed {
-		memberedInstitutions, err := permissions.ListRelationsInternal(ctx, dto.ListObjectsRequest{
+		memberedInstitutions, err := permissions.ListObjectsInternal(ctx, dto.ListObjectsRequest{
 			Actor:    dto.IdentifierString(dto.PTUser, uid),
-			Relation: models.PermMember,
+			Relation: dto.PermMember,
 			Type:     string(dto.PTInstitution),
 		})
 		if err != nil {
@@ -120,7 +120,7 @@ func NewInstitution(ctx context.Context, req dto.NewInstitutionRequest) (*dto.In
 		Updates: []dto.PermissionUpdate{
 			{
 				Actor:    dto.IdentifierString(dto.PTTenant, req.TenantId),
-				Relation: models.PermParent,
+				Relation: dto.PermParent,
 				Target:   dto.IdentifierString(dto.PTInstitution, i.Id),
 			},
 		},

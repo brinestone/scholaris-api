@@ -23,7 +23,7 @@ import (
 )
 
 func mockEndpoints() {
-	et.MockEndpoint(permissions.CheckPermission, func(ctx context.Context, req dto.RelationCheckRequest) (*dto.RelationCheckResponse, error) {
+	et.MockEndpoint(permissions.CheckPermissionInternal, func(ctx context.Context, req dto.InternalRelationCheckRequest) (*dto.RelationCheckResponse, error) {
 		return &dto.RelationCheckResponse{
 			Allowed: true,
 		}, nil
@@ -34,7 +34,7 @@ func mockEndpoints() {
 	et.MockEndpoint(sAuth.VerifyCaptchaToken, func(ctx context.Context, req sAuth.VerifyCaptchaRequest) error {
 		return nil
 	})
-	et.MockEndpoint(permissions.ListRelationsInternal, func(ctx context.Context, req dto.ListObjectsRequest) (*dto.ListObjectsResponse, error) {
+	et.MockEndpoint(permissions.ListObjectsInternal, func(ctx context.Context, req dto.ListObjectsRequest) (*dto.ListObjectsResponse, error) {
 		return &dto.ListObjectsResponse{
 			Relations: map[dto.PermissionType][]uint64{
 				dto.PTForm: {},
@@ -218,7 +218,7 @@ func TestForms(t *testing.T) {
 	})
 
 	t.Run("TestFindForms_Owned", func(t *testing.T) {
-		et.MockEndpoint(permissions.ListRelationsInternal, func(ctx context.Context, p dto.ListObjectsRequest) (ans *dto.ListObjectsResponse, err error) {
+		et.MockEndpoint(permissions.ListObjectsInternal, func(ctx context.Context, p dto.ListObjectsRequest) (ans *dto.ListObjectsResponse, err error) {
 			ans = new(dto.ListObjectsResponse)
 			ans.Relations = make(map[dto.PermissionType][]uint64)
 			ans.Relations[dto.PermissionType(p.Type)] = []uint64{form.Id}

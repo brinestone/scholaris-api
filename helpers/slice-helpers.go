@@ -1,5 +1,31 @@
 package helpers
 
+type SliceReduceOption struct {
+	name  string
+	value any
+}
+
+func WithSeed[T any](seed T) SliceReduceOption {
+	return SliceReduceOption{
+		name:  "seed",
+		value: seed,
+	}
+}
+
+func SliceReduce[T any, R any](slice []T, accumulator func(current T, r R) R, options ...SliceReduceOption) (ans R) {
+	for _, o := range options {
+		switch o.name {
+		case "seed":
+			ans = o.value.(R)
+		}
+	}
+
+	for _, v := range slice {
+		ans = accumulator(v, ans)
+	}
+	return
+}
+
 func EmptySlice[T any]() []T {
 	return make([]T, 0)
 }

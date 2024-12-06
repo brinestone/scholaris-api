@@ -341,9 +341,9 @@ func GetFormInfo(ctx context.Context, form uint64) (*dto.FormConfig, error) {
 		return nil, &util.ErrForbidden
 	}
 
-	perm, err := permissions.CheckPermission(ctx, dto.RelationCheckRequest{
+	perm, err := permissions.CheckPermissionInternal(ctx, dto.InternalRelationCheckRequest{
 		Actor:    dto.IdentifierString(dto.PTUser, uid),
-		Relation: models.PermCanView,
+		Relation: dto.PermCanView,
 		Target:   dto.IdentifierString(dto.PTForm, form),
 	})
 
@@ -648,9 +648,9 @@ func FindForms(ctx context.Context, params dto.FindFormsRequest) (*dto.GetFormsR
 	var overrides []uint64
 	uid, authed := auth.UserID()
 	if authed {
-		res, err := permissions.ListRelationsInternal(ctx, dto.ListObjectsRequest{
+		res, err := permissions.ListObjectsInternal(ctx, dto.ListObjectsRequest{
 			Actor:    dto.IdentifierString(dto.PTUser, uid),
-			Relation: models.PermEditor,
+			Relation: dto.PermEditor,
 			Type:     string(dto.PTForm),
 		})
 		if err != nil {
@@ -693,9 +693,9 @@ func FindForms(ctx context.Context, params dto.FindFormsRequest) (*dto.GetFormsR
 func NewForm(ctx context.Context, req dto.NewFormInput) (response dto.NewFormResponse, err error) {
 	uid, _ := auth.UserID()
 	pt, _ := dto.ParsePermissionType(req.OwnerType)
-	permission, err := permissions.CheckPermission(ctx, dto.RelationCheckRequest{
+	permission, err := permissions.CheckPermissionInternal(ctx, dto.InternalRelationCheckRequest{
 		Actor:    dto.IdentifierString(dto.PTUser, uid),
-		Relation: models.PermCanCreateForms,
+		Relation: dto.PermCanCreateForms,
 		Target:   dto.IdentifierString(pt, req.Owner),
 	})
 	if err != nil || !permission.Allowed {
@@ -728,11 +728,11 @@ func NewForm(ctx context.Context, req dto.NewFormInput) (response dto.NewFormRes
 		Updates: []dto.PermissionUpdate{
 			{
 				Actor:    dto.IdentifierString(dto.PermissionType(req.OwnerType), req.Owner),
-				Relation: models.PermOwner,
+				Relation: dto.PermOwner,
 				Target:   dto.IdentifierString(dto.PTForm, response.Id),
 			}, {
 				Actor:    dto.IdentifierString(dto.PTUser, uid),
-				Relation: models.PermEditor,
+				Relation: dto.PermEditor,
 				Target:   dto.IdentifierString(dto.PTForm, response.Id),
 			},
 		},
