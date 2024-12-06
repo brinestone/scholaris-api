@@ -6,9 +6,6 @@ on:
       - next
     tags:
       - v*
-    paths:
-      - "**/*.fga"
-      - fga.mod
 
 jobs:
   build_cli:
