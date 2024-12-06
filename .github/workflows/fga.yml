@@ -80,6 +80,7 @@ jobs:
         uses: actions/download-artifact@v4.1.8
         with:
           name: fga-cli
+      - run: ls -R ${{ steps.download-cli.outputs.download-path }}
       - name: Untar
         run: tar -xzvf ${{ steps.download-cli.outputs.download-path }}/fga-cli.tar.gz -C ${{ github.workspace }}
       - name: Deploy model
