@@ -4,6 +4,8 @@ on:
     push:
         branches:
           - next
+        tags:
+          - v*
         paths:
           - '**/*.fga'
           - fga.mod
@@ -14,11 +16,11 @@ jobs:
     runs-on: ubuntu-latest
     env:
       FGA_API_URL: ${{ vars.FGA_API_URL }}
-      FGA_STORE_ID: ${{ secrets.FGA_STORE_ID }}
+      FGA_STORE_ID: ${{ startsWith(github.ref, 'refs/tags/') && secrets.FGA_STORE_ID_PROD || secrets.FGA_STORE_ID }}
       FGA_API_TOKEN_ISSUER: ${{ vars.FGA_API_TOKEN_ISSUER }}
       FGA_API_AUDIENCE: ${{ vars.FGA_API_AUDIENCE }}
-      FGA_CLIENT_ID: ${{ secrets.FGA_CLIENT_ID }}
-      FGA_CLIENT_SECRET: ${{ secrets.FGA_CLIENT_SECRET }}
+      FGA_CLIENT_ID: ${{ startsWith(github.ref, 'refs/tags/') && secrets.FGA_CLIENT_ID_PROD || secrets.FGA_CLIENT_ID }}
+      FGA_CLIENT_SECRET: ${{ startsWith(github.ref, 'refs/tags/') && secrets.FGA_CLIENT_ID_PROD || secrets.FGA_CLIENT_SECRET }}
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
