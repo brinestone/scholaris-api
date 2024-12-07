@@ -90,6 +90,10 @@ func ParsePermissionName(p string) (PermissionName, bool) {
 		return PermCanEnroll, true
 	case string(PermCanCreateInstitution):
 		return PermCanCreateInstitution, true
+	case string(PermCanModifyMembers):
+		return PermCanModifyMembers, true
+	case string(PermCanViewMembers):
+		return PermCanViewMembers, true
 	default:
 		return permUnknown, false
 	}
@@ -113,6 +117,8 @@ const (
 	PermEditor                PermissionName = "editor"
 	PermCanEdit               PermissionName = "can_edit"
 	PermCanEnroll             PermissionName = "can_enroll"
+	PermCanModifyMembers      PermissionName = "can_modify_members"
+	PermCanViewMembers        PermissionName = "can_view_members"
 	permUnknown               PermissionName = ""
 )
 

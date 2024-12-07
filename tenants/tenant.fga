@@ -14,6 +14,8 @@ type tenant
     define can_update_subscription: admin or owner
     define can_view_settings: maintainer or admin or owner
     define can_view: member
+    define can_modify_members: admin or owner
+    define can_view_members: maintainer or can_modify_members
     # roles
     define member: maintainer or admin or owner
     define admin: [user]
