@@ -60,30 +60,30 @@ func initService() (*Service, error) {
 	}, nil
 }
 
-// // List Objects with valid relations
-// //
-// // encore:api auth method=POST path=/permissions/related
-// func (s *Service) ListRelations(ctx context.Context, req dto.ListRelationsRequest) (ans *dto.ListRelationsResponse, err error) {
-// 	ans = new(dto.ListRelationsResponse)
-// 	uid, _ := auth.UserID()
-// 	body := client.ClientListRelationsRequest{
-// 		User:      dto.IdentifierString(dto.PTUser, uid),
-// 		Relations: req.Roles,
-// 		Object:    req.Target,
-// 	}
+// List Objects with valid relations
+//
+// encore:api auth method=POST path=/permissions/related
+func (s *Service) ListRelations(ctx context.Context, req dto.ListRelationsRequest) (ans *dto.ListRelationsResponse, err error) {
+	ans = new(dto.ListRelationsResponse)
+	uid, _ := auth.UserID()
+	body := client.ClientListRelationsRequest{
+		User:      dto.IdentifierString(dto.PTUser, uid),
+		Relations: req.Roles,
+		Object:    req.Target,
+	}
 
-// 	res, err := s.fgaClient.ListRelations(ctx).
-// 		Body(body).
-// 		Execute()
-// 	if err != nil {
-// 		rlog.Error(util.MsgCallError, "err", err)
-// 		err = &util.ErrUnknown
-// 		return
-// 	}
+	res, err := s.fgaClient.ListRelations(ctx).
+		Body(body).
+		Execute()
+	if err != nil {
+		rlog.Error(util.MsgCallError, "err", err)
+		err = &util.ErrUnknown
+		return
+	}
 
-// 	ans.Relations = res.Relations
-// 	return
-// }
+	ans.Relations = res.Relations
+	return
+}
 
 // List Objects with valid relations (Internal API)
 //
