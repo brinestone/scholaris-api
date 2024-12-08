@@ -133,15 +133,15 @@ type ListRelationsResponse struct {
 }
 
 type ListRelationsRequest struct {
-	Roles  []string `json:"roles"`
-	Target string   `json:"target"`
+	Permissions []string `json:"permissions"`
+	Target      string   `json:"target"`
 	// Context   *map[string]any `json:"context,omitempty" encore:"optional"`
 }
 
 func (l ListRelationsRequest) Validate() (err error) {
 	msgs := make([]string, 0)
 
-	if len(l.Roles) == 0 {
+	if len(l.Permissions) == 0 {
 		msgs = append(msgs, "The relations field is required")
 	} else {
 		pattern := regexp.MustCompile(`^[a-zA-Z_\-0-9]+:[a-zA-Z_\-0-9]+$`)
@@ -151,7 +151,7 @@ func (l ListRelationsRequest) Validate() (err error) {
 			return patternMatches && validType
 		}
 
-		valid := helpers.Every(l.Roles, fn)
+		valid := helpers.Every(l.Permissions, fn)
 		if !valid {
 			msgs = append(msgs, "Erroneous relation specifier detected")
 		}

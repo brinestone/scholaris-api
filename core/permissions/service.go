@@ -68,7 +68,7 @@ func (s *Service) ListRelations(ctx context.Context, req dto.ListRelationsReques
 	uid, _ := auth.UserID()
 	body := client.ClientListRelationsRequest{
 		User:      dto.IdentifierString(dto.PTUser, uid),
-		Relations: req.Roles,
+		Relations: req.Permissions,
 		Object:    req.Target,
 	}
 
