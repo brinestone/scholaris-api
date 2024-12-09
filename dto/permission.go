@@ -108,6 +108,8 @@ func ParsePermissionName(p string) (PermissionName, bool) {
 		return PNCanUpdate, true
 	case string(PNCanUpdateSubscription):
 		return PNCanUpdateSubscription, true
+	case string(PNCanCreateSettings):
+		return PNCanCreateSettings, true
 	default:
 		return pnUnknown, false
 	}
