@@ -131,7 +131,7 @@ func VerifyFormEditor(req middleware.Request, next middleware.Next) middleware.R
 	form := req.Data().PathParams.Get("form")
 	canEdit, err := permissions.CheckPermissionInternal(req.Context(), dto.InternalRelationCheckRequest{
 		Actor:    dto.IdentifierString(dto.PTUser, uid),
-		Relation: dto.PermEditor,
+		Relation: dto.PNEditor,
 		Target:   dto.IdentifierString(dto.PTForm, form),
 	})
 	if err != nil {

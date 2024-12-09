@@ -26,7 +26,7 @@ func CanViewTenant(req middleware.Request, next middleware.Next) (res middleware
 
 	perm, err := permissions.CheckPermissionInternal(req.Context(), dto.InternalRelationCheckRequest{
 		Actor:    dto.IdentifierString(dto.PTUser, uid),
-		Relation: dto.PermCanView,
+		Relation: dto.PNCanView,
 		Target:   dto.IdentifierString(dto.PTTenant, req.Data().PathParams.Get("id")),
 	})
 

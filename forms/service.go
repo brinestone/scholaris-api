@@ -343,7 +343,7 @@ func GetFormInfo(ctx context.Context, form uint64) (*dto.FormConfig, error) {
 
 	perm, err := permissions.CheckPermissionInternal(ctx, dto.InternalRelationCheckRequest{
 		Actor:    dto.IdentifierString(dto.PTUser, uid),
-		Relation: dto.PermCanView,
+		Relation: dto.PNCanView,
 		Target:   dto.IdentifierString(dto.PTForm, form),
 	})
 
@@ -650,7 +650,7 @@ func FindForms(ctx context.Context, params dto.FindFormsRequest) (*dto.GetFormsR
 	if authed {
 		res, err := permissions.ListObjectsInternal(ctx, dto.ListObjectsRequest{
 			Actor:    dto.IdentifierString(dto.PTUser, uid),
-			Relation: dto.PermEditor,
+			Relation: dto.PNEditor,
 			Type:     string(dto.PTForm),
 		})
 		if err != nil {
@@ -695,7 +695,7 @@ func NewForm(ctx context.Context, req dto.NewFormInput) (response dto.NewFormRes
 	pt, _ := dto.ParsePermissionType(req.OwnerType)
 	permission, err := permissions.CheckPermissionInternal(ctx, dto.InternalRelationCheckRequest{
 		Actor:    dto.IdentifierString(dto.PTUser, uid),
-		Relation: dto.PermCanCreateForms,
+		Relation: dto.PNCanCreateForms,
 		Target:   dto.IdentifierString(pt, req.Owner),
 	})
 	if err != nil || !permission.Allowed {
@@ -728,11 +728,11 @@ func NewForm(ctx context.Context, req dto.NewFormInput) (response dto.NewFormRes
 		Updates: []dto.PermissionUpdate{
 			{
 				Actor:    dto.IdentifierString(dto.PermissionType(req.OwnerType), req.Owner),
-				Relation: dto.PermOwner,
+				Relation: dto.PNOwner,
 				Target:   dto.IdentifierString(dto.PTForm, response.Id),
 			}, {
 				Actor:    dto.IdentifierString(dto.PTUser, uid),
-				Relation: dto.PermEditor,
+				Relation: dto.PNEditor,
 				Target:   dto.IdentifierString(dto.PTForm, response.Id),
 			},
 		},

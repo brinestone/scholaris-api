@@ -83,11 +83,11 @@ func UpdateSettingsInternal(ctx context.Context, req dto.UpdateSettingsInternalR
 		updates = append(updates,
 			dto.PermissionUpdate{
 				Actor:    dto.IdentifierString(dto.PermissionType(req.GetOwnerType()), req.Owner),
-				Relation: dto.PermOwner,
+				Relation: dto.PNOwner,
 				Target:   dto.IdentifierString(dto.PTSetting, id),
 			}, dto.PermissionUpdate{
 				Actor:    dto.IdentifierString(dto.PTUser, uid),
-				Relation: dto.PermEditor,
+				Relation: dto.PNEditor,
 				Target:   dto.IdentifierString(dto.PTSetting, id),
 			})
 	}
@@ -159,7 +159,7 @@ func FindSettings(ctx context.Context, req dto.GetSettingsRequest) (*dto.GetSett
 	if errors.Is(err, cache.Miss) {
 		perms, err := permissions.ListObjectsInternal(ctx, dto.ListObjectsRequest{
 			Actor:    dto.IdentifierString(dto.PTUser, uid),
-			Relation: dto.PermCanView,
+			Relation: dto.PNCanView,
 			Type:     string(dto.PTSetting),
 		})
 		if err != nil {

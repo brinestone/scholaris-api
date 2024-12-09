@@ -56,7 +56,7 @@ func ServeFile(w http.ResponseWriter, req *http.Request) {
 
 	p, err := permissions.CheckPermissionInternal(req.Context(), dto.InternalRelationCheckRequest{
 		Actor:    dto.IdentifierString(dto.PTUser, userId),
-		Relation: dto.PermCanView,
+		Relation: dto.PNCanView,
 		Target:   dto.IdentifierString(fileType, key),
 	})
 	if err != nil {
@@ -141,7 +141,7 @@ func UploadFile(w http.ResponseWriter, req *http.Request) {
 	if requestData.OwnerInfoSet() {
 		p, err := permissions.CheckPermissionInternal(req.Context(), dto.InternalRelationCheckRequest{
 			Actor:    dto.IdentifierString(dto.PTUser, uid),
-			Relation: dto.PermCanUploadFile,
+			Relation: dto.PNCanUploadFile,
 			Target:   dto.IdentifierString(ownerType, owner),
 		})
 		if err != nil {
@@ -203,7 +203,7 @@ func UploadFile(w http.ResponseWriter, req *http.Request) {
 		Updates: []dto.PermissionUpdate{
 			{
 				Actor:    dto.IdentifierString(ownerType, owner),
-				Relation: dto.PermOwner,
+				Relation: dto.PNOwner,
 				Target:   dto.IdentifierString(fileType, key),
 			},
 		},

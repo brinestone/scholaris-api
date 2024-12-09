@@ -18,7 +18,7 @@ import (
 //encore:middleware target=tag:can_set_setting
 func UserCanSetSettingValue(req middleware.Request, next middleware.Next) middleware.Response {
 	var ownerInfo = req.Data().Payload.(models.OwnerInfo)
-	if err := doPermissionCheck(req.Context(), ownerInfo, dto.PermCanSetSettingValue); err != nil {
+	if err := doPermissionCheck(req.Context(), ownerInfo, dto.PNCanSetSettingValue); err != nil {
 		return middleware.Response{
 			Err: err,
 		}
@@ -32,7 +32,7 @@ func UserCanSetSettingValue(req middleware.Request, next middleware.Next) middle
 //encore:middleware target=tag:can_update_settings
 func UserCanUpdateSettings(req middleware.Request, next middleware.Next) middleware.Response {
 	var ownerInfo = req.Data().Payload.(models.OwnerInfo)
-	if err := doPermissionCheck(req.Context(), ownerInfo, dto.PermCanEditSettings); err != nil {
+	if err := doPermissionCheck(req.Context(), ownerInfo, dto.PNCanEditSettings); err != nil {
 		return middleware.Response{
 			Err: err,
 		}
@@ -46,7 +46,7 @@ func UserCanUpdateSettings(req middleware.Request, next middleware.Next) middlew
 //encore:middleware target=tag:can_view_settings
 func UserCanViewSettings(req middleware.Request, next middleware.Next) middleware.Response {
 	var ownerInfo = req.Data().Payload.(models.OwnerInfo)
-	if err := doPermissionCheck(req.Context(), ownerInfo, dto.PermCanViewSettings); err != nil {
+	if err := doPermissionCheck(req.Context(), ownerInfo, dto.PNCanViewSettings); err != nil {
 		return middleware.Response{
 			Err: err,
 		}

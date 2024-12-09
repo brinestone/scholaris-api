@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"encore.dev/beta/auth"
-	"github.com/brinestone/scholaris/helpers"
 )
 
 type PermissionType string
@@ -63,64 +62,64 @@ const (
 
 func ParsePermissionName(p string) (PermissionName, bool) {
 	switch p {
-	case string(PermOwner):
-		return PermOwner, true
-	case string(PermParent):
-		return PermParent, true
-	case string(PermMember):
-		return PermMember, true
-	case string(PermDestination):
-		return PermDestination, true
-	case string(PermCanCreateForms):
-		return PermCanCreateForms, true
-	case string(PermFormResponder):
-		return PermFormResponder, true
-	case string(PermCanView):
-		return PermCanView, true
-	case string(PermCanViewSettings):
-		return PermCanViewSettings, true
-	case string(PermCanEditSettings):
-		return PermCanEditSettings, true
-	case string(PermEditor):
-		return PermEditor, true
-	case string(PermCanEdit):
-		return PermCanEdit, true
-	case string(PermCanCreateAcademicYear):
-		return PermCanCreateAcademicYear, true
-	case string(PermCanEnroll):
-		return PermCanEnroll, true
-	case string(PermCanCreateInstitution):
-		return PermCanCreateInstitution, true
-	case string(PermCanModifyMembers):
-		return PermCanModifyMembers, true
-	case string(PermCanViewMembers):
-		return PermCanViewMembers, true
+	case string(PNOwner):
+		return PNOwner, true
+	case string(PNParent):
+		return PNParent, true
+	case string(PNMember):
+		return PNMember, true
+	case string(PNDestination):
+		return PNDestination, true
+	case string(PNCanCreateForms):
+		return PNCanCreateForms, true
+	case string(PNFormResponder):
+		return PNFormResponder, true
+	case string(PNCanView):
+		return PNCanView, true
+	case string(PNCanViewSettings):
+		return PNCanViewSettings, true
+	case string(PNCanEditSettings):
+		return PNCanEditSettings, true
+	case string(PNEditor):
+		return PNEditor, true
+	case string(PNCanEdit):
+		return PNCanEdit, true
+	case string(PNCanCreateAcademicYear):
+		return PNCanCreateAcademicYear, true
+	case string(PNCanEnroll):
+		return PNCanEnroll, true
+	case string(PNCanCreateInstitution):
+		return PNCanCreateInstitution, true
+	case string(PNCanModifyMembers):
+		return PNCanModifyMembers, true
+	case string(PNCanViewMembers):
+		return PNCanViewMembers, true
 	default:
-		return permUnknown, false
+		return pnUnknown, false
 	}
 }
 
 // Permission name
 const (
-	PermOwner                 PermissionName = "owner"
-	PermParent                PermissionName = "parent"
-	PermMember                PermissionName = "member"
-	PermDestination           PermissionName = "destination"
-	PermCanCreateAcademicYear PermissionName = "can_create_academic_year"
-	PermCanCreateInstitution  PermissionName = "can_create_institution"
-	PermCanCreateForms        PermissionName = "can_create_forms"
-	PermFormResponder         PermissionName = "responder"
-	PermCanView               PermissionName = "can_view"
-	PermCanViewSettings       PermissionName = "can_view_settings"
-	PermCanUploadFile         PermissionName = "can_upload_file"
-	PermCanSetSettingValue    PermissionName = "can_set_setting_value"
-	PermCanEditSettings       PermissionName = "can_edit_settings"
-	PermEditor                PermissionName = "editor"
-	PermCanEdit               PermissionName = "can_edit"
-	PermCanEnroll             PermissionName = "can_enroll"
-	PermCanModifyMembers      PermissionName = "can_modify_members"
-	PermCanViewMembers        PermissionName = "can_view_members"
-	permUnknown               PermissionName = ""
+	PNOwner                 PermissionName = "owner"
+	PNParent                PermissionName = "parent"
+	PNMember                PermissionName = "member"
+	PNDestination           PermissionName = "destination"
+	PNCanCreateAcademicYear PermissionName = "can_create_academic_year"
+	PNCanCreateInstitution  PermissionName = "can_create_institution"
+	PNCanCreateForms        PermissionName = "can_create_forms"
+	PNFormResponder         PermissionName = "responder"
+	PNCanView               PermissionName = "can_view"
+	PNCanViewSettings       PermissionName = "can_view_settings"
+	PNCanUploadFile         PermissionName = "can_upload_file"
+	PNCanSetSettingValue    PermissionName = "can_set_setting_value"
+	PNCanEditSettings       PermissionName = "can_edit_settings"
+	PNEditor                PermissionName = "editor"
+	PNCanEdit               PermissionName = "can_edit"
+	PNCanEnroll             PermissionName = "can_enroll"
+	PNCanModifyMembers      PermissionName = "can_modify_members"
+	PNCanViewMembers        PermissionName = "can_view_members"
+	pnUnknown               PermissionName = ""
 )
 
 type ListObjectsResponse struct {
@@ -142,18 +141,13 @@ func (l ListRelationsRequest) Validate() (err error) {
 	msgs := make([]string, 0)
 
 	if len(l.Permissions) == 0 {
-		msgs = append(msgs, "The relations field is required")
+		msgs = append(msgs, "The permissions field is required and cannot be empty")
 	} else {
-		pattern := regexp.MustCompile(`^[a-zA-Z_\-0-9]+:[a-zA-Z_\-0-9]+$`)
-		fn := func(rel string) bool {
-			patternMatches := pattern.MatchString(rel)
-			_, validType := ParsePermissionType(strings.Split(rel, ":")[0])
-			return patternMatches && validType
-		}
-
-		valid := helpers.Every(l.Permissions, fn)
-		if !valid {
-			msgs = append(msgs, "Erroneous relation specifier detected")
+		for i, v := range l.Permissions {
+			_, validName := ParsePermissionName(v)
+			if !validName {
+				msgs = append(msgs, fmt.Sprintf("Invalid permission name at permissions[%d]", i))
+			}
 		}
 	}
 

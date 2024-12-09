@@ -67,7 +67,7 @@ func AllowedToEnroll(request middleware.Request, next middleware.Next) (ans midd
 
 	req := dto.InternalRelationCheckRequest{
 		Actor:    dto.IdentifierString(dto.PTUser, uid),
-		Relation: dto.PermCanEnroll,
+		Relation: dto.PNCanEnroll,
 		Target:   dto.IdentifierString(dto.PTInstitution, ownerInfo.GetOwner()),
 		Condition: &dto.RelationCondition{
 			Name: "enrollment_available",
@@ -143,7 +143,7 @@ func AllowedToCreateAcademicYear(request middleware.Request, next middleware.Nex
 
 	req := dto.InternalRelationCheckRequest{
 		Actor:    dto.IdentifierString(dto.PTUser, uid),
-		Relation: dto.PermCanCreateAcademicYear,
+		Relation: dto.PNCanCreateAcademicYear,
 		Target:   dto.IdentifierString(dto.PTInstitution, ownerInfo.GetOwner()),
 	}
 	res, err := permissions.CheckPermissionInternal(request.Context(), req)
@@ -219,7 +219,7 @@ func AllowedToCreateInstitutionMiddleware(req middleware.Request, next middlewar
 
 	ans, err := permissions.CheckPermissionInternal(req.Context(), dto.InternalRelationCheckRequest{
 		Actor:    dto.IdentifierString(dto.PTUser, userId),
-		Relation: dto.PermCanCreateInstitution,
+		Relation: dto.PNCanCreateInstitution,
 		Target:   dto.IdentifierString(dto.PTTenant, data.TenantId),
 	})
 
