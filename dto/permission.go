@@ -94,6 +94,20 @@ func ParsePermissionName(p string) (PermissionName, bool) {
 		return PNCanModifyMembers, true
 	case string(PNCanViewMembers):
 		return PNCanViewMembers, true
+	case string(PNCanSetSettingValue):
+		return PNCanSetSettingValue, true
+	case string(PNCanUploadFile):
+		return PNCanUploadFile, true
+	case string(PNCanChangeOwner):
+		return PNCanChangeOwner, true
+	case string(PNCanCreateSetting):
+		return PNCanCreateSetting, true
+	case string(PNCanDelete):
+		return PNCanDelete, true
+	case string(PNCanUpdate):
+		return PNCanUpdate, true
+	case string(PNCanUpdateSubscription):
+		return PNCanUpdateSubscription, true
 	default:
 		return pnUnknown, false
 	}
@@ -119,6 +133,11 @@ const (
 	PNCanEnroll             PermissionName = "can_enroll"
 	PNCanModifyMembers      PermissionName = "can_modify_members"
 	PNCanViewMembers        PermissionName = "can_view_members"
+	PNCanChangeOwner        PermissionName = "can_change_owner"
+	PNCanCreateSetting      PermissionName = "can_change_settings"
+	PNCanDelete             PermissionName = "can_delete"
+	PNCanUpdate             PermissionName = "can_update"
+	PNCanUpdateSubscription PermissionName = "can_update_permission"
 	pnUnknown               PermissionName = ""
 )
 
