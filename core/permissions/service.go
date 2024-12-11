@@ -2,6 +2,7 @@ package permissions
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"encore.dev"
 	"encore.dev/beta/auth"
 	"encore.dev/rlog"
+	"encore.dev/storage/cache"
 	"github.com/brinestone/scholaris/dto"
 	"github.com/brinestone/scholaris/helpers"
 	"github.com/brinestone/scholaris/util"
@@ -66,22 +68,40 @@ func initService() (*Service, error) {
 func (s *Service) ListRelations(ctx context.Context, req dto.ListRelationsRequest) (ans *dto.ListRelationsResponse, err error) {
 	ans = new(dto.ListRelationsResponse)
 	uid, _ := auth.UserID()
-	body := client.ClientListRelationsRequest{
-		User:      dto.IdentifierString(dto.PTUser, uid),
-		Relations: req.Permissions,
-		Object:    req.Target,
-	}
+	cacheKey := relationsCacheKey(uid, req.Permissions...)
+	ans.Relations, err = relationsCache.Items(ctx, cacheKey)
+	if errors.Is(err, cache.Miss) {
+		body := client.ClientListRelationsRequest{
+			User:      dto.IdentifierString(dto.PTUser, uid),
+			Relations: req.Permissions,
+			Object:    req.Target,
+		}
 
-	res, err := s.fgaClient.ListRelations(ctx).
-		Body(body).
-		Execute()
-	if err != nil {
-		rlog.Error(util.MsgCallError, "err", err)
+		var res *client.ClientListRelationsResponse
+		res, err = s.fgaClient.ListRelations(ctx).
+			Body(body).
+			Execute()
+		if err != nil {
+			rlog.Error(util.MsgCallError, "err", err)
+			err = &util.ErrUnknown
+			return
+		}
+
+		ans.Relations = res.Relations
+		defer func() {
+			for i, v := range res.Relations {
+				if err := relationsCache.Set(ctx, cacheKey, int64(i), v); err != nil {
+					rlog.Error(util.MsgCacheAccessError, "err", err)
+					break
+				}
+			}
+		}()
+	} else if err != nil {
+		rlog.Error(util.MsgCacheAccessError, "err", err)
 		err = &util.ErrUnknown
+		ans = nil
 		return
 	}
-
-	ans.Relations = res.Relations
 	return
 }
 
