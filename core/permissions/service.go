@@ -93,7 +93,7 @@ func (s *Service) ListRelations(ctx context.Context, req dto.ListRelationsReques
 			relationsCache.RemoveAll(ctx, cacheKey, "")
 			for i, v := range res.Relations {
 				if err := relationsCache.Set(ctx, cacheKey, int64(i), v); err != nil {
-					rlog.Error(util.MsgCacheAccessError, "err", err)
+					rlog.Error(util.MsgCacheAccessError, "err", err, "value", v, "index", i)
 					break
 				}
 			}
