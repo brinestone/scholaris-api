@@ -2,7 +2,6 @@ package permissions
 
 import (
 	"context"
-	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -10,7 +9,6 @@ import (
 	"encore.dev"
 	"encore.dev/beta/auth"
 	"encore.dev/rlog"
-	"encore.dev/storage/cache"
 	"github.com/brinestone/scholaris/dto"
 	"github.com/brinestone/scholaris/helpers"
 	"github.com/brinestone/scholaris/util"
@@ -70,7 +68,7 @@ func (s *Service) ListRelations(ctx context.Context, req dto.ListRelationsReques
 	uid, _ := auth.UserID()
 	cacheKey := relationsCacheKey(uid, req.Target, req.Permissions...)
 	ans.Relations, err = relationsCache.Items(ctx, cacheKey)
-	if errors.Is(err, cache.Miss) {
+	if len(ans.Relations) == 0 {
 		body := client.ClientListRelationsRequest{
 			User:      dto.IdentifierString(dto.PTUser, uid),
 			Relations: req.Permissions,
