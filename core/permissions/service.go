@@ -2,6 +2,7 @@ package permissions
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"encore.dev"
 	"encore.dev/beta/auth"
 	"encore.dev/rlog"
+	"encore.dev/storage/cache"
 	"github.com/brinestone/scholaris/dto"
 	"github.com/brinestone/scholaris/helpers"
 	"github.com/brinestone/scholaris/util"
@@ -63,12 +65,11 @@ func initService() (*Service, error) {
 // List Objects with valid relations
 //
 // encore:api auth method=POST path=/permissions/related
-func (s *Service) ListRelations(ctx context.Context, req dto.ListRelationsRequest) (ans *dto.ListRelationsResponse, err error) {
-	ans = new(dto.ListRelationsResponse)
+func (s *Service) ListRelations(ctx context.Context, req dto.ListRelationsRequest) (ans dto.ListRelationsResponse, err error) {
 	uid, _ := auth.UserID()
 	cacheKey := relationsCacheKey(uid, req.Target, req.Permissions...)
-	ans.Relations, err = relationsCache.Items(ctx, cacheKey)
-	if len(ans.Relations) == 0 {
+	ans, err = relationsCache.Get(ctx, cacheKey)
+	if errors.Is(err, cache.Miss) {
 		body := client.ClientListRelationsRequest{
 			User:      dto.IdentifierString(dto.PTUser, uid),
 			Relations: req.Permissions,
@@ -87,21 +88,13 @@ func (s *Service) ListRelations(ctx context.Context, req dto.ListRelationsReques
 
 		ans.Relations = res.Relations
 		defer func() {
-			if len(res.Relations) == 0 {
-				return
-			}
-			relationsCache.RemoveAll(ctx, cacheKey, "")
-			for i, v := range res.Relations {
-				if err := relationsCache.Set(ctx, cacheKey, int64(i), v); err != nil {
-					rlog.Error(util.MsgCacheAccessError, "err", err, "value", v, "index", i)
-					break
-				}
+			if err := relationsCache.Set(ctx, cacheKey, ans); err != nil {
+				rlog.Error(util.MsgCacheAccessError, "err", err, "value", ans)
 			}
 		}()
 	} else if err != nil {
 		rlog.Error(util.MsgCacheAccessError, "err", err)
 		err = &util.ErrUnknown
-		ans = nil
 		return
 	}
 	return

@@ -6,10 +6,11 @@ import (
 	"encore.dev/beta/auth"
 	"encore.dev/storage/cache"
 	"github.com/brinestone/scholaris/core/pkg"
+	"github.com/brinestone/scholaris/dto"
 	"github.com/brinestone/scholaris/util"
 )
 
-var relationsCache = cache.NewListKeyspace[string, string](pkg.CacheCluster, cache.KeyspaceConfig{
+var relationsCache = cache.NewStructKeyspace[string, dto.ListRelationsResponse](pkg.CacheCluster, cache.KeyspaceConfig{
 	KeyPattern:    "relations/:key",
 	DefaultExpiry: cache.ExpireIn(time.Hour * 2),
 })
