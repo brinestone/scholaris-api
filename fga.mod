@@ -5,3 +5,4 @@ contents:
     - tenants/tenant.fga
     - forms/forms.fga
     - settings/settings.fga
+    - blob/blob.fga

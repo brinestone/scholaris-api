@@ -51,14 +51,14 @@ func CreateAcademicYear(ctx context.Context, req dto.NewAcademicYearRequest) err
 		Updates: []dto.PermissionUpdate{
 			{
 				Actor:    dto.IdentifierString(dto.PTInstitution, req.GetOwner()),
-				Relation: models.PermOwner,
+				Relation: dto.PNOwner,
 				Target:   dto.IdentifierString(dto.PTAcademicYear, yearId),
 			},
 		},
 	}
 
 	for _, termId := range termIds {
-		r.Updates = append(r.Updates, dto.NewPermissionUpdate[uint64](dto.IdentifierString(dto.PTAcademicYear, yearId), models.PermOwner, dto.IdentifierString(dto.PTAcademicTerm, termId)))
+		r.Updates = append(r.Updates, dto.NewPermissionUpdate[uint64](dto.IdentifierString(dto.PTAcademicYear, yearId), dto.PNOwner, dto.IdentifierString(dto.PTAcademicTerm, termId)))
 	}
 
 	if err := permissions.SetPermissions(ctx, r); err != nil {
@@ -117,21 +117,21 @@ func doAutocreateAcademicYears(ctx context.Context, wg *sync.WaitGroup, page, si
 	for rows.Next() {
 		tx, err := db.Begin(ctx)
 		if err != nil {
-			rlog.Debug(util.MsgDbAccessError, "err", err)
+			rlog.Error(util.MsgDbAccessError, "err", err)
 			return
 		}
 
 		var institution uint64
 		if err := rows.Scan(&institution); err != nil {
 			tx.Rollback()
-			rlog.Debug(util.MsgDbAccessError, "err", err)
+			rlog.Error(util.MsgDbAccessError, "err", err)
 			return
 		}
 
 		yearAndTermsMap, err := autoCreateAcademicYear(ctx, tx, institution)
 		if err != nil {
 			tx.Rollback()
-			rlog.Debug("error while auto-creating academic year", "institution", institution, "err", err)
+			rlog.Error("error while auto-creating academic year", "institution", institution, "err", err)
 			return
 		}
 
@@ -144,14 +144,14 @@ func doAutocreateAcademicYears(ctx context.Context, wg *sync.WaitGroup, page, si
 				Updates: []dto.PermissionUpdate{
 					{
 						Actor:    dto.IdentifierString(dto.PTInstitution, institution),
-						Relation: models.PermOwner,
+						Relation: dto.PNOwner,
 						Target:   dto.IdentifierString(dto.PTAcademicYear, yearId),
 					},
 				},
 			}
 
 			for _, termId := range termIds {
-				req.Updates = append(req.Updates, dto.NewPermissionUpdate[uint64](dto.IdentifierString(dto.PTAcademicYear, yearId), models.PermOwner, dto.IdentifierString(dto.PTAcademicTerm, termId)))
+				req.Updates = append(req.Updates, dto.NewPermissionUpdate[uint64](dto.IdentifierString(dto.PTAcademicYear, yearId), dto.PNOwner, dto.IdentifierString(dto.PTAcademicTerm, termId)))
 			}
 
 			if err := permissions.SetPermissions(ctx, req); err != nil {

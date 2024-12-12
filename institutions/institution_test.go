@@ -25,8 +25,8 @@ func TestLookup(t *testing.T) {
 		ids[i] = created.Id
 	}
 
-	et.MockEndpoint(permissions.ListRelations, func(ctx context.Context, p dto.ListRelationsRequest) (ans *dto.ListRelationsResponse, err error) {
-		ans = &dto.ListRelationsResponse{
+	et.MockEndpoint(permissions.ListObjectsInternal, func(ctx context.Context, p dto.ListObjectsRequest) (ans *dto.ListObjectsResponse, err error) {
+		ans = &dto.ListObjectsResponse{
 			Relations: map[dto.PermissionType][]uint64{
 				dto.PTInstitution: ids,
 			},
@@ -35,18 +35,36 @@ func TestLookup(t *testing.T) {
 	})
 	defer mockEndpoints()
 
-	res, err := institutions.Lookup(mainContext, &dto.PageBasedPaginationParams{
-		Page: 0,
-		Size: 10,
+	t.Run("all", func(t *testing.T) {
+		res, err := institutions.Lookup(mainContext, dto.LookupInstitutionsRequest{
+			Page: 0,
+			Size: 10,
+		})
+
+		if err != nil {
+			t.Error(err)
+			return
+		}
+
+		assert.NotNil(t, res)
+		assert.NotEmpty(t, res.Institutions)
 	})
 
-	if err != nil {
-		t.Error(err)
-		return
-	}
+	t.Run("subscribedOnly", func(t *testing.T) {
+		res, err := institutions.Lookup(mainContext, dto.LookupInstitutionsRequest{
+			Page:           0,
+			Size:           10,
+			SubscribedOnly: true,
+		})
 
-	assert.NotNil(t, res)
-	assert.GreaterOrEqual(t, uint(len(res.Institutions)), cnt)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+
+		assert.NotNil(t, res)
+		assert.GreaterOrEqual(t, uint(len(res.Institutions)), cnt)
+	})
 }
 
 func TestNewIntitution(t *testing.T) {

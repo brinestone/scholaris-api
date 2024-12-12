@@ -6,13 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
-	"encore.dev/beta/auth"
 	"encore.dev/beta/errs"
 	"encore.dev/rlog"
 	"encore.dev/storage/cache"
@@ -36,7 +33,6 @@ func NewExternalUser(ctx context.Context, req dto.NewExternalUserRequest) (ans *
 
 	uid, err := createExternalUser(ctx, tx, req)
 	if err != nil {
-		rlog.Debug("here1")
 		tx.Rollback()
 		return
 	}
@@ -83,31 +79,6 @@ func DeleteInternal(ctx context.Context, id uint64) (err error) {
 		Timestamp: time.Now(),
 	})
 	return
-}
-
-// Uploads a user's profile photo
-//
-//encore:api raw auth path=/avatars/:id
-func UploadProfilePhoto(w http.ResponseWriter, req *http.Request) {
-	userId, _ := auth.UserID()
-	key := util.HashThese(string(userId), time.Now().String())
-
-	upload := profilePhotoUploads.Upload(req.Context(), key)
-	_, err := io.Copy(upload, req.Body)
-	if err != nil {
-		upload.Abort(err)
-		rlog.Error(util.MsgUploadError, "msg", err.Error())
-		errs.HTTPError(w, &util.ErrUnknown)
-		return
-	}
-
-	if err := upload.Close(); err != nil {
-		rlog.Error(util.MsgUploadError, "msg", err.Error())
-		errs.HTTPError(w, &util.ErrUnknown)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
 }
 
 // Fetches a paginated set of Users
@@ -542,12 +513,12 @@ func findUserPasswordHashById(ctx context.Context, id uint64) (ans *string, err 
 func createExternalUser(ctx context.Context, tx *sqldb.Tx, req dto.NewExternalUserRequest) (ans uint64, err error) {
 	query := "SELECT func_create_external_user($1,$2,$3,$4,$5,$6,$7,$8,$9,$10);"
 
-	emailsJson := helpers.Map(req.Emails, func(e dto.ExternalUserEmailAddressData) string {
+	emailsJson := helpers.SliceMap(req.Emails, func(e dto.ExternalUserEmailAddressData) string {
 		j, _ := json.Marshal(e)
 		return string(j)
 	})
 
-	phonesJson := helpers.Map(req.Phones, func(a dto.ExternalUserPhoneData) string {
+	phonesJson := helpers.SliceMap(req.Phones, func(a dto.ExternalUserPhoneData) string {
 		j, _ := json.Marshal(a)
 		return string(j)
 	})

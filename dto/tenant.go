@@ -1,11 +1,27 @@
 package dto
 
 import (
+	"errors"
 	"strings"
 	"time"
 
 	"encore.dev/beta/errs"
 )
+
+type TenantNameAvailableResponse struct {
+	Available bool `json:"available"`
+}
+
+type TenantNameAvailableRequest struct {
+	Name string `query:"name"`
+}
+
+func (t TenantNameAvailableRequest) Validate() error {
+	if len(t.Name) == 0 {
+		return errors.New("invalid value for name")
+	}
+	return nil
+}
 
 type SubscriptionPlanBenefit struct {
 	Name     string  `json:"name"`

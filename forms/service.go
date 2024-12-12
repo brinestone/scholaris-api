@@ -341,9 +341,9 @@ func GetFormInfo(ctx context.Context, form uint64) (*dto.FormConfig, error) {
 		return nil, &util.ErrForbidden
 	}
 
-	perm, err := permissions.CheckPermission(ctx, dto.RelationCheckRequest{
+	perm, err := permissions.CheckPermissionInternal(ctx, dto.InternalRelationCheckRequest{
 		Actor:    dto.IdentifierString(dto.PTUser, uid),
-		Relation: models.PermCanView,
+		Relation: dto.PNCanView,
 		Target:   dto.IdentifierString(dto.PTForm, form),
 	})
 
@@ -644,13 +644,13 @@ func FindFormQuestions(ctx context.Context, id uint64) (*dto.GetFormQuestionsRes
 //
 //encore:api public method=GET path=/forms
 func FindForms(ctx context.Context, params dto.FindFormsRequest) (*dto.GetFormsResponse, error) {
-	ownerType, _ := dto.PermissionTypeFromString(params.OwnerType)
+	ownerType, _ := dto.ParsePermissionType(params.OwnerType)
 	var overrides []uint64
 	uid, authed := auth.UserID()
 	if authed {
-		res, err := permissions.ListRelations(ctx, dto.ListRelationsRequest{
+		res, err := permissions.ListObjectsInternal(ctx, dto.ListObjectsRequest{
 			Actor:    dto.IdentifierString(dto.PTUser, uid),
-			Relation: models.PermEditor,
+			Relation: dto.PNEditor,
 			Type:     string(dto.PTForm),
 		})
 		if err != nil {
@@ -692,10 +692,10 @@ func FindForms(ctx context.Context, params dto.FindFormsRequest) (*dto.GetFormsR
 //encore:api auth method=POST path=/forms tag:needs_captcha_ver
 func NewForm(ctx context.Context, req dto.NewFormInput) (response dto.NewFormResponse, err error) {
 	uid, _ := auth.UserID()
-	pt, _ := dto.PermissionTypeFromString(req.OwnerType)
-	permission, err := permissions.CheckPermission(ctx, dto.RelationCheckRequest{
+	pt, _ := dto.ParsePermissionType(req.OwnerType)
+	permission, err := permissions.CheckPermissionInternal(ctx, dto.InternalRelationCheckRequest{
 		Actor:    dto.IdentifierString(dto.PTUser, uid),
-		Relation: models.PermCanCreateForms,
+		Relation: dto.PNCanCreateForms,
 		Target:   dto.IdentifierString(pt, req.Owner),
 	})
 	if err != nil || !permission.Allowed {
@@ -728,11 +728,11 @@ func NewForm(ctx context.Context, req dto.NewFormInput) (response dto.NewFormRes
 		Updates: []dto.PermissionUpdate{
 			{
 				Actor:    dto.IdentifierString(dto.PermissionType(req.OwnerType), req.Owner),
-				Relation: models.PermOwner,
+				Relation: dto.PNOwner,
 				Target:   dto.IdentifierString(dto.PTForm, response.Id),
 			}, {
 				Actor:    dto.IdentifierString(dto.PTUser, uid),
-				Relation: models.PermEditor,
+				Relation: dto.PNEditor,
 				Target:   dto.IdentifierString(dto.PTForm, response.Id),
 			},
 		},

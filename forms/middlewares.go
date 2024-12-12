@@ -129,9 +129,9 @@ func CanUserRespondToForm(req middleware.Request, next middleware.Next) middlewa
 func VerifyFormEditor(req middleware.Request, next middleware.Next) middleware.Response {
 	uid, _ := encoreAuth.UserID()
 	form := req.Data().PathParams.Get("form")
-	canEdit, err := permissions.CheckPermission(req.Context(), dto.RelationCheckRequest{
+	canEdit, err := permissions.CheckPermissionInternal(req.Context(), dto.InternalRelationCheckRequest{
 		Actor:    dto.IdentifierString(dto.PTUser, uid),
-		Relation: models.PermEditor,
+		Relation: dto.PNEditor,
 		Target:   dto.IdentifierString(dto.PTForm, form),
 	})
 	if err != nil {

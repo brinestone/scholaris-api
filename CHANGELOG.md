@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [2.2.0](https://github.com/brinestone/scholaris-api/compare/v2.1.0...v2.2.0) (2024-12-12)
+
+
+### Features
+
+* **blob:** basic upload/download support ([f42c7ed](https://github.com/brinestone/scholaris-api/commit/f42c7edebab74816a9487ad6bf106481d3520ec1))
+* **instiutions:** remove params from lookup endpoint ([3cc6467](https://github.com/brinestone/scholaris-api/commit/3cc64674d66e5a2b6e101be8d1bcfb8a2bb2c9bf))
+* **permissions:** cache ListRelations endpoint ([a5e7111](https://github.com/brinestone/scholaris-api/commit/a5e7111b08c424137096de20ff7c1bf4c44abd39))
+* **permissions:** relations listing api ([79304af](https://github.com/brinestone/scholaris-api/commit/79304af10ec624a1799acb5498b9e3d69a663071))
+* **tenants:** name availability endpoint ([df9ae87](https://github.com/brinestone/scholaris-api/commit/df9ae8782cd7a48ea2a7de2e5d415a6cbef0e861))
+* **tenants:** remove params for lookup ([95895f0](https://github.com/brinestone/scholaris-api/commit/95895f05cb71b8ca04c7cac2863b932f0bdace68))
+
+
+### Bug Fixes
+
+* **permissions:** fix bad validation for ListRelationsRequest ([30f5117](https://github.com/brinestone/scholaris-api/commit/30f5117ecee402a36295ad5345e67b23bcf899fa))
+* **permissions:** fix bad validation for ListRelationsRequest ([aecd933](https://github.com/brinestone/scholaris-api/commit/aecd93387d3b4f0580f6cb27b445f6b790ab2344))
+* **permissions:** fix bad validation for ListRelationsRequest ([27e1b3f](https://github.com/brinestone/scholaris-api/commit/27e1b3f58ea27447b0474e86c04834bf4b2263bd))
+* **permissions:** fix bad validation for ListRelationsRequest ([35e5238](https://github.com/brinestone/scholaris-api/commit/35e5238d2ca34aca494cb0533cf4aed8ed134e4d))
+* **permissions:** fix list relations endpoin ([ede8ca4](https://github.com/brinestone/scholaris-api/commit/ede8ca4250d336b8eab61532c5bdb6c84df5216d))
+* **permissions:** fix listRelations endpoint caching key gen ([ae6f344](https://github.com/brinestone/scholaris-api/commit/ae6f34415c79453e05ae098fa9858c1f287bdfac))
+* **permissions:** fix listRelations endpoint caching key gen ([65eecf3](https://github.com/brinestone/scholaris-api/commit/65eecf39a0de4fb23641446966991be30705b669))
+* **permissions:** fix listRelations endpoint caching key gen ([a32875f](https://github.com/brinestone/scholaris-api/commit/a32875f5720716cdc009496f994342054264242e))
+* **permissions:** fix listRelations endpoint caching key gen 2 ([55f3c3c](https://github.com/brinestone/scholaris-api/commit/55f3c3c338d9528ec6fe12f55241b06626880fbc))
+* **permissions:** fix listRelations endpoint caching key gen 3 ([fa293ef](https://github.com/brinestone/scholaris-api/commit/fa293ef6f25ee46759d5adad17083e452b9e4c2b))
+
 ## [2.1.0](https://github.com/brinestone/scholaris-api/compare/v2.0.1...v2.1.0) (2024-11-28)
 
 

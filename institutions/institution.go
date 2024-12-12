@@ -39,30 +39,35 @@ func GetInstitution(ctx context.Context, identifier string) (*dto.Institution, e
 // Looks up institutions
 //
 //encore:api public method=GET path=/institutions
-func Lookup(ctx context.Context, req *dto.PageBasedPaginationParams) (*dto.LookupInstitutionsResponse, error) {
+func Lookup(ctx context.Context, req dto.LookupInstitutionsRequest) (*dto.LookupInstitutionsResponse, error) {
 	uid, authed := auth.UserID()
-	var accessibleInstitutions []uint64
+	var memberedRefs []uint64
 
 	if authed {
-		memberedInstitutions, err := permissions.ListRelations(ctx, dto.ListRelationsRequest{
+		memberedInstitutions, err := permissions.ListObjectsInternal(ctx, dto.ListObjectsRequest{
 			Actor:    dto.IdentifierString(dto.PTUser, uid),
-			Relation: models.PermMember,
+			Relation: dto.PNMember,
 			Type:     string(dto.PTInstitution),
 		})
 		if err != nil {
 			return nil, err
 		}
-		accessibleInstitutions = memberedInstitutions.Relations[dto.PTInstitution]
+		memberedRefs = memberedInstitutions.Relations[dto.PTInstitution]
 	}
-
-	ans, err := lookupInstitutions(ctx, req.Page, req.Size, accessibleInstitutions)
+	var ans []*models.Institution
+	var err error
+	if req.SubscribedOnly {
+		ans, err = lookupSubscribedInstitutions(ctx, req.Page, req.Size, memberedRefs)
+	} else {
+		ans, err = lookupInstitutions(ctx, req.Page, req.Size, memberedRefs)
+	}
 	if err != nil {
 		rlog.Error(err.Error())
 		return nil, &util.ErrUnknown
 	}
 
 	return &dto.LookupInstitutionsResponse{
-			Institutions: toInstitutionLookup(ans...),
+			Institutions: toInstitutionDtos(ans...),
 		},
 		nil
 }
@@ -115,7 +120,7 @@ func NewInstitution(ctx context.Context, req dto.NewInstitutionRequest) (*dto.In
 		Updates: []dto.PermissionUpdate{
 			{
 				Actor:    dto.IdentifierString(dto.PTTenant, req.TenantId),
-				Relation: models.PermParent,
+				Relation: dto.PNParent,
 				Target:   dto.IdentifierString(dto.PTInstitution, i.Id),
 			},
 		},
@@ -277,7 +282,7 @@ func findInstitutionByKeyFromDb(ctx context.Context, key string, value any) (*mo
 	return i, nil
 }
 
-func toInstitutionLookup(in ...*models.Institution) (res []dto.InstitutionLookup) {
+func toInstitutionDtos(in ...*models.Institution) (res []dto.InstitutionLookup) {
 	res = make([]dto.InstitutionLookup, len(in))
 	for i, v := range in {
 		u := dto.InstitutionLookup{
@@ -318,6 +323,16 @@ func toInstitutionDto(in ...*models.Institution) (res []dto.Institution) {
 			IsMember:  false,
 		}
 
+		if v.CurrentYear.Valid {
+			tmp := uint64(v.CurrentYear.Int64)
+			u.CurrentYear = &tmp
+		}
+
+		if v.CurrentTerm.Valid {
+			tmp := uint64(v.CurrentTerm.Int64)
+			u.CurrentTerm = &tmp
+		}
+
 		if v.Logo.Valid {
 			u.Logo = &v.Logo.String
 		}
@@ -332,22 +347,30 @@ func toInstitutionDto(in ...*models.Institution) (res []dto.Institution) {
 	return
 }
 
+func lookupSubscribedInstitutions(ctx context.Context, page, size uint, ids []uint64) (ans []*models.Institution, err error) {
+	query := "SELECT id,name,description,logo,visible,slug,tenant,verified,created_at,updated_at,current_year,current_term FROM vw_AllInstitutions WHERE id=ANY($1) OFFSET $2 LIMIT $3;"
+
+	rows, err := db.Query(ctx, query, pq.Array(ids), page*size, size)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var i = new(models.Institution)
+		if err = rows.Scan(&i.Id, &i.Name, &i.Description, &i.Logo, &i.Visible, &i.Slug, &i.TenantId, &i.Verified, &i.CreatedAt, &i.UpdatedAt, &i.CurrentYear, &i.CurrentTerm); err != nil {
+			return
+		}
+		ans = append(ans, i)
+	}
+	return
+}
+
 func lookupInstitutions(ctx context.Context, page, size uint, ids []uint64) ([]*models.Institution, error) {
 	ans := make([]*models.Institution, 0)
+	query := "SELECT id,name,description,logo,visible,slug,tenant,verified,created_at,updated_at,current_year,current_term FROM vw_AllInstitutions WHERE id=ANY($1) OR verified=true OFFSET $2 LIMIT $3;"
 
-	var query = fmt.Sprintf(
-		`
-		SELECT
-			%s
-		FROM
-			institutions
-		WHERE
-			id=ANY($3) OR verified=true
-		OFFSET $1
-		LIMIT $2;
-	`, institutionFields)
-
-	rows, err := db.Query(ctx, query, page*size, size, pq.Array(ids))
+	rows, err := db.Query(ctx, query, pq.Array(ids), page*size, size)
 	if err != nil {
 		if !errors.Is(err, sqldb.ErrNoRows) {
 			return ans, err
@@ -357,7 +380,7 @@ func lookupInstitutions(ctx context.Context, page, size uint, ids []uint64) ([]*
 
 	for rows.Next() {
 		var i = new(models.Institution)
-		if err := rows.Scan(&i.Id, &i.Name, &i.Description, &i.Logo, &i.Visible, &i.Slug, &i.TenantId, &i.CreatedAt, &i.UpdatedAt, &i.Verified); err != nil {
+		if err := rows.Scan(&i.Id, &i.Name, &i.Description, &i.Logo, &i.Visible, &i.Slug, &i.TenantId, &i.Verified, &i.CreatedAt, &i.UpdatedAt, &i.CurrentYear, &i.CurrentTerm); err != nil {
 			return ans, err
 		}
 		ans = append(ans, i)

@@ -8,10 +8,8 @@ import (
 func HashThese(args ...string) string {
 	hash := md5.New()
 	for _, arg := range args {
-		hash.Sum([]byte(arg))
+		hash.Write([]byte(arg))
 	}
-	buf := make([]byte, 0)
-	hash.Write(buf)
 
-	return hex.EncodeToString(buf)
+	return hex.EncodeToString(hash.Sum(nil))
 }

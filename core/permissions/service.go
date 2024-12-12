@@ -2,13 +2,18 @@ package permissions
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 	"time"
 
 	"encore.dev"
+	"encore.dev/beta/auth"
 	"encore.dev/rlog"
+	"encore.dev/storage/cache"
 	"github.com/brinestone/scholaris/dto"
+	"github.com/brinestone/scholaris/helpers"
+	"github.com/brinestone/scholaris/util"
 	openfga "github.com/openfga/go-sdk"
 	"github.com/openfga/go-sdk/client"
 	"github.com/openfga/go-sdk/credentials"
@@ -59,12 +64,54 @@ func initService() (*Service, error) {
 
 // List Objects with valid relations
 //
-//encore:api private method=POST path=/permissions/related
-func (s *Service) ListRelations(ctx context.Context, req dto.ListRelationsRequest) (*dto.ListRelationsResponse, error) {
+// encore:api auth method=POST path=/permissions/related
+func (s *Service) ListRelations(ctx context.Context, req dto.ListRelationsRequest) (ans dto.ListRelationsResponse, err error) {
+	uid, _ := auth.UserID()
+	cacheKey := relationsCacheKey(uid, req.Target, req.Permissions...)
+	ans, err = relationsCache.Get(ctx, cacheKey)
+	if errors.Is(err, cache.Miss) {
+		body := client.ClientListRelationsRequest{
+			User:      dto.IdentifierString(dto.PTUser, uid),
+			Relations: req.Permissions,
+			Object:    req.Target,
+		}
+
+		var res *client.ClientListRelationsResponse
+		res, err = s.fgaClient.ListRelations(ctx).
+			Body(body).
+			Execute()
+		if err != nil {
+			rlog.Error(util.MsgCallError, "err", err)
+			err = &util.ErrUnknown
+			return
+		}
+
+		ans.Relations = res.Relations
+		defer func() {
+			if err := relationsCache.Set(ctx, cacheKey, ans); err != nil {
+				rlog.Error(util.MsgCacheAccessError, "err", err, "value", ans)
+			}
+		}()
+	} else if err != nil {
+		rlog.Error(util.MsgCacheAccessError, "err", err)
+		err = &util.ErrUnknown
+		return
+	}
+	return
+}
+
+// List Objects with valid relations (Internal API)
+//
+//encore:api private method=POST path=/permissions/related/internal
+func (s *Service) ListObjectsInternal(ctx context.Context, req dto.ListObjectsRequest) (*dto.ListObjectsResponse, error) {
 	reqBody := client.ClientListObjectsRequest{
 		User:     req.Actor,
-		Relation: req.Relation,
+		Relation: string(req.Relation),
 		Type:     string(req.Type),
+	}
+
+	if len(req.Context) > 0 {
+		reqBody.Context = contextEntriesToMap(req.Context...)
 	}
 
 	data, err := s.fgaClient.ListObjects(ctx).
@@ -78,58 +125,57 @@ func (s *Service) ListRelations(ctx context.Context, req dto.ListRelationsReques
 
 	for _, rel := range data.GetObjects() {
 		arr := strings.Split(rel, ":")
-		p, _ := dto.PermissionTypeFromString(arr[0])
+		p, _ := dto.ParsePermissionType(arr[0])
 		id, _ := strconv.ParseUint(arr[1], 10, 64)
 		resultMap[p] = append(resultMap[p], id)
 	}
 
-	return &dto.ListRelationsResponse{
+	return &dto.ListObjectsResponse{
 		Relations: resultMap,
 	}, nil
 }
 
-// Checks whether a permission is valid or not.
+// Checks whether a permission is valid or not
 //
-//encore:api private method=POST path=/permissions/check
-func (s *Service) CheckPermission(ctx context.Context, req dto.RelationCheckRequest) (*dto.RelationCheckResponse, error) {
-	request := client.ClientCheckRequest{
-		User:     req.Actor,
-		Relation: req.Relation,
-		Object:   req.Target,
-	}
+//encore:api auth method=POST path=/permissions/check
+func (s *Service) CheckPermission(ctx context.Context, req dto.BatchRelationCheckRequest) (ans *dto.BatchRelationCheckResponse, err error) {
+	ans = new(dto.BatchRelationCheckResponse)
+	ans.Results = make(map[string]bool)
 
-	if req.Condition != nil {
-		c := make(map[string]interface{})
-		request.Context = &c
-
-		for _, v := range req.Condition.Context {
-			switch v.Type {
-			case dto.CETBool:
-				c[v.Name], _ = strconv.ParseBool(v.Value)
-			case dto.CETTimestamp:
-				c[v.Name], _ = time.Parse(time.RFC3339, v.Value)
-			case dto.CETDuration:
-				t, err := time.ParseDuration(v.Value)
-				if err != nil {
-					continue
-				}
-				c[v.Name] = t.String()
-			default:
-				c[v.Name] = v.Value
+	uid, _ := auth.UserID()
+	actor := dto.IdentifierString(dto.PTUser, uid)
+	res, err := s.fgaClient.BatchCheck(ctx).
+		Body(helpers.SliceMap(req.Checks, func(c dto.RelationCheck) client.ClientCheckRequest {
+			return client.ClientCheckRequest{
+				User:     actor,
+				Relation: c.Relation,
+				Object:   c.Target,
 			}
-		}
-	}
-
-	res, err := s.fgaClient.
-		Check(ctx).
-		Body(request).
+		})).
 		Execute()
-
 	if err != nil {
-		rlog.Error(err.Error())
+		rlog.Error(util.MsgCallError, "err", err)
+		err = &util.ErrUnknown
 	}
 
-	return &dto.RelationCheckResponse{Allowed: *res.Allowed}, nil
+	if res == nil {
+		ans = nil
+		return
+	}
+
+	ans.Results = helpers.SliceReduce(*res, func(c client.ClientBatchCheckSingleResponse, r map[string]bool) map[string]bool {
+		r[c.Request.Relation] = *c.Allowed
+		return r
+	}, helpers.WithSeed(ans.Results))
+	return
+}
+
+// Checks whether a permission is valid or not (Internal API)
+//
+//encore:api private method=POST path=/permissions/check/internal
+func (s *Service) CheckPermissionInternal(ctx context.Context, req dto.InternalRelationCheckRequest) (ans *dto.RelationCheckResponse, err error) {
+	ans, err = s.doPermissionCheck(ctx, req.Actor, req.Relation, req.Target, req.Condition)
+	return
 }
 
 // Deletes permission Tuples
@@ -162,7 +208,7 @@ func toOpenFgaDeletes(updates []dto.PermissionUpdate) []openfga.TupleKeyWithoutC
 	for _, u := range updates {
 		ans = append(ans, client.ClientTupleKeyWithoutCondition{
 			User:     u.Actor,
-			Relation: u.Relation,
+			Relation: string(u.Relation),
 			Object:   u.Target,
 		})
 	}
@@ -189,11 +235,57 @@ func toOpenFgaWrites(updates []dto.PermissionUpdate) []openfga.TupleKey {
 
 		ans = append(ans, client.ClientTupleKey{
 			User:      u.Actor,
-			Relation:  u.Relation,
+			Relation:  string(u.Relation),
 			Object:    u.Target,
 			Condition: condition,
 		})
 	}
 
 	return ans
+}
+
+func contextEntriesToMap(entries ...dto.ContextEntry) (ans *map[string]any) {
+	ans = &map[string]any{}
+	c := *ans
+	for _, v := range entries {
+		switch v.Type {
+		case dto.CETBool:
+			c[v.Name], _ = strconv.ParseBool(v.Value)
+		case dto.CETTimestamp:
+			c[v.Name], _ = time.Parse(time.RFC3339, v.Value)
+		case dto.CETDuration:
+			t, err := time.ParseDuration(v.Value)
+			if err != nil {
+				continue
+			}
+			c[v.Name] = t.String()
+		default:
+			c[v.Name] = v.Value
+		}
+	}
+	return
+}
+
+func (s *Service) doPermissionCheck(ctx context.Context, actor string, relation dto.PermissionName, target string, condition *dto.RelationCondition) (ans *dto.RelationCheckResponse, err error) {
+	request := client.ClientCheckRequest{
+		User:     actor,
+		Relation: string(relation),
+		Object:   target,
+	}
+
+	if condition != nil {
+		request.Context = contextEntriesToMap(condition.Context...)
+	}
+
+	res, err := s.fgaClient.
+		Check(ctx).
+		Body(request).
+		Execute()
+
+	if err != nil {
+		return
+	}
+
+	ans = &dto.RelationCheckResponse{Allowed: *res.Allowed}
+	return
 }

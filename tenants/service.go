@@ -21,6 +21,21 @@ import (
 	"github.com/lib/pq"
 )
 
+// Checks whether a tenant name exists or not
+//
+//encore:api public method=GET path=/tenants/name-available
+func NameAvailable(ctx context.Context, req dto.TenantNameAvailableRequest) (ans dto.TenantNameAvailableResponse, err error) {
+	exists, err := tenantNameExists(ctx, req.Name)
+	if err != nil {
+		rlog.Error(util.MsgDbAccessError, "err", err)
+		err = &util.ErrUnknown
+		return
+	}
+
+	ans.Available = !exists
+	return
+}
+
 // Finds Subscription plans
 //
 //encore:api public method=GET path=/subscription-plans
@@ -38,7 +53,7 @@ func FindSubscriptionPlans(ctx context.Context) (*dto.FindSubscriptionPlansRespo
 
 // Finds a tenant using its ID
 //
-//encore:api auth method=GET path=/tenants/:id tag:can_view_tenant
+//encore:api auth method=GET path=/tenants/find/:id tag:can_view_tenant
 func FindTenant(ctx context.Context, id uint64) (*dto.TenantLookup, error) {
 	var t *models.Tenant
 	var err error
@@ -144,12 +159,12 @@ func NewTenant(ctx context.Context, req dto.NewTenantRequest) (err error) {
 		Updates: []dto.PermissionUpdate{
 			{
 				Actor:    dto.IdentifierString(dto.PTUser, user),
-				Relation: models.PermOwner,
+				Relation: dto.PNOwner,
 				Target:   dto.IdentifierString(dto.PTTenant, tenant),
 			},
 			{
 				Actor:    dto.IdentifierString(dto.PTTenant, tenant),
-				Relation: models.PermOwner,
+				Relation: dto.PNOwner,
 				Target:   dto.IdentifierString(dto.PTSubscription, subId),
 			},
 		},
@@ -172,7 +187,7 @@ func NewTenant(ctx context.Context, req dto.NewTenantRequest) (err error) {
 // Find all Tenants
 //
 //encore:api auth method=GET path=/tenants
-func Lookup(ctx context.Context, req dto.PageBasedPaginationParams) (ans *dto.FindTenantResponse, err error) {
+func Lookup(ctx context.Context) (ans *dto.FindTenantResponse, err error) {
 	uid, _ := auth.UserID()
 
 	viewable, err := lookupViewableTenantIds(ctx, uid)
@@ -187,7 +202,7 @@ func Lookup(ctx context.Context, req dto.PageBasedPaginationParams) (ans *dto.Fi
 		return
 	}
 
-	found, err := findViewableTenants(ctx, req.Page, req.Size, viewable)
+	found, err := findViewableTenants(ctx, viewable)
 	if errors.Is(err, sql.ErrNoRows) {
 		err = &util.ErrNotFound
 		return
@@ -205,9 +220,9 @@ func Lookup(ctx context.Context, req dto.PageBasedPaginationParams) (ans *dto.Fi
 }
 
 func lookupViewableTenantIds(ctx context.Context, uid auth.UID) (ans []uint64, err error) {
-	response, err := permissions.ListRelations(ctx, dto.ListRelationsRequest{
+	response, err := permissions.ListObjectsInternal(ctx, dto.ListObjectsRequest{
 		Actor:    dto.IdentifierString(dto.PTUser, uid),
-		Relation: models.PermCanView,
+		Relation: dto.PNCanView,
 		Type:     string(dto.PTTenant),
 	})
 	if err != nil {
@@ -218,7 +233,7 @@ func lookupViewableTenantIds(ctx context.Context, uid auth.UID) (ans []uint64, e
 	return
 }
 
-func findViewableTenants(ctx context.Context, page, size uint, ids []uint64) (ans []*models.Tenant, err error) {
+func findViewableTenants(ctx context.Context, ids []uint64) (ans []*models.Tenant, err error) {
 	query := `
 		SELECT 
 			id, name, created_at, updated_at
@@ -228,14 +243,11 @@ func findViewableTenants(ctx context.Context, page, size uint, ids []uint64) (an
 			id = ANY(SELECT * FROM UNNEST($1::BIGINT[]))
 		ORDER BY 
 			created_at DESC
-		OFFSET $2
-		LIMIT $3
 		;
 	`
 
-	rows, err := tenantDb.Query(ctx, query, pq.Array(ids), page*size, size)
+	rows, err := tenantDb.Query(ctx, query, pq.Array(ids))
 	if err != nil {
-		rlog.Debug("here")
 		return
 	}
 	defer rows.Close()

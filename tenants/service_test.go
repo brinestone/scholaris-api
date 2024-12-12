@@ -20,7 +20,7 @@ import (
 )
 
 func mockEndpoints() {
-	et.MockEndpoint(permissions.CheckPermission, func(ctx context.Context, req dto.RelationCheckRequest) (*dto.RelationCheckResponse, error) {
+	et.MockEndpoint(permissions.CheckPermissionInternal, func(ctx context.Context, req dto.InternalRelationCheckRequest) (*dto.RelationCheckResponse, error) {
 		return &dto.RelationCheckResponse{
 			Allowed: true,
 		}, nil
@@ -31,8 +31,8 @@ func mockEndpoints() {
 	et.MockEndpoint(sAuth.VerifyCaptchaToken, func(ctx context.Context, req sAuth.VerifyCaptchaRequest) error {
 		return nil
 	})
-	et.MockEndpoint(permissions.ListRelations, func(ctx context.Context, req dto.ListRelationsRequest) (*dto.ListRelationsResponse, error) {
-		return &dto.ListRelationsResponse{
+	et.MockEndpoint(permissions.ListObjectsInternal, func(ctx context.Context, req dto.ListObjectsRequest) (*dto.ListObjectsResponse, error) {
+		return &dto.ListObjectsResponse{
 			Relations: map[dto.PermissionType][]uint64{
 				dto.PTForm: {},
 			},
@@ -108,8 +108,8 @@ func TestFindTenant(t *testing.T) {
 	}
 
 	t.Cleanup(mockEndpoints)
-	et.MockEndpoint(permissions.ListRelations, func(ctx context.Context, p dto.ListRelationsRequest) (*dto.ListRelationsResponse, error) {
-		return &dto.ListRelationsResponse{
+	et.MockEndpoint(permissions.ListObjectsInternal, func(ctx context.Context, p dto.ListObjectsRequest) (*dto.ListObjectsResponse, error) {
+		return &dto.ListObjectsResponse{
 			Relations: map[dto.PermissionType][]uint64{
 				dto.PTTenant: {1},
 			},
@@ -138,8 +138,8 @@ func TestDeleteTenant(t *testing.T) {
 
 func TestLookup(t *testing.T) {
 	t.Cleanup(mockEndpoints)
-	et.MockEndpoint(permissions.ListRelations, func(ctx context.Context, p dto.ListRelationsRequest) (*dto.ListRelationsResponse, error) {
-		return &dto.ListRelationsResponse{
+	et.MockEndpoint(permissions.ListObjectsInternal, func(ctx context.Context, p dto.ListObjectsRequest) (*dto.ListObjectsResponse, error) {
+		return &dto.ListObjectsResponse{
 			Relations: map[dto.PermissionType][]uint64{
 				dto.PTTenant: {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11},
 			},
@@ -150,10 +150,7 @@ func TestLookup(t *testing.T) {
 		return
 	}
 
-	res, err := tenants.Lookup(mainContext, dto.PageBasedPaginationParams{
-		Page: 0,
-		Size: 100,
-	})
+	res, err := tenants.Lookup(mainContext)
 
 	if err != nil {
 		t.Error(err)
