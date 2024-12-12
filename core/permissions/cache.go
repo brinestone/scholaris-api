@@ -14,8 +14,8 @@ var relationsCache = cache.NewListKeyspace[string, string](pkg.CacheCluster, cac
 	DefaultExpiry: cache.ExpireIn(time.Hour * 2),
 })
 
-func relationsCacheKey(uid auth.UID, relations ...string) (ans string) {
-	args := append(relations, string(uid))
+func relationsCacheKey(uid auth.UID, target string, relations ...string) (ans string) {
+	args := append(relations, target, string(uid))
 	ans = util.HashThese(args...)
 	return
 }

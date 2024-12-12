@@ -68,7 +68,7 @@ func initService() (*Service, error) {
 func (s *Service) ListRelations(ctx context.Context, req dto.ListRelationsRequest) (ans *dto.ListRelationsResponse, err error) {
 	ans = new(dto.ListRelationsResponse)
 	uid, _ := auth.UserID()
-	cacheKey := relationsCacheKey(uid, req.Permissions...)
+	cacheKey := relationsCacheKey(uid, req.Target, req.Permissions...)
 	ans.Relations, err = relationsCache.Items(ctx, cacheKey)
 	if errors.Is(err, cache.Miss) {
 		body := client.ClientListRelationsRequest{
@@ -89,6 +89,10 @@ func (s *Service) ListRelations(ctx context.Context, req dto.ListRelationsReques
 
 		ans.Relations = res.Relations
 		defer func() {
+			if len(res.Relations) == 0 {
+				return
+			}
+			relationsCache.RemoveAll(ctx, cacheKey, "")
 			for i, v := range res.Relations {
 				if err := relationsCache.Set(ctx, cacheKey, int64(i), v); err != nil {
 					rlog.Error(util.MsgCacheAccessError, "err", err)
