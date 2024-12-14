@@ -56,10 +56,11 @@ type FindTenantResponse struct {
 }
 
 type TenantLookup struct {
-	Name      string    `json:"name"`
-	Id        uint64    `json:"id"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	Name             string    `json:"name"`
+	Id               uint64    `json:"id"`
+	CreatedAt        time.Time `json:"createdAt"`
+	UpdatedAt        time.Time `json:"updatedAt"`
+	SubscriptionPlan string    `json:"subscriptionPlan"`
 }
 
 type NewSubscriptionPlan struct {

@@ -6,11 +6,12 @@ import (
 )
 
 type Tenant struct {
-	Name         string
-	Id           uint64
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
-	Subscription uint64
+	Name             string
+	Id               uint64
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	Subscription     uint64
+	SubscriptionName string
 }
 
 type SubscriptionPlanBenefit struct {
