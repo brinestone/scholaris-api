@@ -16,6 +16,8 @@ type tenant
     define can_view: member
     define can_modify_members: admin or owner
     define can_view_members: maintainer or can_modify_members
+    define can_view_institutions: maintainer or admin or owner
+    define can_create_institutions: admin or owner
     # roles
     define member: maintainer or admin or owner
     define admin: [user]
