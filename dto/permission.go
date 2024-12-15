@@ -62,6 +62,8 @@ const (
 
 func ParsePermissionName(p string) (PermissionName, bool) {
 	switch p {
+	case string(PNCanViewInstitutions):
+		return PNCanViewInstitutions, true
 	case string(PNOwner):
 		return PNOwner, true
 	case string(PNParent):
@@ -141,6 +143,7 @@ const (
 	PNCanUpdate             PermissionName = "can_update"
 	PNCanUpdateSubscription PermissionName = "can_update_subscription"
 	PNCanCreateSettings     PermissionName = "can_create_settings"
+	PNCanViewInstitutions   PermissionName = "can_view_institutions"
 	pnUnknown               PermissionName = ""
 )
 
