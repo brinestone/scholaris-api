@@ -2,21 +2,19 @@ module tenant
 
 type tenant
   relations
-    # abilities
-    define can_change_owner: owner
-    define can_create_forms: maintainer or admin
-    define can_create_institution: admin or owner
-    define can_create_settings: admin or owner
+    # tenant permissions
     define can_delete: owner
-    define can_edit_settings: maintainer or admin or owner
-    define can_set_setting_value: admin or owner
     define can_update: maintainer or admin or owner
     define can_update_subscription: admin or owner
-    define can_view_settings: maintainer or admin or owner
     define can_view: member
-    define can_modify_members: admin or owner
+    # member permissions
+    define can_change_owner: owner
+    define can_add_admin: owner
+    define can_remove_admin: owner
+    define can_add_maintainer: admin or owner
+    define can_remove_maintainer: admin or owner
     define can_view_members: maintainer or can_modify_members
-    define can_view_institutions: maintainer or admin or owner
+    define can_modify_members: admin or owner
     # roles
     define member: maintainer or admin or owner
     define admin: [user]

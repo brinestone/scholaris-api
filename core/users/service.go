@@ -311,11 +311,7 @@ func findUserByIdFromDb(ctx context.Context, id uint64) (ans *models.User, err e
 	return
 }
 
-type rowScanner interface {
-	Scan(dest ...any) error
-}
-
-func parseUserRow(scanner rowScanner) (ans *models.User, err error) {
+func parseUserRow(scanner util.RowScanner) (ans *models.User, err error) {
 	ans = new(models.User)
 	var accountsJson, emailsJson, phonesJson string
 	if err = scanner.Scan(&ans.Id, &ans.Banned, &ans.CreatedAt, &ans.UpdatedAt, &ans.Locked, &accountsJson, &ans.PrimaryEmail, &ans.PrimaryPhone, &emailsJson, &phonesJson); err != nil {

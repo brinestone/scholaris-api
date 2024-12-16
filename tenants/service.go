@@ -16,10 +16,31 @@ import (
 	"encore.dev/storage/sqldb"
 	"github.com/brinestone/scholaris/core/permissions"
 	"github.com/brinestone/scholaris/dto"
+	"github.com/brinestone/scholaris/helpers"
 	"github.com/brinestone/scholaris/models"
 	"github.com/brinestone/scholaris/util"
 	"github.com/lib/pq"
 )
+
+// Gets the members of a tenant
+//
+//encore:api auth method=GET path=/tenants/members/:id tag:can_view_tenant_members
+func FindMembers(ctx context.Context, id uint64) (ans *dto.FindTenantMembersResponse, err error) {
+	members, err := findTenantMembers(ctx, id)
+	if errors.Is(err, sqldb.ErrNoRows) {
+		err = &util.ErrNotFound
+		return
+	} else if err != nil {
+		rlog.Error(util.MsgDbAccessError, "err", err)
+		err = &util.ErrUnknown
+		return
+	}
+
+	ans = &dto.FindTenantMembersResponse{
+		Members: tenantMembershipsToDto(members...),
+	}
+	return
+}
 
 // Checks whether a tenant name exists or not
 //
@@ -451,6 +472,110 @@ func tenantsToDto(t ...*models.Tenant) (ans []dto.TenantLookup) {
 		}
 		ans[i] = vv
 	}
+
+	return
+}
+
+func tenantMembershipsToDto(m ...*models.TenantMembership) (ans []dto.TenantMembership) {
+	ans = helpers.SliceMap(m, func(m *models.TenantMembership) dto.TenantMembership {
+		d := dto.TenantMembership{
+			Invite:       m.Invite,
+			User:         m.User,
+			DisplayName:  m.DisplayName,
+			Email:        m.Email,
+			InviteStatus: m.InviteStatus,
+			Role:         m.Role,
+			InvitedAt:    m.InvitedAt,
+		}
+
+		if m.UpdatedAt.Valid {
+			d.UpdatedAt = &m.UpdatedAt.Time
+		}
+
+		if m.CreatedAt.Valid {
+			d.JoinedAt = &m.CreatedAt.Time
+		}
+
+		if m.InviteExpiresAt.Valid {
+			d.InviteExpiresAt = &m.InviteExpiresAt.Time
+		}
+
+		if m.Prefs != nil && len(*m.Prefs) > 0 {
+			d.Prefs = m.Prefs
+		}
+
+		if m.Phone.Valid {
+			d.Phone = &m.Phone.String
+		}
+
+		if m.Avatar.Valid {
+			d.Avatar = &m.Avatar.String
+		}
+
+		if m.Id.Valid {
+			tmp := uint64(m.Id.Int64)
+			d.Id = &tmp
+		}
+
+		return d
+	})
+	return
+}
+
+func doPermissionCheck(ctx context.Context, actor, target string, relation dto.PermissionName) (pass bool, err error) {
+	res, err := permissions.CheckPermissionInternal(ctx, dto.InternalRelationCheckRequest{
+		Actor:    actor,
+		Relation: relation,
+		Target:   target,
+	})
+
+	if err != nil {
+		err = errs.Wrap(err, util.MsgCallError)
+		return
+	}
+
+	pass = res.Allowed
+	return
+}
+
+func scanTenantMembership(s util.RowScanner) (ans *models.TenantMembership, err error) {
+	ans = new(models.TenantMembership)
+	err = s.Scan(&ans.Id, &ans.Invite, &ans.User, &ans.DisplayName, &ans.Avatar, &ans.Email, &ans.Phone, &ans.Prefs, &ans.Tenant, &ans.InvitedAt, &ans.InviteStatus, &ans.InviteExpiresAt, &ans.CreatedAt, &ans.UpdatedAt, &ans.Role)
+	if err != nil {
+		ans = nil
+	}
+	return
+}
+
+func findTenantMembers(ctx context.Context, id uint64) (ans []*models.TenantMembership, err error) {
+	query := `
+		SELECT
+			*
+		FROM
+			vw_AllMembers
+		WHERE
+			tenant=$1;
+	`
+	rows, err := tenantDb.Query(ctx, query, id)
+	if err != nil {
+		ans = nil
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var m *models.TenantMembership
+		m, err = scanTenantMembership(rows)
+		if err != nil {
+			ans = nil
+			return
+		}
+		ans = append(ans, m)
+	}
+	return
+}
+
+func createTenantMembership(ctx context.Context, tx *sqldb.Tx, invite uint64, role, email, displayName string, phone *string, prefs *map[string]string) (err error) {
 
 	return
 }

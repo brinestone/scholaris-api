@@ -8,6 +8,29 @@ import (
 	"encore.dev/beta/errs"
 )
 
+type TenantMembership struct {
+	Id              *uint64            `json:"id,omitempty" encore:"optional"`
+	Invite          uint64             `json:"invite"`
+	User            uint64             `json:"user"`
+	Tenant          uint64             `json:"tenant"`
+	DisplayName     string             `json:"displayName"`
+	Email           string             `json:"email"`
+	InviteStatus    string             `json:"inviteStatus"`
+	Role            string             `json:"role"`
+	Avatar          *string            `json:"avatar,omitempty" encore:"optional"`
+	Phone           *string            `json:"phone,omitempty" encore:"optional"`
+	Prefs           *map[string]string `json:"prefs,omitempty" encore:"optional"`
+	InvitedAt       time.Time          `json:"invitedAt"`
+	InviteExpiresAt *time.Time         `json:"inviteExpiresAt,omitempty" encore:"optional"`
+	JoinedAt        *time.Time         `json:"joinedAt,omitempty" encore:"optional"`
+	UpdatedAt       *time.Time         `json:"updatedAt,omitempty" encore:"optional"`
+}
+
+type FindTenantMembersResponse struct {
+	// The tenant memberships
+	Members []TenantMembership `json:"members"`
+}
+
 type TenantNameAvailableResponse struct {
 	Available bool `json:"available"`
 }
