@@ -138,6 +138,7 @@ func DeleteTenant(ctx context.Context, id uint64) error {
 //encore:api auth method=POST path=/tenants tag:needs_captcha_ver
 func NewTenant(ctx context.Context, req dto.NewTenantRequest) (err error) {
 	user, _ := auth.UserID()
+	userInfo := auth.Data().(dto.AuthClaims)
 
 	nameUnavailable, err := tenantNameExists(ctx, req.Name)
 	if err != nil {
@@ -172,6 +173,22 @@ func NewTenant(ctx context.Context, req dto.NewTenantRequest) (err error) {
 	if err != nil {
 		tx.Rollback()
 		rlog.Error("error while creating tenant", "err", err)
+		err = &util.ErrUnknown
+		return
+	}
+
+	inviteId, err := createTenantInvite(ctx, tx, dto.PNOwner, userInfo.Email, userInfo.Phone, &userInfo.FullName, userInfo.Avatar, time.Hour*24*7, tenant, userInfo.Sub)
+	if err != nil {
+		tx.Rollback()
+		rlog.Error(util.MsgDbAccessError, "err", err)
+		err = &util.ErrUnknown
+		return
+	}
+
+	err = createTenantMembership(ctx, tx, inviteId, dto.PNOwner, userInfo.Email, userInfo.FullName, userInfo.Phone, userInfo.Avatar, nil)
+	if err != nil {
+		tx.Rollback()
+		rlog.Error(util.MsgDbAccessError, "err", err)
 		err = &util.ErrUnknown
 		return
 	}
@@ -575,7 +592,34 @@ func findTenantMembers(ctx context.Context, id uint64) (ans []*models.TenantMemb
 	return
 }
 
-func createTenantMembership(ctx context.Context, tx *sqldb.Tx, invite uint64, role, email, displayName string, phone *string, prefs *map[string]string) (err error) {
+func createTenantInvite(ctx context.Context, tx *sqldb.Tx, role dto.PermissionName, email string, phone, displayName, avatar *string, window time.Duration, tenant, user uint64) (id uint64, err error) {
+	query := `
+		INSERT INTO member_invites("user",tenant,email,phone,role,display_name,avatar,"window")
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+		RETURNING id;
+	`
+	err = tx.QueryRow(ctx, query, user, tenant, email, phone, string(role), displayName, avatar, fmt.Sprintf("%f hours", window.Hours())).Scan(&id)
+	return
+}
 
+func createTenantMembership(ctx context.Context, tx *sqldb.Tx, invite uint64, role dto.PermissionName, email, displayName string, phone, avatar *string, prefs *map[string]string) (err error) {
+	query := `
+		INSERT INTO
+			tenant_memberships(invite,avatar,role,email,phone,display_name,prefs)
+		VALUES ($1,$2,$3,$4,$5,$6,$7);
+	`
+
+	var prefsJson string = "{}"
+
+	if prefs != nil {
+		var rawJson []byte
+		rawJson, err = json.Marshal(prefs)
+		if err != nil {
+			return
+		}
+		prefsJson = string(rawJson)
+	}
+
+	_, err = tx.Exec(ctx, query, invite, avatar, role, email, phone, displayName, prefsJson)
 	return
 }

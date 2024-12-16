@@ -77,5 +77,14 @@ type User struct {
 }
 
 func (u UserAccount) FullName() string {
-	return strings.Trim(fmt.Sprintf("%v %v", u.FirstName, u.LastName), "\t\n")
+	lastName := ""
+	if u.LastName != nil {
+		lastName = *u.LastName
+	}
+
+	firstName := ""
+	if u.FirstName != nil {
+		firstName = *u.FirstName
+	}
+	return strings.Trim(fmt.Sprintf("%s %s", firstName, lastName), "\t\n")
 }
