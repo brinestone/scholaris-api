@@ -31,7 +31,7 @@ type DateOnly struct {
 }
 
 func (d *DateOnly) UnmarshalJSON(b []byte) (err error) {
-	if len(b) <= 2 || string(b) == "null" {
+	if len(b) <= 2 || string(b) == "null" || string(b) == "NULL" {
 		d.Valid = false
 		return
 	}

@@ -92,6 +92,10 @@ type NewSubscriptionPlan struct {
 	Currency string  `json:"currency"`
 }
 
+type NewTenantResponse struct {
+	Id uint64 `json:"id"`
+}
+
 type NewTenantRequest struct {
 	Name         string `json:"name"`
 	CaptchaToken string `json:"captchaToken"`

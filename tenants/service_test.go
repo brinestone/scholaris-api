@@ -63,15 +63,21 @@ func makeUser() (auth.UID, dto.AuthClaims) {
 	return auth.UID(fmt.Sprintf("%d", uid)), userData
 }
 
-func makeTenant() (err error) {
-	err = tenants.NewTenant(mainContext, dto.NewTenantRequest{
+func makeTenant() (id uint64, err error) {
+	res, err := tenants.NewTenant(mainContext, dto.NewTenantRequest{
 		Name:         gofakeit.Company(),
 		CaptchaToken: randomString(30),
 	})
+	id = res.Id
 	return
 }
 
 var mainContext context.Context
+
+func setupUserAuth() {
+	uid, data := makeUser()
+	et.OverrideAuthInfo(uid, data)
+}
 
 func TestMain(m *testing.M) {
 	mockEndpoints()
@@ -92,7 +98,7 @@ func TestFindSubscriptionPlans(t *testing.T) {
 }
 
 func TestNewTenant(t *testing.T) {
-	err := makeTenant()
+	_, err := makeTenant()
 	assert.Nil(t, err)
 }
 
@@ -100,7 +106,7 @@ func TestFindTenant(t *testing.T) {
 	cnt := gofakeit.IntRange(1, 10)
 	var err error
 	for i := 0; i < cnt; i++ {
-		err = makeTenant()
+		_, err = makeTenant()
 		if err != nil {
 			t.Error(err)
 			return
@@ -127,7 +133,7 @@ func TestFindTenant(t *testing.T) {
 }
 
 func TestDeleteTenant(t *testing.T) {
-	if err := makeTenant(); err != nil {
+	if _, err := makeTenant(); err != nil {
 		t.Error(err)
 		return
 	}
@@ -145,7 +151,7 @@ func TestLookup(t *testing.T) {
 			},
 		}, nil
 	})
-	if err := makeTenant(); err != nil {
+	if _, err := makeTenant(); err != nil {
 		t.Error(err)
 		return
 	}
@@ -159,4 +165,23 @@ func TestLookup(t *testing.T) {
 
 	assert.NotNil(t, res)
 	assert.LessOrEqual(t, len(res.Tenants), 100)
+}
+
+func TestFindMembers(t *testing.T) {
+	id, err := makeTenant()
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	res, err := tenants.FindMembers(mainContext, id)
+	if assert.Nil(t, err) {
+		assert.NotNil(t, res)
+		assert.NotEmpty(t, res.Members)
+		for _, v := range res.Members {
+			assert.Greater(t, v.Tenant, uint64(0))
+			assert.Equal(t, id, v.Tenant)
+			// assert.Equal(t, userInfo.Sub, v.User)
+		}
+	}
 }

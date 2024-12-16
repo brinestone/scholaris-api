@@ -26,7 +26,7 @@ import (
 //
 //encore:api auth method=GET path=/tenants/members/:id tag:can_view_tenant_members
 func FindMembers(ctx context.Context, id uint64) (ans *dto.FindTenantMembersResponse, err error) {
-	members, err := findTenantMembers(ctx, id)
+	members, err := findTenantMemberships(ctx, id)
 	if errors.Is(err, sqldb.ErrNoRows) {
 		err = &util.ErrNotFound
 		return
@@ -136,10 +136,11 @@ func DeleteTenant(ctx context.Context, id uint64) error {
 // Creates a new Tenant
 //
 //encore:api auth method=POST path=/tenants tag:needs_captcha_ver
-func NewTenant(ctx context.Context, req dto.NewTenantRequest) (err error) {
+func NewTenant(ctx context.Context, req dto.NewTenantRequest) (ans dto.NewTenantResponse, err error) {
 	user, _ := auth.UserID()
-	userInfo := auth.Data().(dto.AuthClaims)
+	userInfo := auth.Data().(*dto.AuthClaims)
 
+	// Check whether a tenant with the same name already exists or not
 	nameUnavailable, err := tenantNameExists(ctx, req.Name)
 	if err != nil {
 		rlog.Error("error while checking tenant name existence", "err", err)
@@ -154,6 +155,8 @@ func NewTenant(ctx context.Context, req dto.NewTenantRequest) (err error) {
 		}
 		return
 	}
+
+	// Start DB Transaction
 	tx, err := tenantDb.Begin(ctx)
 	if err != nil {
 		rlog.Error("transaction error", "err", err)
@@ -161,6 +164,7 @@ func NewTenant(ctx context.Context, req dto.NewTenantRequest) (err error) {
 		return
 	}
 
+	// Create Subscription
 	subId, err := createTenantSubscription(ctx, tx, 1) // Use basic plan by default
 	if err != nil {
 		tx.Rollback()
@@ -169,6 +173,7 @@ func NewTenant(ctx context.Context, req dto.NewTenantRequest) (err error) {
 		return
 	}
 
+	// Create Tenant Record
 	tenant, err := createTenant(ctx, tx, req, subId)
 	if err != nil {
 		tx.Rollback()
@@ -177,6 +182,7 @@ func NewTenant(ctx context.Context, req dto.NewTenantRequest) (err error) {
 		return
 	}
 
+	// Create invite record for the owner user
 	inviteId, err := createTenantInvite(ctx, tx, dto.PNOwner, userInfo.Email, userInfo.Phone, &userInfo.FullName, userInfo.Avatar, time.Hour*24*7, tenant, userInfo.Sub)
 	if err != nil {
 		tx.Rollback()
@@ -185,6 +191,7 @@ func NewTenant(ctx context.Context, req dto.NewTenantRequest) (err error) {
 		return
 	}
 
+	// Create the membership record for the just created invite.
 	err = createTenantMembership(ctx, tx, inviteId, dto.PNOwner, userInfo.Email, userInfo.FullName, userInfo.Phone, userInfo.Avatar, nil)
 	if err != nil {
 		tx.Rollback()
@@ -193,6 +200,7 @@ func NewTenant(ctx context.Context, req dto.NewTenantRequest) (err error) {
 		return
 	}
 
+	// Create permission/role tuples
 	if err = permissions.SetPermissions(ctx, dto.UpdatePermissionsRequest{
 		Updates: []dto.PermissionUpdate{
 			{
@@ -213,12 +221,15 @@ func NewTenant(ctx context.Context, req dto.NewTenantRequest) (err error) {
 		return
 	}
 
+	// Commit the transaction
 	tx.Commit()
 
 	NewTenants.Publish(ctx, &TenantCreated{
 		Id:        tenant,
 		CreatedBy: &user,
 	})
+
+	ans.Id = tenant
 	return
 }
 
@@ -503,6 +514,7 @@ func tenantMembershipsToDto(m ...*models.TenantMembership) (ans []dto.TenantMemb
 			InviteStatus: m.InviteStatus,
 			Role:         m.Role,
 			InvitedAt:    m.InvitedAt,
+			Tenant:       m.Tenant,
 		}
 
 		if m.UpdatedAt.Valid {
@@ -513,7 +525,7 @@ func tenantMembershipsToDto(m ...*models.TenantMembership) (ans []dto.TenantMemb
 			d.JoinedAt = &m.CreatedAt.Time
 		}
 
-		if m.InviteExpiresAt.Valid {
+		if m.InviteExpiresAt != nil && m.InviteExpiresAt.Valid {
 			d.InviteExpiresAt = &m.InviteExpiresAt.Time
 		}
 
@@ -557,19 +569,39 @@ func doPermissionCheck(ctx context.Context, actor, target string, relation dto.P
 
 func scanTenantMembership(s util.RowScanner) (ans *models.TenantMembership, err error) {
 	ans = new(models.TenantMembership)
-	err = s.Scan(&ans.Id, &ans.Invite, &ans.User, &ans.DisplayName, &ans.Avatar, &ans.Email, &ans.Phone, &ans.Prefs, &ans.Tenant, &ans.InvitedAt, &ans.InviteStatus, &ans.InviteExpiresAt, &ans.CreatedAt, &ans.UpdatedAt, &ans.Role)
+	var prefsJson string
+	err = s.Scan(&ans.Id, &ans.Invite, &ans.User, &ans.DisplayName, &ans.Avatar, &ans.Email, &ans.Phone, &prefsJson, &ans.Tenant, &ans.InvitedAt, &ans.InviteStatus, &ans.InviteExpiresAt, &ans.CreatedAt, &ans.UpdatedAt, &ans.Role)
 	if err != nil {
+		err = errs.Wrap(err, "scan error")
 		ans = nil
+	}
+
+	if len(prefsJson) > 2 {
+		err = json.Unmarshal([]byte(prefsJson), ans.Prefs)
 	}
 	return
 }
 
-func findTenantMembers(ctx context.Context, id uint64) (ans []*models.TenantMembership, err error) {
+func findTenantMemberships(ctx context.Context, id uint64) (ans []*models.TenantMembership, err error) {
 	query := `
 		SELECT
-			*
+			id,
+			invite,
+			"user",
+			display_name,
+			avatar,
+			email,
+			phone,
+			prefs,
+			tenant,
+			invited_at,
+			invite_status,
+			invite_expires_at,
+			created_at,
+			updated_at,
+			"role"
 		FROM
-			vw_AllMembers
+			vw_AllTenantMembers
 		WHERE
 			tenant=$1;
 	`
