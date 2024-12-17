@@ -10,11 +10,11 @@ type tenant
     # member permissions
     define can_change_owner: owner
     define can_add_admin: owner
-    define can_remove_admin: owner
+    define can_remove_admin: can_add_admin
     define can_add_maintainer: admin or owner
-    define can_remove_maintainer: admin or owner
-    define can_view_members: maintainer or can_modify_members
-    define can_modify_members: admin or owner
+    define can_remove_maintainer: can_add_maintainer
+    define can_view_members: maintainer or admin or owner
+    define can_modify_members: can_add_admin or can_add_maintainer
     # roles
     define member: maintainer or admin or owner
     define admin: [user]
@@ -25,6 +25,6 @@ type subscription
   relations
     define can_delete: editor
     define can_suspend: editor
-    define editor: maintainer from owner
+    define editor: admin from owner or owner from owner
     define owner: [tenant]
     define viewer: member from owner

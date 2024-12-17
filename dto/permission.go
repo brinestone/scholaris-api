@@ -112,6 +112,16 @@ func ParsePermissionName(p string) (PermissionName, bool) {
 		return PNCanUpdateSubscription, true
 	case string(PNCanCreateSettings):
 		return PNCanCreateSettings, true
+	case string(PNCanRemoveAdmin):
+		return PNCanRemoveAdmin, true
+	case string(PNCanAddAdmin):
+		return PNCanAddAdmin, true
+	case string(PNCanAddMaintainer):
+		return PNCanAddMaintainer, true
+	case string(PNCanRemoveMaintainer):
+		return PNCanRemoveMaintainer, true
+	case string(PNMaintainer):
+		return PNMaintainer, true
 	default:
 		return pnUnknown, false
 	}
@@ -144,6 +154,11 @@ const (
 	PNCanUpdateSubscription PermissionName = "can_update_subscription"
 	PNCanCreateSettings     PermissionName = "can_create_settings"
 	PNCanViewInstitutions   PermissionName = "can_view_institutions"
+	PNCanAddAdmin           PermissionName = "can_add_admin"
+	PNCanRemoveMaintainer   PermissionName = "can_remove_maintainer"
+	PNCanAddMaintainer      PermissionName = "can_add_maintainer"
+	PNCanRemoveAdmin        PermissionName = "can_remove_admin"
+	PNMaintainer            PermissionName = "maintainer"
 	pnUnknown               PermissionName = ""
 )
 

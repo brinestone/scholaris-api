@@ -9,6 +9,7 @@ CREATE TABLE
         phone VARCHAR(50),
         "role" VARCHAR(20) NOT NULL,
         display_name VARCHAR(100),
+        redirect_url VARCHAR(255),
         avatar TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

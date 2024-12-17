@@ -74,11 +74,6 @@ func makeTenant() (id uint64, err error) {
 
 var mainContext context.Context
 
-func setupUserAuth() {
-	uid, data := makeUser()
-	et.OverrideAuthInfo(uid, data)
-}
-
 func TestMain(m *testing.M) {
 	mockEndpoints()
 	uid, data := makeUser()
@@ -184,4 +179,21 @@ func TestFindMembers(t *testing.T) {
 			// assert.Equal(t, userInfo.Sub, v.User)
 		}
 	}
+}
+
+func TestInviteNewMember(t *testing.T) {
+	tenant, err := makeTenant()
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	err = tenants.InviteNewMember(mainContext, tenant, dto.CreateTenantInviteRequest{
+		Email:      gofakeit.Email(),
+		Phone:      &gofakeit.Contact().Phone,
+		Names:      gofakeit.Name(),
+		RedirecUrl: gofakeit.URL(),
+	})
+
+	assert.Nil(t, err)
 }

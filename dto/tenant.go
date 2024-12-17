@@ -2,11 +2,45 @@ package dto
 
 import (
 	"errors"
+	"regexp"
 	"strings"
 	"time"
 
 	"encore.dev/beta/errs"
 )
+
+type CreateTenantInviteRequest struct {
+	Email      string  `json:"email"`
+	Phone      *string `json:"phone,omitempty" encore:"optional"`
+	Names      string  `json:"displayName"`
+	RedirecUrl string  `json:"redirecUrl"`
+}
+
+func (c CreateTenantInviteRequest) Validate() (err error) {
+	msgs := make([]string, 0)
+
+	if len(c.Names) == 0 {
+		msgs = append(msgs, "The displayName field is required")
+	}
+
+	if len(c.RedirecUrl) == 0 {
+		msgs = append(msgs, "The redirectUrl field is required")
+	}
+
+	if len(c.Email) == 0 {
+		msgs = append(msgs, "The email field is required")
+	} else {
+		emailValid := regexp.MustCompile(`^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$`).MatchString(c.Email)
+		if !emailValid {
+			msgs = append(msgs, "Invalid email address")
+		}
+	}
+
+	if len(msgs) > 0 {
+		err = errors.New(strings.Join(msgs, "\n"))
+	}
+	return
+}
 
 type TenantMembership struct {
 	Id              *uint64            `json:"id,omitempty" encore:"optional"`

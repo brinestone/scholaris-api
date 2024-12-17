@@ -11,17 +11,17 @@ import (
 	"github.com/brinestone/scholaris/util"
 )
 
-//encore:middleware target=tag:can_view_tenant_members
-func CanViewTenantMembers(req middleware.Request, next middleware.Next) (res middleware.Response) {
-	uid, _ := eAuth.UserID()
-	if len(uid) == 0 {
+//encore:middleware target=tag:can_modify_tenant_members
+func CanModifyTenantMembers(req middleware.Request, next middleware.Next) (res middleware.Response) {
+	uid, authed := eAuth.UserID()
+	if !authed {
 		res = middleware.Response{
 			Err: &util.ErrUnauthorized,
 		}
 		return
 	}
 
-	allowed, err := doPermissionCheck(req.Context(), dto.IdentifierString(dto.PTUser, uid), dto.IdentifierString(dto.PTTenant, req.Data().PathParams.Get("id")), dto.PNCanViewMembers)
+	allowed, err := checkPermissions(req.Context(), dto.IdentifierString(dto.PTUser, uid), dto.IdentifierString(dto.PTTenant, req.Data().PathParams.Get("id")), dto.PNCanModifyMembers)
 	if err != nil {
 		err = errs.Wrap(err, util.MsgMiddlewareError, "middleware", "CanViewTenant", "msg", err)
 		rlog.Error("middleware error", err.Error())
@@ -35,6 +35,38 @@ func CanViewTenantMembers(req middleware.Request, next middleware.Next) (res mid
 		res = middleware.Response{
 			Err: &util.ErrForbidden,
 		}
+		return
+	}
+
+	res = next(req)
+	return
+}
+
+//encore:middleware target=tag:can_view_tenant_members
+func CanViewTenantMembers(req middleware.Request, next middleware.Next) (res middleware.Response) {
+	uid, authed := eAuth.UserID()
+	if !authed {
+		res = middleware.Response{
+			Err: &util.ErrUnauthorized,
+		}
+		return
+	}
+
+	allowed, err := checkPermissions(req.Context(), dto.IdentifierString(dto.PTUser, uid), dto.IdentifierString(dto.PTTenant, req.Data().PathParams.Get("id")), dto.PNCanViewMembers)
+	if err != nil {
+		err = errs.Wrap(err, util.MsgMiddlewareError, "middleware", "CanViewTenant", "msg", err)
+		rlog.Error("middleware error", err.Error())
+		res = middleware.Response{
+			Err: &util.ErrUnknown,
+		}
+		return
+	}
+
+	if !allowed {
+		res = middleware.Response{
+			Err: &util.ErrForbidden,
+		}
+		return
 	}
 
 	res = next(req)
@@ -51,7 +83,7 @@ func CanViewTenant(req middleware.Request, next middleware.Next) (res middleware
 		return
 	}
 
-	allowed, err := doPermissionCheck(req.Context(), dto.IdentifierString(dto.PTUser, uid), dto.IdentifierString(dto.PTTenant, req.Data().PathParams.Get("id")), dto.PNCanView)
+	allowed, err := checkPermissions(req.Context(), dto.IdentifierString(dto.PTUser, uid), dto.IdentifierString(dto.PTTenant, req.Data().PathParams.Get("id")), dto.PNCanView)
 	if err != nil {
 		err = errs.Wrap(err, util.MsgMiddlewareError, "middleware", "CanViewTenant", "msg", err)
 		rlog.Error("middleware error", err.Error())

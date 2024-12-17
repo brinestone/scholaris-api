@@ -22,6 +22,35 @@ import (
 	"github.com/lib/pq"
 )
 
+// Invites a new member to a tenant
+//
+//encore:api auth method=POST path=/tenants/invites/:tenant tag:can_modify_tenant_members
+func InviteNewMember(ctx context.Context, tenant uint64, req dto.CreateTenantInviteRequest) (err error) {
+	tx, err := tenantDb.Begin(ctx)
+	if err != nil {
+		rlog.Error(util.MsgDbAccessError, "err", err)
+		err = &util.ErrUnknown
+		return
+	}
+
+	invite, err := createTenantInvite(ctx, tx, dto.PNCanAddMaintainer, req.Email, req.Phone, &req.Names, nil, 7*24*time.Hour, tenant, nil)
+	if err != nil {
+		tx.Rollback()
+		rlog.Error(util.MsgDbAccessError, "err", err)
+		err = &util.ErrUnknown
+		return
+	}
+
+	tx.Commit()
+
+	TenantInvites.Publish(ctx, &MemberInvited{
+		Id:          invite,
+		Email:       req.Email,
+		DisplayName: req.Names,
+	})
+	return
+}
+
 // Gets the members of a tenant
 //
 //encore:api auth method=GET path=/tenants/members/:id tag:can_view_tenant_members
@@ -183,7 +212,7 @@ func NewTenant(ctx context.Context, req dto.NewTenantRequest) (ans dto.NewTenant
 	}
 
 	// Create invite record for the owner user
-	inviteId, err := createTenantInvite(ctx, tx, dto.PNOwner, userInfo.Email, userInfo.Phone, &userInfo.FullName, userInfo.Avatar, time.Hour*24*7, tenant, userInfo.Sub)
+	inviteId, err := createTenantInvite(ctx, tx, dto.PNOwner, userInfo.Email, userInfo.Phone, &userInfo.FullName, userInfo.Avatar, time.Hour*24*7, tenant, &userInfo.Sub)
 	if err != nil {
 		tx.Rollback()
 		rlog.Error(util.MsgDbAccessError, "err", err)
@@ -551,7 +580,7 @@ func tenantMembershipsToDto(m ...*models.TenantMembership) (ans []dto.TenantMemb
 	return
 }
 
-func doPermissionCheck(ctx context.Context, actor, target string, relation dto.PermissionName) (pass bool, err error) {
+func checkPermissions(ctx context.Context, actor, target string, relation dto.PermissionName) (pass bool, err error) {
 	res, err := permissions.CheckPermissionInternal(ctx, dto.InternalRelationCheckRequest{
 		Actor:    actor,
 		Relation: relation,
@@ -624,7 +653,7 @@ func findTenantMemberships(ctx context.Context, id uint64) (ans []*models.Tenant
 	return
 }
 
-func createTenantInvite(ctx context.Context, tx *sqldb.Tx, role dto.PermissionName, email string, phone, displayName, avatar *string, window time.Duration, tenant, user uint64) (id uint64, err error) {
+func createTenantInvite(ctx context.Context, tx *sqldb.Tx, role dto.PermissionName, email string, phone, displayName, avatar *string, window time.Duration, tenant uint64, user *uint64) (id uint64, err error) {
 	query := `
 		INSERT INTO member_invites("user",tenant,email,phone,role,display_name,avatar,"window")
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
