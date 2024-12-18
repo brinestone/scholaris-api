@@ -43,10 +43,18 @@ func InviteNewMember(ctx context.Context, tenant uint64, req dto.CreateTenantInv
 
 	tx.Commit()
 
+	inviteObj, err := findInviteById(ctx, invite)
+	if err != nil {
+		rlog.Error(util.MsgDbAccessError, "err", err)
+		err = &util.ErrUnknown
+		return
+	}
+
 	TenantInvites.Publish(ctx, &MemberInvited{
 		Id:          invite,
 		Email:       req.Email,
 		DisplayName: req.Names,
+		TenantName:  inviteObj.TenantName,
 	})
 	return
 }
@@ -596,6 +604,16 @@ func checkPermissions(ctx context.Context, actor, target string, relation dto.Pe
 	return
 }
 
+func scanTenantInvitation(s util.RowScanner) (ans *models.TenantMembershipInvitation, err error) {
+	ans = new(models.TenantMembershipInvitation)
+	err = s.Scan(&ans.Id, &ans.User, &ans.Tenant, &ans.TenantName, &ans.Email, &ans.Phone, &ans.Role, &ans.DisplayName, &ans.RedirectUrl, &ans.ErrorRedirect, &ans.OnboardRedirect, &ans.Url, &ans.Avatar, &ans.CreatedAt, &ans.UpdatedAt, &ans.Status, &ans.ExpiresAt)
+	if err != nil {
+		err = errs.Wrap(err, "scan error")
+		ans = nil
+	}
+	return
+}
+
 func scanTenantMembership(s util.RowScanner) (ans *models.TenantMembership, err error) {
 	ans = new(models.TenantMembership)
 	var prefsJson string
@@ -682,5 +700,35 @@ func createTenantMembership(ctx context.Context, tx *sqldb.Tx, invite uint64, ro
 	}
 
 	_, err = tx.Exec(ctx, query, invite, avatar, role, email, phone, displayName, prefsJson)
+	return
+}
+
+func findInviteById(ctx context.Context, id uint64) (ans *models.TenantMembershipInvitation, err error) {
+	query := `
+		SELECT
+			id,
+			"user",
+			tenant,
+			tenant_name,
+			email,
+			phone,
+			"role",
+			display_name,
+			success_redirect,
+			error_redirect,
+			onboard_redirect,
+			url,
+			avatar,
+			created_at,
+			updated_at,
+			invite_status,
+			expires_at
+		FROM
+			vw_AllTenantInvitations
+		WHERE
+			id=$1;
+	`
+
+	ans, err = scanTenantInvitation(tenantDb.QueryRow(ctx, query, id))
 	return
 }

@@ -18,9 +18,11 @@ type TenantDeleted struct {
 }
 
 type MemberInvited struct {
+	TenantName  string
 	Id          uint64
 	Email       string
 	DisplayName string
+	Url         string
 }
 
 var NewTenants = pubsub.NewTopic[*TenantCreated]("new-tenant", pubsub.TopicConfig{

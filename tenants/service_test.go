@@ -189,10 +189,13 @@ func TestInviteNewMember(t *testing.T) {
 	}
 
 	err = tenants.InviteNewMember(mainContext, tenant, dto.CreateTenantInviteRequest{
-		Email:      gofakeit.Email(),
-		Phone:      &gofakeit.Contact().Phone,
-		Names:      gofakeit.Name(),
-		RedirecUrl: gofakeit.URL(),
+		Email:           gofakeit.Email(),
+		Phone:           &gofakeit.Contact().Phone,
+		Names:           gofakeit.Name(),
+		SuccessRedirect: gofakeit.URL(),
+		OnboardRedirect: gofakeit.URL(),
+		ErrorRedirect:   gofakeit.URL(),
+		CaptchaToken:    randomString(50),
 	})
 
 	assert.Nil(t, err)

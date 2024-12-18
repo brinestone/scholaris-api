@@ -30,6 +30,21 @@ type DateOnly struct {
 	time.Time
 }
 
+func (d *DateOnly) Scan(value any) (err error) {
+	if value != nil {
+		d.Time, d.Valid = value.(time.Time)
+	}
+	return
+}
+
+func (d *DateOnly) Value() (ans any, err error) {
+	if !d.Valid {
+		return
+	}
+	ans = d.Time.Format(time.DateOnly)
+	return
+}
+
 func (d *DateOnly) UnmarshalJSON(b []byte) (err error) {
 	if len(b) <= 2 || string(b) == "null" || string(b) == "NULL" {
 		d.Valid = false

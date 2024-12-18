@@ -33,6 +33,7 @@ var secrets struct {
 	FgaIssuer       string `encore:"sensitive"`
 }
 
+//lint:ignore U1000 Intentionally ignored linting message
 func initService() (*Service, error) {
 	var err error
 	config := &client.ClientConfiguration{

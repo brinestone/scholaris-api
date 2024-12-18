@@ -10,10 +10,17 @@ import (
 )
 
 type CreateTenantInviteRequest struct {
-	Email      string  `json:"email"`
-	Phone      *string `json:"phone,omitempty" encore:"optional"`
-	Names      string  `json:"displayName"`
-	RedirecUrl string  `json:"redirecUrl"`
+	Email           string  `json:"email"`
+	Phone           *string `json:"phone,omitempty" encore:"optional"`
+	Names           string  `json:"displayName"`
+	SuccessRedirect string  `json:"redirecUrl"`
+	OnboardRedirect string  `json:"onboardRedirect"`
+	ErrorRedirect   string  `json:"errorRedirect"`
+	CaptchaToken    string  `json:"captcha"`
+}
+
+func (c CreateTenantInviteRequest) GetCaptchaToken() string {
+	return c.CaptchaToken
 }
 
 func (c CreateTenantInviteRequest) Validate() (err error) {
@@ -23,8 +30,20 @@ func (c CreateTenantInviteRequest) Validate() (err error) {
 		msgs = append(msgs, "The displayName field is required")
 	}
 
-	if len(c.RedirecUrl) == 0 {
+	if len(c.CaptchaToken) == 0 {
+		msgs = append(msgs, "The captcha field is required")
+	}
+
+	if len(c.ErrorRedirect) == 0 {
+		msgs = append(msgs, "The errorRedirect field is required")
+	}
+
+	if len(c.SuccessRedirect) == 0 {
 		msgs = append(msgs, "The redirectUrl field is required")
+	}
+
+	if len(c.OnboardRedirect) == 0 {
+		msgs = append(msgs, "The onboardRedirect field is required")
 	}
 
 	if len(c.Email) == 0 {
