@@ -10,6 +10,7 @@ const (
 	MsgWebhookError     = "webhook error"
 	MsgForbidden        = "forbidden action"
 	MsgCallError        = "error while calling API"
+	MsgMiddlewareError  = "middleware error"
 	MsgUploadError      = "error while uploading file"
 )
 

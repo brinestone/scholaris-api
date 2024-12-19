@@ -5,6 +5,26 @@ import (
 	"time"
 )
 
+type TenantMembershipInvitation struct {
+	Id                                                                           uint64
+	User, Tenant                                                                 sql.NullInt64
+	TenantName, Email, Role, Status                                              string
+	Phone, RedirectUrl, ErrorRedirect, OnboardRedirect, Avatar, Url, DisplayName sql.NullString
+	CreatedAt, UpdatedAt                                                         time.Time
+	ExpiresAt                                                                    DateOnly
+}
+
+type TenantMembership struct {
+	Id                                     sql.NullInt64
+	Invite, User, Tenant                   uint64
+	DisplayName, Email, InviteStatus, Role string
+	Avatar, Phone                          sql.NullString
+	Prefs                                  *map[string]string
+	InvitedAt                              time.Time
+	InviteExpiresAt                        *DateOnly
+	CreatedAt, UpdatedAt                   sql.NullTime
+}
+
 type Tenant struct {
 	Name             string
 	Id               uint64

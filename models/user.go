@@ -30,8 +30,23 @@ type DateOnly struct {
 	time.Time
 }
 
+func (d *DateOnly) Scan(value any) (err error) {
+	if value != nil {
+		d.Time, d.Valid = value.(time.Time)
+	}
+	return
+}
+
+func (d *DateOnly) Value() (ans any, err error) {
+	if !d.Valid {
+		return
+	}
+	ans = d.Time.Format(time.DateOnly)
+	return
+}
+
 func (d *DateOnly) UnmarshalJSON(b []byte) (err error) {
-	if len(b) <= 2 || string(b) == "null" {
+	if len(b) <= 2 || string(b) == "null" || string(b) == "NULL" {
 		d.Valid = false
 		return
 	}
@@ -77,5 +92,14 @@ type User struct {
 }
 
 func (u UserAccount) FullName() string {
-	return strings.Trim(fmt.Sprintf("%v %v", u.FirstName, u.LastName), "\t\n")
+	lastName := ""
+	if u.LastName != nil {
+		lastName = *u.LastName
+	}
+
+	firstName := ""
+	if u.FirstName != nil {
+		firstName = *u.FirstName
+	}
+	return strings.Trim(fmt.Sprintf("%s %s", firstName, lastName), "\t\n")
 }

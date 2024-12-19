@@ -1,11 +1,18 @@
 module settings
 
+extend type tenant
+  relations
+    define can_create_settings: admin or owner
+    define can_view_settings: maintainer or admin or owner
+
+extend type institution
+  relations
+    define can_create_settings: admin or owner
+    define can_view_settings: maintainer or admin or owner
+
 type setting
   relations
-    define can_edit: editor
-    define can_set_value: admin from owner or maintainer from owner
-    define can_view: viewer
-    define editor: [user] or admin from owner
+    define can_edit: admin from owner or owner from owner
+    define can_set_value: admin from owner or owner from owner
     define owner: [institution, tenant]
     define parent: [setting]
-    define viewer: [user] or editor or maintainer from owner

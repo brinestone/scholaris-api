@@ -1,19 +1,19 @@
 module institution
 
+extend type tenant
+  relations
+    define can_create_institution: admin or owner
+    define can_view_institutions: maintainer or admin or owner
+
 type institution
   relations
-    # abilities
+    # permissions
     define can_create_enrollment_forms: maintainer
-    define can_create_forms: maintainer or admin
     define can_create_academic_year: maintainer or admin
     define can_edit_academic_year: can_create_academic_year
-    define can_create_settings: admin or can_create_settings from parent
-    define can_edit_settings: can_create_settings 
-    define can_set_setting_value: [user] or can_edit_settings or can_set_setting_value from parent
     define can_update: can_update from parent or maintainer
     define can_view: [user:* with institution_visible] or member
     define can_enroll: [user:* with enrollment_available]
-    define can_view_settings: can_edit_settings or can_create_settings
     # roles
     define maintainer: [user] or maintainer from parent or admin
     define member: student or teacher or staff or maintainer

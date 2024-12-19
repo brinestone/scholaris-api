@@ -21,6 +21,7 @@ var (
 
 type AuthClaims struct {
 	Email      string  `json:"email"`
+	Phone      *string `json:"phone"`
 	Avatar     *string `json:"avatar"`
 	Provider   string  `json:"provider"`
 	ExternalId string  `json:"externalId"`

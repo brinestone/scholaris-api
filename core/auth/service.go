@@ -104,6 +104,14 @@ func (s *Service) SignIn(ctx context.Context, req dto.LoginRequest) (*LoginRespo
 		"mode":        encore.Meta().Environment,
 	}
 
+	phone, phoneAvailable := helpers.Find(user.PhoneNumbers, func(p models.UserPhoneNumber) bool {
+		return p.IsPrimary
+	})
+
+	if phoneAvailable {
+		claims["phone"] = phone.Phone
+	}
+
 	token := jwt.NewWithClaims(jwtSigningMethod, claims)
 	serializedToken, err := token.SignedString([]byte(secrets.JwtKey))
 	if err != nil {
@@ -275,6 +283,7 @@ func (s *Service) doClerkJwtValidation(ctx context.Context, token string) (ans *
 
 	account := res.User.ProvidedAccounts[res.AccountIndex]
 	email, _ := helpers.Find(res.User.Emails, func(a models.UserEmailAddress) bool { return a.IsPrimary })
+	phone, phoneAvailable := helpers.Find(res.User.PhoneNumbers, func(p models.UserPhoneNumber) bool { return p.IsPrimary })
 	user = &res.User
 
 	ans = &dto.AuthClaims{
@@ -285,6 +294,11 @@ func (s *Service) doClerkJwtValidation(ctx context.Context, token string) (ans *
 		FullName:   account.FullName(),
 		Sub:        res.User.Id,
 		Account:    account.Id,
+		Phone:      nil,
+	}
+
+	if phoneAvailable {
+		ans.Phone = &phone.Phone
 	}
 
 	return
@@ -310,6 +324,9 @@ func doInternalJwtValidation(ctx context.Context, token string) (ans *dto.AuthCl
 	ans = new(dto.AuthClaims)
 	ans.Provider = "internal"
 	var userId uint64
+	if temp, ok := claims["phone"].(string); ok {
+		ans.Phone = &temp
+	}
 	if temp, ok := claims["avatar"].(string); ok {
 		ans.Avatar = &temp
 	}

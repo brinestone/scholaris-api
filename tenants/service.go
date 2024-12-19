@@ -16,10 +16,68 @@ import (
 	"encore.dev/storage/sqldb"
 	"github.com/brinestone/scholaris/core/permissions"
 	"github.com/brinestone/scholaris/dto"
+	"github.com/brinestone/scholaris/helpers"
 	"github.com/brinestone/scholaris/models"
 	"github.com/brinestone/scholaris/util"
 	"github.com/lib/pq"
 )
+
+// Invites a new member to a tenant
+//
+//encore:api auth method=POST path=/tenants/invites/:tenant tag:can_modify_tenant_members
+func InviteNewMember(ctx context.Context, tenant uint64, req dto.CreateTenantInviteRequest) (err error) {
+	tx, err := tenantDb.Begin(ctx)
+	if err != nil {
+		rlog.Error(util.MsgDbAccessError, "err", err)
+		err = &util.ErrUnknown
+		return
+	}
+
+	invite, err := createTenantInvite(ctx, tx, dto.PNCanAddMaintainer, req.Email, req.Phone, &req.Names, nil, 7*24*time.Hour, tenant, nil)
+	if err != nil {
+		tx.Rollback()
+		rlog.Error(util.MsgDbAccessError, "err", err)
+		err = &util.ErrUnknown
+		return
+	}
+
+	tx.Commit()
+
+	inviteObj, err := findInviteById(ctx, invite)
+	if err != nil {
+		rlog.Error(util.MsgDbAccessError, "err", err)
+		err = &util.ErrUnknown
+		return
+	}
+
+	TenantInvites.Publish(ctx, &MemberInvited{
+		Id:          invite,
+		Email:       req.Email,
+		DisplayName: req.Names,
+		TenantName:  inviteObj.TenantName,
+	})
+	return
+}
+
+// Gets the members of a tenant
+//
+//encore:api auth method=GET path=/tenants/members/:id tag:can_view_tenant_members
+func FindMembers(ctx context.Context, id uint64) (ans *dto.FindTenantMembersResponse, err error) {
+	members, err := findTenantMemberships(ctx, id)
+	if errors.Is(err, sqldb.ErrNoRows) {
+		err = &util.ErrNotFound
+		return
+	} else if err != nil {
+		rlog.Error(util.MsgDbAccessError, "err", err)
+		err = &util.ErrUnknown
+		return
+	}
+
+	ans = &dto.FindTenantMembersResponse{
+		Members: tenantMembershipsToDto(members...),
+	}
+	return
+}
 
 // Checks whether a tenant name exists or not
 //
@@ -115,9 +173,11 @@ func DeleteTenant(ctx context.Context, id uint64) error {
 // Creates a new Tenant
 //
 //encore:api auth method=POST path=/tenants tag:needs_captcha_ver
-func NewTenant(ctx context.Context, req dto.NewTenantRequest) (err error) {
+func NewTenant(ctx context.Context, req dto.NewTenantRequest) (ans dto.NewTenantResponse, err error) {
 	user, _ := auth.UserID()
+	userInfo := auth.Data().(*dto.AuthClaims)
 
+	// Check whether a tenant with the same name already exists or not
 	nameUnavailable, err := tenantNameExists(ctx, req.Name)
 	if err != nil {
 		rlog.Error("error while checking tenant name existence", "err", err)
@@ -132,6 +192,8 @@ func NewTenant(ctx context.Context, req dto.NewTenantRequest) (err error) {
 		}
 		return
 	}
+
+	// Start DB Transaction
 	tx, err := tenantDb.Begin(ctx)
 	if err != nil {
 		rlog.Error("transaction error", "err", err)
@@ -139,6 +201,7 @@ func NewTenant(ctx context.Context, req dto.NewTenantRequest) (err error) {
 		return
 	}
 
+	// Create Subscription
 	subId, err := createTenantSubscription(ctx, tx, 1) // Use basic plan by default
 	if err != nil {
 		tx.Rollback()
@@ -147,6 +210,7 @@ func NewTenant(ctx context.Context, req dto.NewTenantRequest) (err error) {
 		return
 	}
 
+	// Create Tenant Record
 	tenant, err := createTenant(ctx, tx, req, subId)
 	if err != nil {
 		tx.Rollback()
@@ -155,6 +219,25 @@ func NewTenant(ctx context.Context, req dto.NewTenantRequest) (err error) {
 		return
 	}
 
+	// Create invite record for the owner user
+	inviteId, err := createTenantInvite(ctx, tx, dto.PNOwner, userInfo.Email, userInfo.Phone, &userInfo.FullName, userInfo.Avatar, time.Hour*24*7, tenant, &userInfo.Sub)
+	if err != nil {
+		tx.Rollback()
+		rlog.Error(util.MsgDbAccessError, "err", err)
+		err = &util.ErrUnknown
+		return
+	}
+
+	// Create the membership record for the just created invite.
+	err = createTenantMembership(ctx, tx, inviteId, dto.PNOwner, userInfo.Email, userInfo.FullName, userInfo.Phone, userInfo.Avatar, nil)
+	if err != nil {
+		tx.Rollback()
+		rlog.Error(util.MsgDbAccessError, "err", err)
+		err = &util.ErrUnknown
+		return
+	}
+
+	// Create permission/role tuples
 	if err = permissions.SetPermissions(ctx, dto.UpdatePermissionsRequest{
 		Updates: []dto.PermissionUpdate{
 			{
@@ -175,12 +258,15 @@ func NewTenant(ctx context.Context, req dto.NewTenantRequest) (err error) {
 		return
 	}
 
+	// Commit the transaction
 	tx.Commit()
 
 	NewTenants.Publish(ctx, &TenantCreated{
 		Id:        tenant,
 		CreatedBy: &user,
 	})
+
+	ans.Id = tenant
 	return
 }
 
@@ -452,5 +538,197 @@ func tenantsToDto(t ...*models.Tenant) (ans []dto.TenantLookup) {
 		ans[i] = vv
 	}
 
+	return
+}
+
+func tenantMembershipsToDto(m ...*models.TenantMembership) (ans []dto.TenantMembership) {
+	ans = helpers.SliceMap(m, func(m *models.TenantMembership) dto.TenantMembership {
+		d := dto.TenantMembership{
+			Invite:       m.Invite,
+			User:         m.User,
+			DisplayName:  m.DisplayName,
+			Email:        m.Email,
+			InviteStatus: m.InviteStatus,
+			Role:         m.Role,
+			InvitedAt:    m.InvitedAt,
+			Tenant:       m.Tenant,
+		}
+
+		if m.UpdatedAt.Valid {
+			d.UpdatedAt = &m.UpdatedAt.Time
+		}
+
+		if m.CreatedAt.Valid {
+			d.JoinedAt = &m.CreatedAt.Time
+		}
+
+		if m.InviteExpiresAt != nil && m.InviteExpiresAt.Valid {
+			d.InviteExpiresAt = &m.InviteExpiresAt.Time
+		}
+
+		if m.Prefs != nil && len(*m.Prefs) > 0 {
+			d.Prefs = m.Prefs
+		}
+
+		if m.Phone.Valid {
+			d.Phone = &m.Phone.String
+		}
+
+		if m.Avatar.Valid {
+			d.Avatar = &m.Avatar.String
+		}
+
+		if m.Id.Valid {
+			tmp := uint64(m.Id.Int64)
+			d.Id = &tmp
+		}
+
+		return d
+	})
+	return
+}
+
+func checkPermissions(ctx context.Context, actor, target string, relation dto.PermissionName) (pass bool, err error) {
+	res, err := permissions.CheckPermissionInternal(ctx, dto.InternalRelationCheckRequest{
+		Actor:    actor,
+		Relation: relation,
+		Target:   target,
+	})
+
+	if err != nil {
+		err = errs.Wrap(err, util.MsgCallError)
+		return
+	}
+
+	pass = res.Allowed
+	return
+}
+
+func scanTenantInvitation(s util.RowScanner) (ans *models.TenantMembershipInvitation, err error) {
+	ans = new(models.TenantMembershipInvitation)
+	err = s.Scan(&ans.Id, &ans.User, &ans.Tenant, &ans.TenantName, &ans.Email, &ans.Phone, &ans.Role, &ans.DisplayName, &ans.RedirectUrl, &ans.ErrorRedirect, &ans.OnboardRedirect, &ans.Url, &ans.Avatar, &ans.CreatedAt, &ans.UpdatedAt, &ans.Status, &ans.ExpiresAt)
+	if err != nil {
+		err = errs.Wrap(err, "scan error")
+		ans = nil
+	}
+	return
+}
+
+func scanTenantMembership(s util.RowScanner) (ans *models.TenantMembership, err error) {
+	ans = new(models.TenantMembership)
+	var prefsJson string
+	err = s.Scan(&ans.Id, &ans.Invite, &ans.User, &ans.DisplayName, &ans.Avatar, &ans.Email, &ans.Phone, &prefsJson, &ans.Tenant, &ans.InvitedAt, &ans.InviteStatus, &ans.InviteExpiresAt, &ans.CreatedAt, &ans.UpdatedAt, &ans.Role)
+	if err != nil {
+		err = errs.Wrap(err, "scan error")
+		ans = nil
+	}
+
+	if len(prefsJson) > 2 {
+		err = json.Unmarshal([]byte(prefsJson), ans.Prefs)
+	}
+	return
+}
+
+func findTenantMemberships(ctx context.Context, id uint64) (ans []*models.TenantMembership, err error) {
+	query := `
+		SELECT
+			id,
+			invite,
+			"user",
+			display_name,
+			avatar,
+			email,
+			phone,
+			prefs,
+			tenant,
+			invited_at,
+			invite_status,
+			invite_expires_at,
+			created_at,
+			updated_at,
+			"role"
+		FROM
+			vw_AllTenantMembers
+		WHERE
+			tenant=$1;
+	`
+	rows, err := tenantDb.Query(ctx, query, id)
+	if err != nil {
+		ans = nil
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var m *models.TenantMembership
+		m, err = scanTenantMembership(rows)
+		if err != nil {
+			ans = nil
+			return
+		}
+		ans = append(ans, m)
+	}
+	return
+}
+
+func createTenantInvite(ctx context.Context, tx *sqldb.Tx, role dto.PermissionName, email string, phone, displayName, avatar *string, window time.Duration, tenant uint64, user *uint64) (id uint64, err error) {
+	query := `
+		INSERT INTO member_invites("user",tenant,email,phone,role,display_name,avatar,"window")
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+		RETURNING id;
+	`
+	err = tx.QueryRow(ctx, query, user, tenant, email, phone, string(role), displayName, avatar, fmt.Sprintf("%f hours", window.Hours())).Scan(&id)
+	return
+}
+
+func createTenantMembership(ctx context.Context, tx *sqldb.Tx, invite uint64, role dto.PermissionName, email, displayName string, phone, avatar *string, prefs *map[string]string) (err error) {
+	query := `
+		INSERT INTO
+			tenant_memberships(invite,avatar,role,email,phone,display_name,prefs)
+		VALUES ($1,$2,$3,$4,$5,$6,$7);
+	`
+
+	var prefsJson string = "{}"
+
+	if prefs != nil {
+		var rawJson []byte
+		rawJson, err = json.Marshal(prefs)
+		if err != nil {
+			return
+		}
+		prefsJson = string(rawJson)
+	}
+
+	_, err = tx.Exec(ctx, query, invite, avatar, role, email, phone, displayName, prefsJson)
+	return
+}
+
+func findInviteById(ctx context.Context, id uint64) (ans *models.TenantMembershipInvitation, err error) {
+	query := `
+		SELECT
+			id,
+			"user",
+			tenant,
+			tenant_name,
+			email,
+			phone,
+			"role",
+			display_name,
+			success_redirect,
+			error_redirect,
+			onboard_redirect,
+			url,
+			avatar,
+			created_at,
+			updated_at,
+			invite_status,
+			expires_at
+		FROM
+			vw_AllTenantInvitations
+		WHERE
+			id=$1;
+	`
+
+	ans, err = scanTenantInvitation(tenantDb.QueryRow(ctx, query, id))
 	return
 }
