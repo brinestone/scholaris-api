@@ -25,7 +25,11 @@ func onNewMemberInvited(ctx context.Context, msg *tenants.MemberInvited) (err er
 			"inviteUrl":          msg.Url,
 			"invitationDeadline": msg.Deadline.Format(time.DateOnly),
 		},
+		TemplateId: "d-90749aa869484cbc9b5e8c29a47dfb0a",
 	})
+	if err != nil {
+		return
+	}
 
 	maxClicks := 1
 	window := time.Until(msg.Deadline)

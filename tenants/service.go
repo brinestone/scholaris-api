@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"time"
 
 	"encore.dev/beta/auth"
@@ -34,7 +35,8 @@ func InviteNewMember(ctx context.Context, tenant uint64, req dto.CreateTenantInv
 	}
 
 	window := 7 * 24 * time.Hour
-	invite, err := createTenantInvite(ctx, tx, dto.PNCanAddMaintainer, req.Email, req.Phone, &req.Names, nil, window, tenant, nil)
+	avatar := fmt.Sprintf("https://api.dicebear.com/9.x/identicon/svg?seed=%s&scale=70", url.QueryEscape(req.Names))
+	invite, err := createTenantInvite(ctx, tx, dto.PNCanAddMaintainer, req.Email, req.Phone, &req.Names, &avatar, window, tenant, nil)
 	if err != nil {
 		tx.Rollback()
 		rlog.Error(util.MsgDbAccessError, "err", err)
