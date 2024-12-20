@@ -50,13 +50,25 @@ func InviteNewMember(ctx context.Context, tenant uint64, req dto.CreateTenantInv
 	var userId *uint64
 	avatar := fmt.Sprintf("https://api.dicebear.com/9.x/identicon/svg?seed=%s&scale=70", url.QueryEscape(req.Names))
 	if user != nil {
+		var invitationExists bool
+		invitationExists, err = userHasTenantInvitation(ctx, user.Id, tenant)
+		if err != nil {
+			rlog.Error(util.MsgDbAccessError, "err", err)
+			err = &util.ErrUnknown
+			return
+		} else if invitationExists {
+			err = &errs.Error{
+				Code:    errs.AlreadyExists,
+				Message: "There's already a pending invitation for this user",
+			}
+		}
 		userPhone = helpers.Coalesce(user.GetPhoneNumber(), req.Phone)
 		userName = helpers.Coalesce(user.FullName(), &req.Names)
 		avatar = *helpers.Coalesce(user.GetAvatar(), &avatar)
 		userId = &user.Id
 	}
 
-	invite, err := createTenantInvite(ctx, tx, dto.PNCanAddMaintainer, req.Email, userPhone, userName, &avatar, window, tenant, userId)
+	invite, err := createTenantInvite(ctx, tx, dto.PNCanAddMaintainer, req.Email, userPhone, userName, &avatar, window, tenant, userId, &req.SuccessRedirect, &req.ErrorRedirect, &req.OnboardRedirect)
 	if err != nil {
 		tx.Rollback()
 		rlog.Error(util.MsgDbAccessError, "err", err)
@@ -264,7 +276,7 @@ func NewTenant(ctx context.Context, req dto.NewTenantRequest) (ans dto.NewTenant
 	}
 
 	// Create invite record for the owner user
-	inviteId, err := createTenantInvite(ctx, tx, dto.PNOwner, userInfo.Email, userInfo.Phone, &userInfo.FullName, userInfo.Avatar, time.Hour*24*7, tenant, &userInfo.Sub)
+	inviteId, err := createTenantInvite(ctx, tx, dto.PNOwner, userInfo.Email, userInfo.Phone, &userInfo.FullName, userInfo.Avatar, time.Hour*24*7, tenant, &userInfo.Sub, nil, nil, nil)
 	if err != nil {
 		tx.Rollback()
 		rlog.Error(util.MsgDbAccessError, "err", err)
@@ -784,13 +796,13 @@ func findTenantMemberships(ctx context.Context, id uint64) (ans []*models.Tenant
 	return
 }
 
-func createTenantInvite(ctx context.Context, tx *sqldb.Tx, role dto.PermissionName, email string, phone, displayName, avatar *string, window time.Duration, tenant uint64, user *uint64) (id uint64, err error) {
+func createTenantInvite(ctx context.Context, tx *sqldb.Tx, role dto.PermissionName, email string, phone, displayName, avatar *string, window time.Duration, tenant uint64, user *uint64, successRedirect, errorRedirect, onboardRedirect *string) (id uint64, err error) {
 	query := `
-		INSERT INTO member_invites("user",tenant,email,phone,role,display_name,avatar,"window")
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+		INSERT INTO member_invites("user",tenant,email,phone,role,display_name,avatar,"window",success_redirect,error_redirect,onboard_redirect)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
 		RETURNING id;
 	`
-	err = tx.QueryRow(ctx, query, user, tenant, email, phone, string(role), displayName, avatar, fmt.Sprintf("%f hours", window.Hours())).Scan(&id)
+	err = tx.QueryRow(ctx, query, user, tenant, email, phone, string(role), displayName, avatar, fmt.Sprintf("%f hours", window.Hours()), successRedirect, errorRedirect, onboardRedirect).Scan(&id)
 	return
 }
 
@@ -817,7 +829,12 @@ func createTenantMembership(ctx context.Context, tx *sqldb.Tx, invite uint64, ro
 }
 
 func findInviteById(ctx context.Context, id uint64) (ans *models.TenantMembershipInvitation, err error) {
-	query := `
+	ans, err = findInvitationByKey(ctx, "id", id)
+	return
+}
+
+func findInvitationByKey(ctx context.Context, key string, value any) (ans *models.TenantMembershipInvitation, err error) {
+	query := fmt.Sprintf(`
 		SELECT
 			id,
 			"user",
@@ -839,9 +856,24 @@ func findInviteById(ctx context.Context, id uint64) (ans *models.TenantMembershi
 		FROM
 			vw_AllTenantInvitations
 		WHERE
-			id=$1;
+			%s=$1;
+	`, key)
+
+	ans, err = scanTenantInvitation(tenantDb.QueryRow(ctx, query, value))
+	return
+}
+
+func userHasTenantInvitation(ctx context.Context, user, tenant uint64) (ans bool, err error) {
+	query := `
+		SELECT (invite_status IS NOT NULL AND invite_status <> 'expired') FROM vw_AllTenantInvitations WHERE "user" = $1 AND tenant=$2;
 	`
 
-	ans, err = scanTenantInvitation(tenantDb.QueryRow(ctx, query, id))
+	err = tenantDb.QueryRow(ctx, query, user, tenant).Scan(&ans)
+	if errors.Is(err, sqldb.ErrNoRows) {
+		ans = false
+		err = nil
+	} else if err != nil {
+		ans = false
+	}
 	return
 }

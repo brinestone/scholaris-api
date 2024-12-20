@@ -24,7 +24,7 @@ import (
 
 // Finds a user using their email address (Internal API)
 //
-//enore:api private method=GET path=/users/find-by-email
+//encore:api private method=POST path=/users/find-by-email
 func FindUserByEmail(ctx context.Context, req dto.FindUserByEmailRequest) (ans *models.User, err error) {
 	ans, err = findUserByEmailFromDb(ctx, req.Email)
 	if errors.Is(err, sqldb.ErrNoRows) {
@@ -363,16 +363,16 @@ func userEmailExists(ctx context.Context, email string) (ans bool, err error) {
 func findUserByEmailFromDb(ctx context.Context, email string) (ans *models.User, err error) {
 	query := `
 		SELECT 
-			* 
+			vau.* 
 		FROM 
-			vw_AllUsers 
+			vw_AllUsers vau
 		WHERE 
-			pa.id=(
+			vau.id=(
 				SELECT 
 					"user" 
 				FROM 
 					provider_accounts pa 
-				WHERE id=(
+				WHERE pa.id=(
 					SELECT
 						ae.account
 					FROM
@@ -383,6 +383,7 @@ func findUserByEmailFromDb(ctx context.Context, email string) (ans *models.User,
 			)
 		;
 	`
+	rlog.Debug("jkj", "email", email)
 	ans, err = parseUserRow(userDb.QueryRow(ctx, query, email))
 	if err != nil {
 		return
