@@ -21,7 +21,7 @@ func CanModifyTenantMembers(req middleware.Request, next middleware.Next) (res m
 		return
 	}
 
-	allowed, err := checkPermissions(req.Context(), dto.IdentifierString(dto.PTUser, uid), dto.IdentifierString(dto.PTTenant, req.Data().PathParams.Get("id")), dto.PNCanModifyMembers)
+	allowed, err := checkPermissions(req.Context(), dto.IdentifierString(dto.PTUser, uid), dto.IdentifierString(dto.PTTenant, req.Data().PathParams.Get("tenant")), dto.PNCanModifyMembers)
 	if err != nil {
 		err = errs.Wrap(err, util.MsgMiddlewareError, "middleware", "CanViewTenant", "msg", err)
 		rlog.Error("middleware error", err.Error())
@@ -83,7 +83,7 @@ func CanViewTenant(req middleware.Request, next middleware.Next) (res middleware
 		return
 	}
 
-	allowed, err := checkPermissions(req.Context(), dto.IdentifierString(dto.PTUser, uid), dto.IdentifierString(dto.PTTenant, req.Data().PathParams.Get("id")), dto.PNCanView)
+	allowed, err := checkPermissions(req.Context(), dto.IdentifierString(dto.PTUser, uid), dto.IdentifierString(dto.PTTenant, req.Data().PathParams.Get("tenant")), dto.PNCanView)
 	if err != nil {
 		err = errs.Wrap(err, util.MsgMiddlewareError, "middleware", "CanViewTenant", "msg", err)
 		rlog.Error("middleware error", err.Error())

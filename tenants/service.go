@@ -167,12 +167,12 @@ func FindSubscriptionPlans(ctx context.Context) (*dto.FindSubscriptionPlansRespo
 
 // Finds a tenant using its ID
 //
-//encore:api auth method=GET path=/tenants/find/:id tag:can_view_tenant
-func FindTenant(ctx context.Context, id uint64) (*dto.TenantLookup, error) {
+//encore:api auth method=GET path=/tenants/find/:tenant tag:can_view_tenant
+func FindTenant(ctx context.Context, tenant uint64) (*dto.TenantLookup, error) {
 	var t *models.Tenant
 	var err error
 
-	t, err = findTenantById(ctx, id)
+	t, err = findTenantById(ctx, tenant)
 	if err != nil {
 		if errors.Is(err, sqldb.ErrNoRows) {
 			return nil, &util.ErrNotFound
