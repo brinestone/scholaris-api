@@ -52,10 +52,10 @@ func CanViewTenantMembers(req middleware.Request, next middleware.Next) (res mid
 		return
 	}
 
-	allowed, err := checkPermissions(req.Context(), dto.IdentifierString(dto.PTUser, uid), dto.IdentifierString(dto.PTTenant, req.Data().PathParams.Get("id")), dto.PNCanViewMembers)
+	allowed, err := checkPermissions(req.Context(), dto.IdentifierString(dto.PTUser, uid), dto.IdentifierString(dto.PTTenant, req.Data().PathParams.Get("tenant")), dto.PNCanViewMembers)
 	if err != nil {
 		err = errs.Wrap(err, util.MsgMiddlewareError, "middleware", "CanViewTenant", "msg", err)
-		rlog.Error("middleware error", err.Error())
+		rlog.Error("middleware error", "err", err)
 		res = middleware.Response{
 			Err: &util.ErrUnknown,
 		}
