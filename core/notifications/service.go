@@ -38,6 +38,7 @@ func (s *Service) SendEmail(ctx context.Context, req dto.SendEmailRequest) error
 			"address": req.To,
 		},
 		Data: req.Data,
+		Meta: map[string]string{},
 	}
 	if req.IsContentHtml {
 		notification.Meta["htmlContent"] = req.Body
