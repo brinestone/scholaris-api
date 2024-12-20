@@ -1,8 +1,6 @@
 package helpers
 
-type Pointer interface{}
-
-func Coalesce(args ...Pointer) (ans Pointer) {
+func Coalesce[T string](args ...*T) (ans *T) {
 	for _, arg := range args {
 		if ans = arg; arg != nil {
 			return

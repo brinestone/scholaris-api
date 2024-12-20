@@ -22,6 +22,18 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// Finds a user using their email address (Internal API)
+//
+//enore:api private method=GET path=/users/find-by-email
+func FindUserByEmail(ctx context.Context, req dto.FindUserByEmailRequest) (ans *models.User, err error) {
+	ans, err = findUserByEmailFromDb(ctx, req.Email)
+	if errors.Is(err, sqldb.ErrNoRows) {
+		err = &util.ErrNotFound
+		return
+	}
+	return
+}
+
 // Creates a new user with an externally provided account
 //
 //encore:api private method=POST path=/users/external

@@ -13,7 +13,7 @@ type CreateTenantInviteRequest struct {
 	Email           string  `json:"email"`
 	Phone           *string `json:"phone,omitempty" encore:"optional"`
 	Names           string  `json:"displayName"`
-	SuccessRedirect string  `json:"redirecUrl"`
+	SuccessRedirect string  `json:"redirectUrl"`
 	OnboardRedirect string  `json:"onboardRedirect"`
 	ErrorRedirect   string  `json:"errorRedirect"`
 	CaptchaToken    string  `json:"captcha"`

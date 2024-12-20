@@ -16,6 +16,7 @@ import (
 	"encore.dev/storage/cache"
 	"encore.dev/storage/sqldb"
 	"github.com/brinestone/scholaris/core/permissions"
+	"github.com/brinestone/scholaris/core/users"
 	"github.com/brinestone/scholaris/dto"
 	"github.com/brinestone/scholaris/helpers"
 	"github.com/brinestone/scholaris/models"
@@ -27,6 +28,16 @@ import (
 //
 //encore:api auth method=POST path=/tenants/invites/:tenant tag:can_modify_tenant_members
 func InviteNewMember(ctx context.Context, tenant uint64, req dto.CreateTenantInviteRequest) (err error) {
+	user, err := users.FindUserByEmail(ctx, dto.FindUserByEmailRequest{
+		Email: req.Email,
+	})
+
+	if err != nil && errs.Code(err) != errs.NotFound {
+		rlog.Error(util.MsgCallError, "err", err)
+		err = &util.ErrUnknown
+		return
+	}
+
 	tx, err := tenantDb.Begin(ctx)
 	if err != nil {
 		rlog.Error(util.MsgDbAccessError, "err", err)
@@ -35,8 +46,17 @@ func InviteNewMember(ctx context.Context, tenant uint64, req dto.CreateTenantInv
 	}
 
 	window := 7 * 24 * time.Hour
+	var userPhone, userName *string
+	var userId *uint64
 	avatar := fmt.Sprintf("https://api.dicebear.com/9.x/identicon/svg?seed=%s&scale=70", url.QueryEscape(req.Names))
-	invite, err := createTenantInvite(ctx, tx, dto.PNCanAddMaintainer, req.Email, req.Phone, &req.Names, &avatar, window, tenant, nil)
+	if user != nil {
+		userPhone = helpers.Coalesce(user.GetPhoneNumber(), req.Phone)
+		userName = helpers.Coalesce(user.FullName(), &req.Names)
+		avatar = *helpers.Coalesce(user.GetAvatar(), &avatar)
+		userId = &user.Id
+	}
+
+	invite, err := createTenantInvite(ctx, tx, dto.PNCanAddMaintainer, req.Email, userPhone, userName, &avatar, window, tenant, userId)
 	if err != nil {
 		tx.Rollback()
 		rlog.Error(util.MsgDbAccessError, "err", err)

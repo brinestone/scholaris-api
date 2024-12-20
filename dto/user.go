@@ -9,6 +9,10 @@ import (
 	"encore.dev/beta/errs"
 )
 
+type FindUserByEmailRequest struct {
+	Email string `query:"email"`
+}
+
 type FetchUsersResponse struct {
 	Users []User `json:"users"`
 }

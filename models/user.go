@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/brinestone/scholaris/helpers"
 )
 
 type UserEmailAddress struct {
@@ -89,6 +91,50 @@ type User struct {
 	Emails           []UserEmailAddress
 	ProvidedAccounts []UserAccount
 	PhoneNumbers     []UserPhoneNumber
+}
+
+func (u *User) GetAvatar() (ans *string) {
+	avatars := helpers.SliceMap(u.ProvidedAccounts, func(a UserAccount) *string {
+		return a.ImageUrl
+	})
+
+	ans = helpers.Coalesce(avatars...)
+	return
+}
+
+func (u *User) FullName() (ans *string) {
+	tmp := u.ProvidedAccounts[0].FullName()
+	return &tmp
+}
+
+func (u *User) GetEmail() (ans *string) {
+	if u.PrimaryEmail.Valid {
+		email, found := helpers.Find(u.Emails, func(a UserEmailAddress) bool {
+			return a.IsPrimary
+		})
+		if found {
+			ans = &email.Email
+		}
+	} else if len(u.Emails) > 0 {
+		ans = &u.Emails[0].Email
+	}
+	return
+}
+
+// Gets any phone number assigned to this user.
+// The user's primary phone number takes higher preference over others.
+func (u *User) GetPhoneNumber() (ans *string) {
+	if u.PrimaryPhone.Valid {
+		phone, found := helpers.Find(u.PhoneNumbers, func(a UserPhoneNumber) bool {
+			return a.IsPrimary
+		})
+		if found {
+			ans = &phone.Phone
+		}
+	} else if len(u.PhoneNumbers) > 0 {
+		ans = &u.PhoneNumbers[0].Phone
+	}
+	return
 }
 
 func (u UserAccount) FullName() string {
