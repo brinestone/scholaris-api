@@ -62,26 +62,42 @@ func (c CreateTenantInviteRequest) Validate() (err error) {
 }
 
 type TenantMembership struct {
-	Id              *uint64            `json:"id,omitempty" encore:"optional"`
-	Invite          uint64             `json:"invite"`
-	User            uint64             `json:"user"`
-	Tenant          uint64             `json:"tenant"`
-	DisplayName     string             `json:"displayName"`
-	Email           string             `json:"email"`
-	InviteStatus    string             `json:"inviteStatus"`
-	Role            string             `json:"role"`
-	Avatar          *string            `json:"avatar,omitempty" encore:"optional"`
-	Phone           *string            `json:"phone,omitempty" encore:"optional"`
-	Prefs           *map[string]string `json:"prefs,omitempty" encore:"optional"`
-	InvitedAt       time.Time          `json:"invitedAt"`
-	InviteExpiresAt *time.Time         `json:"inviteExpiresAt,omitempty" encore:"optional"`
-	JoinedAt        *time.Time         `json:"joinedAt,omitempty" encore:"optional"`
-	UpdatedAt       *time.Time         `json:"updatedAt,omitempty" encore:"optional"`
+	Id               *uint64            `json:"id,omitempty" encore:"optional"`
+	Invite           uint64             `json:"invite"`
+	User             uint64             `json:"user"`
+	Tenant           uint64             `json:"tenant"`
+	DisplayName      string             `json:"displayName"`
+	Email            string             `json:"email"`
+	InvitationStatus string             `json:"invitationStatus"`
+	Role             string             `json:"role"`
+	Avatar           *string            `json:"avatar,omitempty" encore:"optional"`
+	Phone            *string            `json:"phone,omitempty" encore:"optional"`
+	Prefs            *map[string]string `json:"prefs,omitempty" encore:"optional"`
+	InvitedAt        time.Time          `json:"invitedAt"`
+	InviteExpiresAt  *time.Time         `json:"inviteExpiresAt,omitempty" encore:"optional"`
+	JoinedAt         *time.Time         `json:"joinedAt,omitempty" encore:"optional"`
+	UpdatedAt        *time.Time         `json:"updatedAt,omitempty" encore:"optional"`
 }
 
-type FindTenantMembersResponse struct {
+type TenantMembershipLookup struct {
+	Id               *uint64    `json:"id,omitempty" encore:"optional"`
+	User             uint64     `json:"user"`
+	Tenant           uint64     `json:"tenant"`
+	DisplayName      string     `json:"displayName"`
+	Email            string     `json:"email"`
+	InvitationStatus string     `json:"invitationStatus"`
+	Role             string     `json:"role"`
+	Avatar           *string    `json:"avatar,omitempty" encore:"optional"`
+	Phone            *string    `json:"phone,omitempty" encore:"optional"`
+	InvitedAt        time.Time  `json:"invitedAt"`
+	InviteExpiresAt  *time.Time `json:"inviteExpiresAt,omitempty" encore:"optional"`
+	JoinedAt         *time.Time `json:"joinedAt,omitempty" encore:"optional"`
+	UpdatedAt        *time.Time `json:"updatedAt,omitempty" encore:"optional"`
+}
+
+type LookupTenantMembersResponse struct {
 	// The tenant memberships
-	Members []TenantMembership `json:"members"`
+	Members []TenantMembershipLookup `json:"members"`
 }
 
 type TenantNameAvailableResponse struct {

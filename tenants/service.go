@@ -63,11 +63,11 @@ func InviteNewMember(ctx context.Context, tenant uint64, req dto.CreateTenantInv
 	return
 }
 
-// Gets the members of a tenant
+// Gets a tenant membership
 //
-//encore:api auth method=GET path=/tenants/members/:id tag:can_view_tenant_members
-func FindMembers(ctx context.Context, id uint64) (ans *dto.FindTenantMembersResponse, err error) {
-	members, err := findTenantMemberships(ctx, id)
+//encore:api auth method=GET path=/tenants/members/:tenant/:user tag:can_view_tenant_members
+func FindMember(ctx context.Context, tenant, user uint64) (ans *dto.TenantMembership, err error) {
+	membership, err := findTenantMembershipByUserId(ctx, tenant, user)
 	if errors.Is(err, sqldb.ErrNoRows) {
 		err = &util.ErrNotFound
 		return
@@ -77,8 +77,26 @@ func FindMembers(ctx context.Context, id uint64) (ans *dto.FindTenantMembersResp
 		return
 	}
 
-	ans = &dto.FindTenantMembersResponse{
-		Members: tenantMembershipsToDto(members...),
+	ans = &tenantMembershipsToDto(membership)[0]
+	return
+}
+
+// Lookup the members of a tenant
+//
+//encore:api auth method=GET path=/tenants/members/:tenant tag:can_view_tenant_members
+func LookupTenantMembers(ctx context.Context, tenant uint64) (ans *dto.LookupTenantMembersResponse, err error) {
+	members, err := findTenantMemberships(ctx, tenant)
+	if errors.Is(err, sqldb.ErrNoRows) {
+		err = &util.ErrNotFound
+		return
+	} else if err != nil {
+		rlog.Error(util.MsgDbAccessError, "err", err)
+		err = &util.ErrUnknown
+		return
+	}
+
+	ans = &dto.LookupTenantMembersResponse{
+		Members: tenantMembershipsToLookup(members...),
 	}
 	return
 }
@@ -545,17 +563,59 @@ func tenantsToDto(t ...*models.Tenant) (ans []dto.TenantLookup) {
 	return
 }
 
+func tenantMembershipsToLookup(m ...*models.TenantMembership) (ans []dto.TenantMembershipLookup) {
+	ans = helpers.SliceMap(m, func(m *models.TenantMembership) dto.TenantMembershipLookup {
+		d := dto.TenantMembershipLookup{
+			User:             m.User,
+			DisplayName:      m.DisplayName,
+			Email:            m.Email,
+			InvitationStatus: m.InviteStatus,
+			Role:             m.Role,
+			InvitedAt:        m.InvitedAt,
+			Tenant:           m.Tenant,
+		}
+
+		if m.UpdatedAt.Valid {
+			d.UpdatedAt = &m.UpdatedAt.Time
+		}
+
+		if m.CreatedAt.Valid {
+			d.JoinedAt = &m.CreatedAt.Time
+		}
+
+		if m.InviteExpiresAt != nil && m.InviteExpiresAt.Valid {
+			d.InviteExpiresAt = &m.InviteExpiresAt.Time
+		}
+
+		if m.Phone.Valid {
+			d.Phone = &m.Phone.String
+		}
+
+		if m.Avatar.Valid {
+			d.Avatar = &m.Avatar.String
+		}
+
+		if m.Id.Valid {
+			tmp := uint64(m.Id.Int64)
+			d.Id = &tmp
+		}
+
+		return d
+	})
+	return
+}
+
 func tenantMembershipsToDto(m ...*models.TenantMembership) (ans []dto.TenantMembership) {
 	ans = helpers.SliceMap(m, func(m *models.TenantMembership) dto.TenantMembership {
 		d := dto.TenantMembership{
-			Invite:       m.Invite,
-			User:         m.User,
-			DisplayName:  m.DisplayName,
-			Email:        m.Email,
-			InviteStatus: m.InviteStatus,
-			Role:         m.Role,
-			InvitedAt:    m.InvitedAt,
-			Tenant:       m.Tenant,
+			Invite:           m.Invite,
+			User:             m.User,
+			DisplayName:      m.DisplayName,
+			Email:            m.Email,
+			InvitationStatus: m.InviteStatus,
+			Role:             m.Role,
+			InvitedAt:        m.InvitedAt,
+			Tenant:           m.Tenant,
 		}
 
 		if m.UpdatedAt.Valid {
@@ -630,6 +690,33 @@ func scanTenantMembership(s util.RowScanner) (ans *models.TenantMembership, err 
 	if len(prefsJson) > 2 {
 		err = json.Unmarshal([]byte(prefsJson), ans.Prefs)
 	}
+	return
+}
+
+func findTenantMembershipByUserId(ctx context.Context, tenant, user uint64) (ans *models.TenantMembership, err error) {
+	query := `
+		SELECT
+			id,
+			invite,
+			"user",
+			display_name,
+			avatar,
+			email,
+			phone,
+			prefs,
+			tenant,
+			invited_at,
+			invite_status,
+			invite_expires_at,
+			created_at,
+			updated_at,
+			"role"
+		FROM
+			vw_AllTenantMembers
+		WHERE
+			tenant=$1 AND "user"=$2;
+	`
+	ans, err = scanTenantMembership(tenantDb.QueryRow(ctx, query, tenant, user))
 	return
 }
 

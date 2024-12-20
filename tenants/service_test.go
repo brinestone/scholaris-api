@@ -78,6 +78,7 @@ func TestMain(m *testing.M) {
 	mockEndpoints()
 	uid, data := makeUser()
 	mainContext = auth.WithContext(context.TODO(), uid, &data)
+	et.OverrideAuthInfo(uid, data)
 	m.Run()
 }
 
@@ -162,14 +163,14 @@ func TestLookup(t *testing.T) {
 	assert.LessOrEqual(t, len(res.Tenants), 100)
 }
 
-func TestFindMembers(t *testing.T) {
+func TestLookupMembers(t *testing.T) {
 	id, err := makeTenant()
 	if err != nil {
 		t.Error(err)
 		return
 	}
 
-	res, err := tenants.FindMembers(mainContext, id)
+	res, err := tenants.LookupTenantMembers(mainContext, id)
 	if assert.Nil(t, err) {
 		assert.NotNil(t, res)
 		assert.NotEmpty(t, res.Members)
@@ -200,3 +201,17 @@ func TestInviteNewMember(t *testing.T) {
 
 	assert.Nil(t, err)
 }
+
+// func TestFindMembership(t *testing.T) {
+// 	uid, data := makeUser()
+// 	et.OverrideAuthInfo(uid, &data)
+
+// 	id, err := makeTenant()
+// 	if assert.Nil(t, err) {
+// 		user, _ := strconv.ParseUint(string(uid), 10, 64)
+// 		membership, err := tenants.FindMember(mainContext, id, user)
+// 		if assert.Nil(t, err) {
+// 			assert.Equal(t, user, membership.User)
+// 		}
+// 	}
+// }
