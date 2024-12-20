@@ -33,7 +33,8 @@ func InviteNewMember(ctx context.Context, tenant uint64, req dto.CreateTenantInv
 		return
 	}
 
-	invite, err := createTenantInvite(ctx, tx, dto.PNCanAddMaintainer, req.Email, req.Phone, &req.Names, nil, 7*24*time.Hour, tenant, nil)
+	window := 7 * 24 * time.Hour
+	invite, err := createTenantInvite(ctx, tx, dto.PNCanAddMaintainer, req.Email, req.Phone, &req.Names, nil, window, tenant, nil)
 	if err != nil {
 		tx.Rollback()
 		rlog.Error(util.MsgDbAccessError, "err", err)
@@ -55,6 +56,9 @@ func InviteNewMember(ctx context.Context, tenant uint64, req dto.CreateTenantInv
 		Email:       req.Email,
 		DisplayName: req.Names,
 		TenantName:  inviteObj.TenantName,
+		Url:         inviteObj.Url.String,
+		ErrorUrl:    inviteObj.ErrorRedirect.String,
+		Deadline:    inviteObj.ExpiresAt.Time,
 	})
 	return
 }

@@ -23,6 +23,8 @@ type MemberInvited struct {
 	Email       string
 	DisplayName string
 	Url         string
+	ErrorUrl    string
+	Deadline    time.Time
 }
 
 var NewTenants = pubsub.NewTopic[*TenantCreated]("new-tenant", pubsub.TopicConfig{
