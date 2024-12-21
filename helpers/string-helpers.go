@@ -1,6 +1,6 @@
 package helpers
 
-func Coalesce[T string](args ...*T) (ans *T) {
+func Coalesce[T any](args ...*T) (ans *T) {
 	for _, arg := range args {
 		if ans = arg; arg != nil {
 			return

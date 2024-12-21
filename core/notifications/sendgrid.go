@@ -17,6 +17,11 @@ func (s *SendGridNotifier) Notify(n models.Notification) (err error) {
 	to := mail.NewEmail(n.RecepientInfo["name"], n.RecepientInfo["address"])
 	message := mail.NewSingleEmail(from, n.Subject, to, n.Content, n.Meta["htmlContent"])
 	message.TemplateID = n.Meta["templateId"]
+	message.Personalizations = []*mail.Personalization{
+		{
+			DynamicTemplateData: n.Data,
+		},
+	}
 
 	_, err = s.client.Send(message)
 	return

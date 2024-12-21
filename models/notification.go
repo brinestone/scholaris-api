@@ -10,7 +10,8 @@ type NotificationAttachment struct {
 }
 
 type Notification struct {
-	Subject                   string
-	Content                   string
-	Meta, Data, RecepientInfo map[string]string
+	Subject             string
+	Content             string
+	Meta, RecepientInfo map[string]string
+	Data                map[string]any
 }

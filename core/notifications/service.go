@@ -31,13 +31,17 @@ func initService() (s *Service, err error) {
 
 //encore:api private method=POST path=/notifications/email
 func (s *Service) SendEmail(ctx context.Context, req dto.SendEmailRequest) error {
+	data := map[string]any{}
+	for k, v := range req.Data {
+		data[k] = v
+	}
 	notification := models.Notification{
 		Subject: req.Subject,
 		RecepientInfo: map[string]string{
 			"name":    req.ToName,
 			"address": req.To,
 		},
-		Data: req.Data,
+		Data: data,
 		Meta: map[string]string{},
 	}
 	if req.IsContentHtml {
