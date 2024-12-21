@@ -64,7 +64,7 @@ func (c CreateTenantInviteRequest) Validate() (err error) {
 type TenantMembership struct {
 	Id               *uint64            `json:"id,omitempty" encore:"optional"`
 	Invite           uint64             `json:"invite"`
-	User             uint64             `json:"user"`
+	User             *uint64            `json:"user,omitempty" encore:"optional"`
 	Tenant           uint64             `json:"tenant"`
 	DisplayName      string             `json:"displayName"`
 	Email            string             `json:"email"`
@@ -81,7 +81,7 @@ type TenantMembership struct {
 
 type TenantMembershipLookup struct {
 	Id               *uint64    `json:"id,omitempty" encore:"optional"`
-	User             uint64     `json:"user"`
+	User             *uint64    `json:"user,omitempty" encore:"optional"`
 	Tenant           uint64     `json:"tenant"`
 	DisplayName      string     `json:"displayName"`
 	Email            string     `json:"email"`

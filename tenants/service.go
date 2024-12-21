@@ -600,13 +600,17 @@ func tenantsToDto(t ...*models.Tenant) (ans []dto.TenantLookup) {
 func tenantMembershipsToLookup(m ...*models.TenantMembership) (ans []dto.TenantMembershipLookup) {
 	ans = helpers.SliceMap(m, func(m *models.TenantMembership) dto.TenantMembershipLookup {
 		d := dto.TenantMembershipLookup{
-			User:             m.User,
 			DisplayName:      m.DisplayName,
 			Email:            m.Email,
 			InvitationStatus: m.InviteStatus,
 			Role:             m.Role,
 			InvitedAt:        m.InvitedAt,
 			Tenant:           m.Tenant,
+		}
+
+		if m.User.Valid {
+			t := uint64(m.User.Int64)
+			d.User = &t
 		}
 
 		if m.UpdatedAt.Valid {
@@ -643,13 +647,17 @@ func tenantMembershipsToDto(m ...*models.TenantMembership) (ans []dto.TenantMemb
 	ans = helpers.SliceMap(m, func(m *models.TenantMembership) dto.TenantMembership {
 		d := dto.TenantMembership{
 			Invite:           m.Invite,
-			User:             m.User,
 			DisplayName:      m.DisplayName,
 			Email:            m.Email,
 			InvitationStatus: m.InviteStatus,
 			Role:             m.Role,
 			InvitedAt:        m.InvitedAt,
 			Tenant:           m.Tenant,
+		}
+
+		if m.User.Valid {
+			t := uint64(m.User.Int64)
+			d.User = &t
 		}
 
 		if m.UpdatedAt.Valid {

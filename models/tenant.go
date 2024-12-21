@@ -15,8 +15,8 @@ type TenantMembershipInvitation struct {
 }
 
 type TenantMembership struct {
-	Id                                     sql.NullInt64
-	Invite, User, Tenant                   uint64
+	Id, User                               sql.NullInt64
+	Invite, Tenant                         uint64
 	DisplayName, Email, InviteStatus, Role string
 	Avatar, Phone                          sql.NullString
 	Prefs                                  *map[string]string
