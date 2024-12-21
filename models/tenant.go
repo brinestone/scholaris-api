@@ -15,14 +15,14 @@ type TenantMembershipInvitation struct {
 }
 
 type TenantMembership struct {
-	Id, User                               sql.NullInt64
-	Invite, Tenant                         uint64
-	DisplayName, Email, InviteStatus, Role string
-	Avatar, Phone                          sql.NullString
-	Prefs                                  *map[string]string
-	InvitedAt                              time.Time
-	InviteExpiresAt                        *DateOnly
-	CreatedAt, UpdatedAt                   sql.NullTime
+	Id, User                   sql.NullInt64
+	Invite, Tenant             uint64
+	Email, InviteStatus, Role  string
+	Avatar, Phone, DisplayName sql.NullString
+	Prefs                      *map[string]string
+	InvitedAt                  time.Time
+	InviteExpiresAt            *DateOnly
+	CreatedAt, UpdatedAt       sql.NullTime
 }
 
 type Tenant struct {

@@ -1,7 +1,6 @@
 package notifications
 
 import (
-	"encore.dev/rlog"
 	"github.com/brinestone/scholaris/models"
 	"github.com/sendgrid/sendgrid-go"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
@@ -26,8 +25,7 @@ func (s *SendGridNotifier) Notify(n models.Notification) (err error) {
 			Subject:             n.Subject,
 		},
 	}
-	res, err := s.client.Send(message)
-	rlog.Debug("sendgrid", "message", message, "result", res)
+	_, err = s.client.Send(message)
 	return
 }
 

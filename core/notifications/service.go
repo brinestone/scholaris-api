@@ -4,7 +4,6 @@ package notifications
 import (
 	"context"
 
-	"encore.dev/rlog"
 	"github.com/brinestone/scholaris/dto"
 	"github.com/brinestone/scholaris/models"
 )
@@ -55,7 +54,6 @@ func (s *Service) SendEmail(ctx context.Context, req dto.SendEmailRequest) error
 		notification.Meta["templateId"] = req.TemplateId
 	}
 
-	rlog.Debug("sendEmail", "req", req, "notification", notification)
 	s.notifier.Notify(notification)
 	return nil
 }

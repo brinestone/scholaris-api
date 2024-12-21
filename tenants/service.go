@@ -603,13 +603,16 @@ func tenantsToDto(t ...*models.Tenant) (ans []dto.TenantLookup) {
 func tenantMembershipsToLookup(m ...*models.TenantMembership) (ans []dto.TenantMembershipLookup) {
 	ans = helpers.SliceMap(m, func(m *models.TenantMembership) dto.TenantMembershipLookup {
 		d := dto.TenantMembershipLookup{
-			DisplayName:      m.DisplayName,
 			Email:            m.Email,
 			InvitationStatus: m.InviteStatus,
 			Role:             m.Role,
 			InvitedAt:        m.InvitedAt,
 			Tenant:           m.Tenant,
 			Invitation:       m.Invite,
+		}
+
+		if m.DisplayName.Valid {
+			d.DisplayName = &m.DisplayName.String
 		}
 
 		if m.User.Valid {
@@ -651,12 +654,15 @@ func tenantMembershipsToDto(m ...*models.TenantMembership) (ans []dto.TenantMemb
 	ans = helpers.SliceMap(m, func(m *models.TenantMembership) dto.TenantMembership {
 		d := dto.TenantMembership{
 			Invite:           m.Invite,
-			DisplayName:      m.DisplayName,
 			Email:            m.Email,
 			InvitationStatus: m.InviteStatus,
 			Role:             m.Role,
 			InvitedAt:        m.InvitedAt,
 			Tenant:           m.Tenant,
+		}
+
+		if m.DisplayName.Valid {
+			d.DisplayName = &m.DisplayName.String
 		}
 
 		if m.User.Valid {

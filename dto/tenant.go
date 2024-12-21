@@ -66,7 +66,7 @@ type TenantMembership struct {
 	Invite           uint64             `json:"invite"`
 	User             *uint64            `json:"user,omitempty" encore:"optional"`
 	Tenant           uint64             `json:"tenant"`
-	DisplayName      string             `json:"displayName"`
+	DisplayName      *string            `json:"displayName,omitempty" encore:"optional"`
 	Email            string             `json:"email"`
 	InvitationStatus string             `json:"invitationStatus"`
 	Role             string             `json:"role"`
@@ -84,7 +84,7 @@ type TenantMembershipLookup struct {
 	Id               *uint64    `json:"id,omitempty" encore:"optional"`
 	User             *uint64    `json:"user,omitempty" encore:"optional"`
 	Tenant           uint64     `json:"tenant"`
-	DisplayName      string     `json:"displayName"`
+	DisplayName      *string    `json:"displayName,omitempty" enore:"optional"`
 	Email            string     `json:"email"`
 	InvitationStatus string     `json:"invitationStatus"`
 	Role             string     `json:"role"`
