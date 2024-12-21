@@ -29,6 +29,22 @@ import (
 //
 //encore:api auth method=POST path=/tenants/invites/:tenant tag:can_modify_tenant_members
 func InviteNewMember(ctx context.Context, tenant uint64, req dto.CreateTenantInviteRequest) (err error) {
+
+	emailHasInvitation, err := emailHasNonExpiredInvitation(ctx, tenant, req.Email)
+	if err != nil {
+		rlog.Error(util.MsgDbAccessError, "err", err)
+		err = &util.ErrUnknown
+		return
+	}
+
+	if emailHasInvitation {
+		err = &errs.Error{
+			Code:    errs.AlreadyExists,
+			Message: "There's already a non-expired membership associated with this email and this tenant",
+		}
+		return
+	}
+
 	user, err := users.FindUserByEmail(ctx, dto.FindUserByEmailRequest{
 		Email: req.Email,
 	})
@@ -793,7 +809,7 @@ func findTenantMemberships(ctx context.Context, id uint64) (ans []*models.Tenant
 		FROM
 			vw_AllTenantMembers
 		WHERE
-			tenant=$1;
+			tenant=$1 AND invite_status <> 'expired';
 	`
 	rows, err := tenantDb.Query(ctx, query, id)
 	if err != nil {
@@ -887,6 +903,21 @@ func userHasTenantInvitation(ctx context.Context, user, tenant uint64) (ans bool
 	`
 
 	err = tenantDb.QueryRow(ctx, query, user, tenant).Scan(&ans)
+	if errors.Is(err, sqldb.ErrNoRows) {
+		ans = false
+		err = nil
+	} else if err != nil {
+		ans = false
+	}
+	return
+}
+
+func emailHasNonExpiredInvitation(ctx context.Context, tenant uint64, email string) (ans bool, err error) {
+	query := `
+		SELECT (invite_status IS NOT NULL AND invite_status <> 'expired') FROM vw_AllTenantInvitations WHERE email=$1 AND tenant=$2;
+	`
+
+	err = tenantDb.QueryRow(ctx, query, email, tenant).Scan(&ans)
 	if errors.Is(err, sqldb.ErrNoRows) {
 		ans = false
 		err = nil

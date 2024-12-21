@@ -118,7 +118,7 @@ func generateShortKey() string {
 	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	const keyLength = 6
 
-	rand.Seed(time.Now().UnixNano())
+	rand.New(rand.NewSource(time.Now().UnixNano()))
 	shortKey := make([]byte, keyLength)
 	for i := range shortKey {
 		shortKey[i] = charset[rand.Intn(len(charset))]
@@ -129,7 +129,7 @@ func generateShortKey() string {
 func scanShortLink(s util.RowScanner) (ans *models.ShortLink, err error) {
 	ans = new(models.ShortLink)
 
-	err = s.Scan(&ans.Key, &ans.ClickCount, &ans.MaxClicks, &ans.ErrorRedirect, &ans.SuccessRedirect, &ans.CreatedAt, &ans.UpdatedAt, &ans.ExpiresAt)
+	err = s.Scan(&ans.Key, &ans.ClickCount, &ans.MaxClicks, &ans.ErrorRedirect, &ans.SuccessRedirect, &ans.CreatedAt, &ans.UpdatedAt, &ans.ExpiresAt, &ans.IsUsable)
 	if err != nil {
 		err = errs.Wrap(err, "scan error")
 	}

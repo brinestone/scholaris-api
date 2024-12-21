@@ -188,8 +188,7 @@ func TestInviteNewMember(t *testing.T) {
 		t.Error(err)
 		return
 	}
-
-	err = tenants.InviteNewMember(mainContext, tenant, dto.CreateTenantInviteRequest{
+	req := dto.CreateTenantInviteRequest{
 		Email:           gofakeit.Email(),
 		Phone:           &gofakeit.Contact().Phone,
 		Names:           gofakeit.Name(),
@@ -197,9 +196,16 @@ func TestInviteNewMember(t *testing.T) {
 		OnboardRedirect: gofakeit.URL(),
 		ErrorRedirect:   gofakeit.URL(),
 		CaptchaToken:    randomString(50),
-	})
+	}
 
-	assert.Nil(t, err)
+	err = tenants.InviteNewMember(mainContext, tenant, req)
+
+	if assert.Nil(t, err) {
+		t.Run("WithDuplicateEmail", func(t *testing.T) {
+			err := tenants.InviteNewMember(mainContext, tenant, req)
+			assert.NotNil(t, err)
+		})
+	}
 }
 
 // func TestFindMembership(t *testing.T) {
