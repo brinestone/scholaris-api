@@ -23,7 +23,6 @@ type MemberInvited struct {
 	Email       string
 	DisplayName string
 	Url         string
-	ErrorUrl    string
 	Deadline    time.Time
 }
 

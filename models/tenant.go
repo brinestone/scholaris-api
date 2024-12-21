@@ -6,8 +6,8 @@ import (
 )
 
 type TenantMembershipInvitation struct {
-	Id                                                                           uint64
-	User, Tenant                                                                 sql.NullInt64
+	Id, Tenant                                                                   uint64
+	User                                                                         sql.NullInt64
 	TenantName, Email, Role, Status                                              string
 	Phone, RedirectUrl, ErrorRedirect, OnboardRedirect, Avatar, Url, DisplayName sql.NullString
 	CreatedAt, UpdatedAt                                                         time.Time

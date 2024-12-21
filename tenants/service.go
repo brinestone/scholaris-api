@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"time"
 
+	"encore.dev"
 	"encore.dev/beta/auth"
 	"encore.dev/beta/errs"
 	"encore.dev/rlog"
@@ -46,7 +47,8 @@ func InviteNewMember(ctx context.Context, tenant uint64, req dto.CreateTenantInv
 	}
 
 	window := 7 * 24 * time.Hour
-	var userPhone, userName *string
+	var userPhone *string = req.Phone
+	var userName *string = &req.Names
 	var userId *uint64
 	avatar := fmt.Sprintf("https://api.dicebear.com/9.x/identicon/svg?seed=%s&scale=70", url.QueryEscape(req.Names))
 	if user != nil {
@@ -68,7 +70,7 @@ func InviteNewMember(ctx context.Context, tenant uint64, req dto.CreateTenantInv
 		userId = &user.Id
 	}
 
-	invite, err := createTenantInvite(ctx, tx, dto.PNCanAddMaintainer, req.Email, userPhone, userName, &avatar, window, tenant, userId, &req.SuccessRedirect, &req.ErrorRedirect, &req.OnboardRedirect)
+	invite, err := createInvitation(ctx, tx, dto.PNMaintainer, req.Email, userPhone, userName, &avatar, window, tenant, userId, &req.SuccessRedirect, &req.ErrorRedirect, &req.OnboardRedirect)
 	if err != nil {
 		tx.Rollback()
 		rlog.Error(util.MsgDbAccessError, "err", err)
@@ -85,13 +87,14 @@ func InviteNewMember(ctx context.Context, tenant uint64, req dto.CreateTenantInv
 		return
 	}
 
+	inviteUrl, err := url.JoinPath(encore.Meta().APIBaseURL.String(), "tenants", "membership_process", fmt.Sprintf("%d", invite))
+
 	TenantInvites.Publish(ctx, &MemberInvited{
 		Id:          invite,
 		Email:       req.Email,
 		DisplayName: req.Names,
 		TenantName:  inviteObj.TenantName,
-		Url:         inviteObj.Url.String,
-		ErrorUrl:    inviteObj.ErrorRedirect.String,
+		Url:         inviteUrl,
 		Deadline:    inviteObj.ExpiresAt.Time,
 	})
 	return
@@ -276,7 +279,7 @@ func NewTenant(ctx context.Context, req dto.NewTenantRequest) (ans dto.NewTenant
 	}
 
 	// Create invite record for the owner user
-	inviteId, err := createTenantInvite(ctx, tx, dto.PNOwner, userInfo.Email, userInfo.Phone, &userInfo.FullName, userInfo.Avatar, time.Hour*24*7, tenant, &userInfo.Sub, nil, nil, nil)
+	inviteId, err := createInvitation(ctx, tx, dto.PNOwner, userInfo.Email, userInfo.Phone, &userInfo.FullName, userInfo.Avatar, time.Hour*24*7, tenant, &userInfo.Sub, nil, nil, nil)
 	if err != nil {
 		tx.Rollback()
 		rlog.Error(util.MsgDbAccessError, "err", err)
@@ -606,6 +609,7 @@ func tenantMembershipsToLookup(m ...*models.TenantMembership) (ans []dto.TenantM
 			Role:             m.Role,
 			InvitedAt:        m.InvitedAt,
 			Tenant:           m.Tenant,
+			Invitation:       m.Invite,
 		}
 
 		if m.User.Valid {
@@ -722,15 +726,15 @@ func scanTenantInvitation(s util.RowScanner) (ans *models.TenantMembershipInvita
 
 func scanTenantMembership(s util.RowScanner) (ans *models.TenantMembership, err error) {
 	ans = new(models.TenantMembership)
-	var prefsJson string
+	var prefsJson sql.NullString
 	err = s.Scan(&ans.Id, &ans.Invite, &ans.User, &ans.DisplayName, &ans.Avatar, &ans.Email, &ans.Phone, &prefsJson, &ans.Tenant, &ans.InvitedAt, &ans.InviteStatus, &ans.InviteExpiresAt, &ans.CreatedAt, &ans.UpdatedAt, &ans.Role)
 	if err != nil {
 		err = errs.Wrap(err, "scan error")
 		ans = nil
 	}
 
-	if len(prefsJson) > 2 {
-		err = json.Unmarshal([]byte(prefsJson), ans.Prefs)
+	if prefsJson.Valid && len(prefsJson.String) > 2 {
+		err = json.Unmarshal([]byte(prefsJson.String), ans.Prefs)
 	}
 	return
 }
@@ -804,7 +808,7 @@ func findTenantMemberships(ctx context.Context, id uint64) (ans []*models.Tenant
 	return
 }
 
-func createTenantInvite(ctx context.Context, tx *sqldb.Tx, role dto.PermissionName, email string, phone, displayName, avatar *string, window time.Duration, tenant uint64, user *uint64, successRedirect, errorRedirect, onboardRedirect *string) (id uint64, err error) {
+func createInvitation(ctx context.Context, tx *sqldb.Tx, role dto.PermissionName, email string, phone, displayName, avatar *string, window time.Duration, tenant uint64, user *uint64, successRedirect, errorRedirect, onboardRedirect *string) (id uint64, err error) {
 	query := `
 		INSERT INTO member_invites("user",tenant,email,phone,role,display_name,avatar,"window",success_redirect,error_redirect,onboard_redirect)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)

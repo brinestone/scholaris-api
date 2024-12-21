@@ -1,6 +1,7 @@
 package notifications
 
 import (
+	"encore.dev/rlog"
 	"github.com/brinestone/scholaris/models"
 	"github.com/sendgrid/sendgrid-go"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
@@ -15,15 +16,18 @@ type SendGridNotifier struct {
 func (s *SendGridNotifier) Notify(n models.Notification) (err error) {
 	from := mail.NewEmail(s.senderName, s.from)
 	to := mail.NewEmail(n.RecepientInfo["name"], n.RecepientInfo["address"])
-	message := mail.NewSingleEmail(from, n.Subject, to, n.Content, n.Meta["htmlContent"])
+	message := mail.NewSingleEmail(from, n.Subject, to, "", "")
 	message.TemplateID = n.Meta["templateId"]
 	message.Personalizations = []*mail.Personalization{
 		{
+			To:                  []*mail.Email{to},
+			From:                from,
 			DynamicTemplateData: n.Data,
+			Subject:             n.Subject,
 		},
 	}
-
-	_, err = s.client.Send(message)
+	res, err := s.client.Send(message)
+	rlog.Debug("sendgrid", "message", message, "result", res)
 	return
 }
 

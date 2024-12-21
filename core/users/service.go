@@ -383,7 +383,6 @@ func findUserByEmailFromDb(ctx context.Context, email string) (ans *models.User,
 			)
 		;
 	`
-	rlog.Debug("jkj", "email", email)
 	ans, err = parseUserRow(userDb.QueryRow(ctx, query, email))
 	if err != nil {
 		return

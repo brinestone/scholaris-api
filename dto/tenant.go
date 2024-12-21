@@ -80,6 +80,7 @@ type TenantMembership struct {
 }
 
 type TenantMembershipLookup struct {
+	Invitation       uint64     `json:"invitation"`
 	Id               *uint64    `json:"id,omitempty" encore:"optional"`
 	User             *uint64    `json:"user,omitempty" encore:"optional"`
 	Tenant           uint64     `json:"tenant"`
