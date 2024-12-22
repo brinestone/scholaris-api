@@ -397,7 +397,7 @@ func lookupViewableTenantIds(ctx context.Context, uid auth.UID) (ans []uint64, e
 func findViewableTenants(ctx context.Context, ids []uint64) (ans []*models.Tenant, err error) {
 	query := `
 		SELECT 
-			id, name, created_at, updated_at, subscription_plan_name
+			id, name, created_at, updated_at, subscription_plan_name, member_count
 		FROM 
 			vw_AllTenants
 		WHERE 
@@ -415,7 +415,7 @@ func findViewableTenants(ctx context.Context, ids []uint64) (ans []*models.Tenan
 
 	for rows.Next() {
 		var mod = new(models.Tenant)
-		if err = rows.Scan(&mod.Id, &mod.Name, &mod.CreatedAt, &mod.UpdatedAt, &mod.SubscriptionName); err != nil {
+		if err = rows.Scan(&mod.Id, &mod.Name, &mod.CreatedAt, &mod.UpdatedAt, &mod.SubscriptionName, &mod.MemberCount); err != nil {
 			return
 		}
 		ans = append(ans, mod)
@@ -609,6 +609,7 @@ func tenantsToDto(t ...*models.Tenant) (ans []dto.TenantLookup) {
 			CreatedAt:        v.CreatedAt,
 			UpdatedAt:        v.UpdatedAt,
 			SubscriptionPlan: v.SubscriptionName,
+			MemberCount:      v.MemberCount,
 		}
 		ans[i] = vv
 	}

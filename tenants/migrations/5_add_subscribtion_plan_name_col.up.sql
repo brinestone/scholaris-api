@@ -1,3 +1,4 @@
+-- updated in version 9
 CREATE OR REPLACE VIEW
     vw_AllTenants AS
 SELECT

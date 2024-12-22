@@ -154,6 +154,7 @@ type TenantLookup struct {
 	CreatedAt        time.Time `json:"createdAt"`
 	UpdatedAt        time.Time `json:"updatedAt"`
 	SubscriptionPlan string    `json:"subscriptionPlan"`
+	MemberCount      uint      `json:"memberCount"`
 }
 
 type NewSubscriptionPlan struct {

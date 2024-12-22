@@ -161,6 +161,9 @@ func TestLookup(t *testing.T) {
 
 	assert.NotNil(t, res)
 	assert.LessOrEqual(t, len(res.Tenants), 100)
+	for _, v := range res.Tenants {
+		assert.GreaterOrEqual(t, v.MemberCount, uint(1))
+	}
 }
 
 func TestLookupMembers(t *testing.T) {

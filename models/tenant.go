@@ -32,6 +32,7 @@ type Tenant struct {
 	UpdatedAt        time.Time
 	Subscription     uint64
 	SubscriptionName string
+	MemberCount      uint
 }
 
 type SubscriptionPlanBenefit struct {
