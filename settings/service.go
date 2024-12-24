@@ -154,12 +154,11 @@ func UpdateSettings(ctx context.Context, req dto.UpdateSettingsRequest) error {
 func FindSettings(ctx context.Context, req dto.GetSettingsRequest) (*dto.GetSettingsResponse, error) {
 	var settings *dto.GetSettingsResponse
 	var err error
-	uid, _ := auth.UserID()
 	s, err := settingsCache.Get(ctx, cacheKey(req.Owner, req.OwnerType))
 	if errors.Is(err, cache.Miss) {
 		perms, err := permissions.ListObjectsInternal(ctx, dto.ListObjectsRequest{
-			Actor:    dto.IdentifierString(dto.PTUser, uid),
-			Relation: dto.PNCanView,
+			Actor:    dto.IdentifierString(dto.PermissionType(req.GetOwnerType()), req.GetOwner()),
+			Relation: dto.PNOwner,
 			Type:     string(dto.PTSetting),
 		})
 		if err != nil {
