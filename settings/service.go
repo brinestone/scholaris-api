@@ -264,12 +264,13 @@ func settingsToDto(s ...*models.Setting) []dto.Setting {
 		}
 
 		for j, w := range v.Values {
-			var value dto.SettingValue
-			value.Id = w.Id
-			value.SetAt = w.SetAt
-			value.SetBy = w.SetBy
-			value.Setting = w.Setting
-			value.Index = w.Index
+			var value = dto.SettingValue{
+				Id:      w.Id,
+				SetAt:   w.SetAt,
+				SetBy:   w.SetBy,
+				Setting: w.Setting,
+				Index:   w.Index,
+			}
 			setting.Values[j] = value
 		}
 
