@@ -9,4 +9,6 @@ API project for the Scholaris platform - A unified platform for administrating e
 - [Production](https://prod-scholaris-xnz2.encr.app)
 
 ## Services
-A complete service catalog can be found [here](https://app.encore.cloud/scholaris-xnz2/envs/prod/api)
+Here's a bird's eye view of the microservice structure
+![encore-flow](https://github.com/user-attachments/assets/52ac5854-1527-4345-bebe-fb94065526f2)
+
