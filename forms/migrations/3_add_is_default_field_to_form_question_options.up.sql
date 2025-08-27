@@ -1,1 +1,0 @@
-ALTER TABLE form_question_options ADD is_default BOOLEAN DEFAULT false;
